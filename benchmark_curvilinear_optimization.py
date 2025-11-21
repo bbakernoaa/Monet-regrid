@@ -4,8 +4,10 @@ Benchmark script to test performance improvements in curvilinear regridding.
 """
 
 import time
+
 import numpy as np
 import xarray as xr
+
 from monet_regrid.curvilinear import CurvilinearInterpolator
 
 
@@ -22,15 +24,15 @@ def create_test_grids(nx_source=100, ny_source=50, nx_target=50, ny_target=25):
 
     source_ds = xr.Dataset(
         {
-            'temperature': (
-                ('y', 'x'),
+            "temperature": (
+                ("y", "x"),
                 np.random.random((ny_source, nx_source)).astype(np.float32),
-                {'units': 'K'}
+                {"units": "K"}
             )
         },
         coords={
-            'lon': (('y', 'x'), source_lon_2d),
-            'lat': (('y', 'x'), source_lat_2d)
+            "lon": (("y", "x"), source_lon_2d),
+            "lat": (("y", "x"), source_lat_2d)
         }
     )
 
@@ -45,8 +47,8 @@ def create_test_grids(nx_source=100, ny_source=50, nx_target=50, ny_target=25):
 
     target_ds = xr.Dataset(
         coords={
-            'lon': (('y', 'x'), target_lon_2d),
-            'lat': (('y', 'x'), target_lat_2d)
+            "lon": (("y", "x"), target_lon_2d),
+            "lat": (("y", "x"), target_lat_2d)
         }
     )
 
@@ -57,10 +59,10 @@ def benchmark_interpolation():
     """Benchmark the curvilinear interpolation performance."""
     print("Creating test grids...")
     source_ds, target_ds = create_test_grids(nx_source=100, ny_source=50, nx_target=50, ny_target=25)
-    
+
     print(f"Source grid shape: {source_ds['temperature'].shape}")
     print(f"Target grid shape: {target_ds['lon'].shape}")
-    
+
     # Test linear interpolation
     print("\nTesting linear interpolation...")
     interpolator_linear = CurvilinearInterpolator(
@@ -68,15 +70,15 @@ def benchmark_interpolation():
         target_grid=target_ds,
         method="linear"
     )
-    
+
     start_time = time.time()
-    result_linear = interpolator_linear(source_ds['temperature'])
+    result_linear = interpolator_linear(source_ds["temperature"])
     linear_elapsed = time.time() - start_time
-    
+
     print(f"Linear interpolation time: {linear_elapsed:.4f} seconds")
     print(f"Result shape: {result_linear.shape}")
     print(f"NaN count: {np.sum(np.isnan(result_linear.values))}")
-    
+
     # Test nearest neighbor interpolation
     print("\nTesting nearest neighbor interpolation...")
     interpolator_nearest = CurvilinearInterpolator(
@@ -84,16 +86,16 @@ def benchmark_interpolation():
         target_grid=target_ds,
         method="nearest"
     )
-    
+
     start_time = time.time()
-    result_nearest = interpolator_nearest(source_ds['temperature'])
+    result_nearest = interpolator_nearest(source_ds["temperature"])
     nearest_elapsed = time.time() - start_time
-    
+
     print(f"Nearest neighbor interpolation time: {nearest_elapsed:.4f} seconds")
     print(f"Result shape: {result_nearest.shape}")
     print(f"NaN count: {np.sum(np.isnan(result_nearest.values))}")
-    
-    print(f"\nPerformance summary:")
+
+    print("\nPerformance summary:")
     print(f"Linear interpolation: {linear_elapsed:.4f}s")
     print(f"Nearest neighbor interpolation: {nearest_elapsed:.4f}s")
 
