@@ -28,21 +28,21 @@ URLs updated, and documentation adapted for new branding.
 
 from __future__ import annotations
 
-import numpy as np
-import pyproj
-from typing import Tuple
-import functools
 import hashlib
 import pickle
-from scipy.spatial.distance import pdist
+from typing import Tuple  # noqa: UP035
+
+import numpy as np
+import pyproj
+from scipy.spatial.distance import pdist  # type: ignore
 
 
 class CoordinateTransformer:
     """Optimized coordinate transformer with caching and batch processing."""
-    
+
     def __init__(self, source_crs: str = "EPSG:4979", target_crs: str = "EPSG:4978"):
         """Initialize coordinate transformer.
-        
+
         Args:
             source_crs: Source coordinate reference system (default: EPSG:4979 for lat/lon/height)
             target_crs: Target coordinate reference system (default: EPSG:4978 for 3D geocentric)
@@ -50,54 +50,54 @@ class CoordinateTransformer:
         self.source_crs = source_crs
         self.target_crs = target_crs
         self.transformer = pyproj.Transformer.from_crs(source_crs, target_crs, always_xy=True)
-        self._cache = {}
+        self._cache: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
         self._max_cache_size = 100  # Maximum number of cached transformations
-    
+
     def transform_coordinates(
-        self, 
-        lon: np.ndarray, 
-        lat: np.ndarray, 
+        self,
+        lon: np.ndarray,
+        lat: np.ndarray,
         height: np.ndarray | None = None,
         use_cache: bool = True
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Transform coordinates from geographic to 3D geocentric.
-        
+
         Args:
             lon: Longitude array (degrees)
             lat: Latitude array (degrees)
             height: Height array (meters, optional, defaults to 0)
             use_cache: Whether to use caching for repeated transformations
-            
+
         Returns:
             Tuple of (x, y, z) coordinates in target CRS
         """
         # Flatten arrays for consistent processing
         lon_flat = np.asarray(lon).flatten()
         lat_flat = np.asarray(lat).flatten()
-        
+
         if height is None:
             height_flat = np.zeros_like(lon_flat)
         else:
             height_flat = np.asarray(height).flatten()
-        
+
         # Create cache key based on input coordinates
         cache_key = None
         if use_cache:
             # Use hash of coordinate values as cache key (for approximate matches)
             coords_tuple = (lon_flat.tobytes(), lat_flat.tobytes(), height_flat.tobytes())
             cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()
-            
+
             if cache_key in self._cache:
                 return self._cache[cache_key]
-        
+
         # Perform transformation
         x, y, z = self.transformer.transform(lon_flat, lat_flat, height_flat)
-        
+
         # Reshape to match original input shape
         x = x.reshape(lon.shape)
         y = y.reshape(lon.shape)
         z = z.reshape(lon.shape)
-        
+
         # Cache result if caching is enabled
         if use_cache and cache_key is not None:
             # Implement LRU-like behavior by removing oldest entries when needed
@@ -105,26 +105,26 @@ class CoordinateTransformer:
                 # Remove first item (oldest)
                 oldest_key = next(iter(self._cache))
                 del self._cache[oldest_key]
-            
+
             self._cache[cache_key] = (x, y, z)
-        
+
         return x, y, z
-    
+
     def inverse_transform_coordinates(
-        self, 
-        x: np.ndarray, 
-        y: np.ndarray, 
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
         z: np.ndarray,
         use_cache: bool = True
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Transform coordinates from 3D geocentric back to geographic.
-        
+
         Args:
             x: X coordinate array in target CRS
             y: Y coordinate array in target CRS
             z: Z coordinate array in target CRS
             use_cache: Whether to use caching for repeated transformations
-            
+
         Returns:
             Tuple of (lon, lat, height) coordinates in source CRS
         """
@@ -132,24 +132,24 @@ class CoordinateTransformer:
         x_flat = np.asarray(x).flatten()
         y_flat = np.asarray(y).flatten()
         z_flat = np.asarray(z).flatten()
-        
+
         # Create cache key based on input coordinates
         cache_key = None
         if use_cache:
             coords_tuple = (x_flat.tobytes(), y_flat.tobytes(), z_flat.tobytes())
             cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()
-            
+
             if cache_key in self._cache:
                 return self._cache[cache_key]
-        
+
         # Perform inverse transformation
-        lon, lat, height = self.transformer.transform(x_flat, y_flat, z_flat, direction='INVERSE')
-        
+        lon, lat, height = self.transformer.transform(x_flat, y_flat, z_flat, direction="INVERSE")
+
         # Reshape to match original input shape
         lon = lon.reshape(x.shape)
         lat = lat.reshape(x.shape)
         height = height.reshape(z.shape)
-        
+
         # Cache result if caching is enabled
         if use_cache and cache_key is not None:
             # Implement LRU-like behavior by removing oldest entries when needed
@@ -157,28 +157,28 @@ class CoordinateTransformer:
                 # Remove first item (oldest)
                 oldest_key = next(iter(self._cache))
                 del self._cache[oldest_key]
-            
+
             self._cache[cache_key] = (lon, lat, height)
-        
+
         return lon, lat, height
-    
+
     def calculate_distance_threshold(
-        self, 
-        points_3d: np.ndarray, 
+        self,
+        points_3d: np.ndarray,
         factor: float = 3.0
     ) -> float:
         """Calculate appropriate distance threshold for out-of-domain detection.
-        
+
         Args:
             points_3d: Array of 3D points (n, 3) in geocentric coordinates
             factor: Multiplier for average distance between points
-            
+
         Returns:
             Distance threshold value
         """
         if len(points_3d) < 2:
-            return float('inf')
-        
+            return float("inf")
+
         # Calculate typical inter-point distances in the source domain
         # Use a sample of points to estimate average distance
         if len(points_3d) > 100:
@@ -187,7 +187,7 @@ class CoordinateTransformer:
             sample_points = points_3d[indices]
         else:
             sample_points = points_3d
-        
+
         # Calculate distances between all pairs of sample points
         # For efficiency, only calculate for a subset if we have many points
         if len(sample_points) > 50:
@@ -207,19 +207,19 @@ class CoordinateTransformer:
             # Calculate all pairwise distances for smaller datasets
             distances = pdist(sample_points)
             avg_dist = float(np.mean(distances)) if len(distances) > 0 else 0.0
-        
+
         # Set threshold as a multiple of average distance
         return avg_dist * factor
-    
-    def clear_cache(self):
+
+    def clear_cache(self) -> None:
         """Clear the transformation cache."""
         self._cache.clear()
-    
+
     def get_cache_stats(self) -> dict:
         """Get cache statistics."""
         return {
-            'size': len(self._cache),
-            'max_size': self._max_cache_size
+            "size": len(self._cache),
+            "max_size": self._max_cache_size
         }
 
 

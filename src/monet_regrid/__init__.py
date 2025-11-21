@@ -22,19 +22,19 @@ URLs updated, and documentation adapted for new branding.
 """
 
 from monet_regrid import methods
+from monet_regrid.constants import GridType
+from monet_regrid.core import BaseRegridder, CurvilinearRegridder, RectilinearRegridder
 from monet_regrid.regrid import Regridder
 from monet_regrid.utils import Grid, create_regridding_dataset
-from monet_regrid.constants import GridType
-from monet_regrid.core import BaseRegridder, RectilinearRegridder, CurvilinearRegridder
 
 __all__ = [
-    "Grid",
-    "Regridder",
     "BaseRegridder",
-    "RectilinearRegridder",
     "CurvilinearRegridder",
-    "create_regridding_dataset",
+    "Grid",
     "GridType",
+    "RectilinearRegridder",
+    "Regridder",
+    "create_regridding_dataset",
     "methods",
 ]
 

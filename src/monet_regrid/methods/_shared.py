@@ -93,7 +93,7 @@ def restore_properties(
             else:
                 result = result.where(covered, fill_value)
 
-    return result.transpose(*original_data.dims)
+    return result.transpose(*original_data.dims) # type: ignore
 
 
 @overload
@@ -123,8 +123,8 @@ def reduce_data_to_new_domain(
         data = data.sel(
             {
                 coord: slice(
-                    target_ds[coord].min().to_numpy() - coord_res,
-                    target_ds[coord].max().to_numpy() + coord_res,
+                    float(target_ds[coord].min().to_numpy()) - coord_res,
+                    float(target_ds[coord].max().to_numpy()) + coord_res,
                 )
             }
         )

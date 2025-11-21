@@ -121,7 +121,7 @@ def conservative_regrid(
 
     regridded_data = regridded_data.reindex_like(target_ds, copy=False)
 
-    return regridded_data
+    return regridded_data # type: ignore
 
 
 def conservative_regrid_dataset(
@@ -262,7 +262,7 @@ def apply_spherical_correction(
     latitude_res = float(np.median(np.diff(dot_array[latitude_coord].to_numpy(), 1)))
     lat_weights = lat_weight(dot_array[latitude_coord].to_numpy(), latitude_res)
     da.values = utils.normalize_overlap(dot_array.values * lat_weights[:, np.newaxis])
-    return da
+    return da # type: ignore
 
 
 def lat_weight(latitude: np.ndarray, latitude_res: float) -> np.ndarray:
@@ -323,4 +323,4 @@ def format_weights(
     # elif sparse is not None:
     #     new_weights.data = sparse.COO(weights.data)
 
-    return new_weights
+    return new_weights # type: ignore
