@@ -77,9 +77,7 @@ def restore_properties(
         result[coord].attrs = target_ds[coord].attrs
 
         # Replace zeros outside of original data grid with NaNs
-        covered = (target_ds[coord] <= original_data[coord].max()) & (
-            target_ds[coord] >= original_data[coord].min()
-        )
+        covered = (target_ds[coord] <= original_data[coord].max()) & (target_ds[coord] >= original_data[coord].min())
 
         if (~covered).any():
             if fill_value is None:
@@ -93,7 +91,7 @@ def restore_properties(
             else:
                 result = result.where(covered, fill_value)
 
-    return result.transpose(*original_data.dims) # type: ignore
+    return result.transpose(*original_data.dims)  # type: ignore
 
 
 @overload

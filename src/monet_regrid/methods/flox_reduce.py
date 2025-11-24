@@ -103,9 +103,7 @@ def statistic_reduce(
         data = utils.ensure_monotonic(data, coord_name)
     coords = {name: sorted_target_coords[name] for name in coord_names}
 
-    bounds = tuple(
-        construct_intervals(sorted_target_coords[coord].to_numpy()) for coord in coords
-    )
+    bounds = tuple(construct_intervals(sorted_target_coords[coord].to_numpy()) for coord in coords)
 
     data = reduce_data_to_new_domain(data, sorted_target_coords, coord_names)
 
@@ -188,9 +186,7 @@ def compute_mode(
     target_coords = xr.Dataset(target_ds.coords)  # stores coords for reindexing later
     sorted_target_coords = target_coords.sortby(coords)
 
-    bounds = tuple(
-        construct_intervals(sorted_target_coords[coord].to_numpy()) for coord in coords
-    )
+    bounds = tuple(construct_intervals(sorted_target_coords[coord].to_numpy()) for coord in coords)
 
     data = reduce_data_to_new_domain(data, sorted_target_coords, coords)
 

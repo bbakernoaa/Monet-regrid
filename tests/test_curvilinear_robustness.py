@@ -1,15 +1,17 @@
 import numpy as np
-import xarray as xr
 import pytest
+import xarray as xr
+
 from monet_regrid.curvilinear import CurvilinearInterpolator
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 # Old import: from xarray_regrid.curvilinear import CurvilinearInterpolator
 # New import: from monet_regrid.curvilinear import CurvilinearInterpolator
 
+
 def test_curvilinear_linear_vs_nearest_differentiation():
     """Test that linear interpolation on a sphere produces different results from nearest neighbor.
-    
+
     This ensures that the linear interpolation doesn't silently fallback to nearest neighbor
     due to points being slightly outside the convex hull on spherical geometries.
     """
@@ -24,17 +26,8 @@ def test_curvilinear_linear_vs_nearest_differentiation():
     source_lat_2d = source_lat_2d + 0.3 * np.cos(np.radians(source_lat_2d)) * np.sin(np.radians(source_lon_2d))
 
     source_ds_curv = xr.Dataset(
-        {
-            'temperature': (
-                ('y', 'x'),
-                np.random.random((ny_curv, nx_curv)).astype(np.float32),
-                {'units': 'K'}
-            )
-        },
-        coords={
-            'lon': (('y', 'x'), source_lon_2d),
-            'lat': (('y', 'x'), source_lat_2d)
-        }
+        {"temperature": (("y", "x"), np.random.random((ny_curv, nx_curv)).astype(np.float32), {"units": "K"})},
+        coords={"lon": (("y", "x"), source_lon_2d), "lat": (("y", "x"), source_lat_2d)},
     )
 
     # Create sample curvilinear target grid
@@ -47,38 +40,31 @@ def test_curvilinear_linear_vs_nearest_differentiation():
     target_lon_2d = target_lon_2d + 0.3 * np.sin(np.radians(target_lat_2d)) * np.cos(np.radians(target_lon_2d))
     target_lat_2d = target_lat_2d + 0.2 * np.cos(np.radians(target_lat_2d)) * np.sin(np.radians(target_lon_2d))
 
-    target_ds_curv = xr.Dataset(
-        coords={
-            'lon': (('y', 'x'), target_lon_2d),
-            'lat': (('y', 'x'), target_lat_2d)
-        }
-    )
+    target_ds_curv = xr.Dataset(coords={"lon": (("y", "x"), target_lon_2d), "lat": (("y", "x"), target_lat_2d)})
 
     # 1. Run Linear Interpolation
     interpolator_linear = CurvilinearInterpolator(
-        source_grid=source_ds_curv,
-        target_grid=target_ds_curv,
-        method="linear"
+        source_grid=source_ds_curv, target_grid=target_ds_curv, method="linear"
     )
-    result_linear = interpolator_linear(source_ds_curv['temperature'])
+    result_linear = interpolator_linear(source_ds_curv["temperature"])
 
     # Check internal state to ensure no massive fallback
-    simplex_indices = interpolator_linear.interpolation_engine.precomputed_weights['simplex_indices']
+    simplex_indices = interpolator_linear.interpolation_engine.precomputed_weights["simplex_indices"]
     # -2 indicates fallback to nearest
     fallback_count = np.sum(simplex_indices == -2)
     total_count = simplex_indices.size
-    
+
     # We expect very few fallbacks (only possibly at boundaries if domains don't overlap perfectly)
     # With global coverage, it should be near 0
-    assert fallback_count < 0.1 * total_count, f"Too many points fell back to nearest neighbor: {fallback_count}/{total_count}"
+    assert fallback_count < 0.1 * total_count, (
+        f"Too many points fell back to nearest neighbor: {fallback_count}/{total_count}"
+    )
 
     # 2. Run Nearest Neighbor Interpolation
     interpolator_nearest = CurvilinearInterpolator(
-        source_grid=source_ds_curv,
-        target_grid=target_ds_curv,
-        method="nearest"
+        source_grid=source_ds_curv, target_grid=target_ds_curv, method="nearest"
     )
-    result_nearest = interpolator_nearest(source_ds_curv['temperature'])
+    result_nearest = interpolator_nearest(source_ds_curv["temperature"])
 
     # 3. Compare Results
     # They should be different
@@ -92,38 +78,37 @@ def test_curvilinear_linear_vs_nearest_differentiation():
     # Ideally, max difference should be significant (e.g. > 0.1 for random [0,1] data)
     assert max_diff > 0.01, "Linear and Nearest Neighbor results are too similar (likely identical)"
 
+
 def test_curvilinear_scaling_recovery():
     """Test that the scaling mechanism actually recovers points that would otherwise be lost."""
     # Create a simple spherical case where we know points are "outside" the convex hull
     # 4 points on equator forming a square (in lat/lon) -> tetrahedron in 3D? No, just surface points.
-    
+
     # Use a coarse grid where the chord vs arc difference is large
     ny, nx = 10, 20
     lon = np.linspace(0, 360, nx, endpoint=False)
     lat = np.linspace(-90, 90, ny)
     lon_2d, lat_2d = np.meshgrid(lon, lat)
-    
-    source_ds = xr.Dataset(
-        coords={'lon': (('y', 'x'), lon_2d), 'lat': (('y', 'x'), lat_2d)}
-    )
-    
+
+    source_ds = xr.Dataset(coords={"lon": (("y", "x"), lon_2d), "lat": (("y", "x"), lat_2d)})
+
     # Target points exactly in between source points on the sphere surface
     # These will definitely be "outside" the planar facets of the source convex hull
     ny_t, nx_t = 5, 10
     lon_t = np.linspace(10, 350, nx_t)
     lat_t = np.linspace(-80, 80, ny_t)
     lon_t_2d, lat_t_2d = np.meshgrid(lon_t, lat_t)
-    
-    target_ds = xr.Dataset(
-        coords={'lon': (('y', 'x'), lon_t_2d), 'lat': (('y', 'x'), lat_t_2d)}
-    )
-    
+
+    target_ds = xr.Dataset(coords={"lon": (("y", "x"), lon_t_2d), "lat": (("y", "x"), lat_t_2d)})
+
     interpolator = CurvilinearInterpolator(source_ds, target_ds, method="linear")
-    
+
     # Check that we found simplices for most points
-    simplex_indices = interpolator.interpolation_engine.precomputed_weights['simplex_indices']
+    simplex_indices = interpolator.interpolation_engine.precomputed_weights["simplex_indices"]
     valid_count = np.sum(simplex_indices >= 0)
     total_count = simplex_indices.size
-    
+
     # Without scaling, this would be 0. With scaling, it should be high.
-    assert valid_count > 0.9 * total_count, f"Failed to find simplices for spherical points. Found {valid_count}/{total_count}"
+    assert valid_count > 0.9 * total_count, (
+        f"Failed to find simplices for spherical points. Found {valid_count}/{total_count}"
+    )

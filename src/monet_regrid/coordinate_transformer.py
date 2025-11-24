@@ -54,11 +54,7 @@ class CoordinateTransformer:
         self._max_cache_size = 100  # Maximum number of cached transformations
 
     def transform_coordinates(
-        self,
-        lon: np.ndarray,
-        lat: np.ndarray,
-        height: np.ndarray | None = None,
-        use_cache: bool = True
+        self, lon: np.ndarray, lat: np.ndarray, height: np.ndarray | None = None, use_cache: bool = True
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Transform coordinates from geographic to 3D geocentric.
 
@@ -111,11 +107,7 @@ class CoordinateTransformer:
         return x, y, z
 
     def inverse_transform_coordinates(
-        self,
-        x: np.ndarray,
-        y: np.ndarray,
-        z: np.ndarray,
-        use_cache: bool = True
+        self, x: np.ndarray, y: np.ndarray, z: np.ndarray, use_cache: bool = True
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Transform coordinates from 3D geocentric back to geographic.
 
@@ -162,11 +154,7 @@ class CoordinateTransformer:
 
         return lon, lat, height
 
-    def calculate_distance_threshold(
-        self,
-        points_3d: np.ndarray,
-        factor: float = 3.0
-    ) -> float:
+    def calculate_distance_threshold(self, points_3d: np.ndarray, factor: float = 3.0) -> float:
         """Calculate appropriate distance threshold for out-of-domain detection.
 
         Args:
@@ -217,10 +205,7 @@ class CoordinateTransformer:
 
     def get_cache_stats(self) -> dict:
         """Get cache statistics."""
-        return {
-            "size": len(self._cache),
-            "max_size": self._max_cache_size
-        }
+        return {"size": len(self._cache), "max_size": self._max_cache_size}
 
 
 # Pre-configured transformer instance for common use cases

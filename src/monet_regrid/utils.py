@@ -61,22 +61,14 @@ class Grid:
         """Validate the initialized SpatialBounds class."""
         msg = None
         if self.south > self.north:
-            msg = (
-                "Value of north bound is greater than south bound."
-                "\nPlease check the bounds input."
-            )
+            msg = "Value of north bound is greater than south bound.\nPlease check the bounds input."
             pass
         if self.west > self.east:
-            msg = (
-                "Value of west bound is greater than east bound."
-                "\nPlease check the bounds input."
-            )
+            msg = "Value of west bound is greater than east bound.\nPlease check the bounds input."
         if msg is not None:
             raise InvalidBoundsError(msg)
 
-    def create_regridding_dataset(
-        self, lat_name: str = "latitude", lon_name: str = "longitude"
-    ) -> xr.Dataset:
+    def create_regridding_dataset(self, lat_name: str = "latitude", lon_name: str = "longitude") -> xr.Dataset:
         """Create a dataset to use for regridding.
 
         Args:
@@ -107,22 +99,16 @@ def create_lat_lon_coords(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
     if np.remainder((grid.north - grid.south), grid.resolution_lat) > 0:
         lat_coords = np.arange(grid.south, grid.north, grid.resolution_lat)
     else:
-        lat_coords = np.arange(
-            grid.south, grid.north + grid.resolution_lat, grid.resolution_lat
-        )
+        lat_coords = np.arange(grid.south, grid.north + grid.resolution_lat, grid.resolution_lat)
 
     if np.remainder((grid.east - grid.west), grid.resolution_lat) > 0:
         lon_coords = np.arange(grid.west, grid.east, grid.resolution_lon)
     else:
-        lon_coords = np.arange(
-            grid.west, grid.east + grid.resolution_lon, grid.resolution_lon
-        )
+        lon_coords = np.arange(grid.west, grid.east + grid.resolution_lon, grid.resolution_lon)
     return lat_coords, lon_coords
 
 
-def create_regridding_dataset(
-    grid: Grid, lat_name: str = "latitude", lon_name: str = "longitude"
-) -> xr.Dataset:
+def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: str = "longitude") -> xr.Dataset:
     """Create a dataset to use for regridding.
 
     Args:
@@ -329,7 +315,7 @@ def format_for_regrid(
                 if len(obj[var].chunksizes.get(coord, ())) == 1:
                     result[var] = result[var].chunk({coord: -1})
 
-    return result # type: ignore
+    return result  # type: ignore
 
 
 def format_lat(
@@ -415,9 +401,7 @@ def format_lon(
     source_vals = obj.coords[lon_coord].values
     target_vals = target.coords[target_lon_coord].values
     wrap_point = (target_vals[-1] + target_vals[0] + 360) / 2
-    source_vals = np.where(
-        source_vals < wrap_point - 360, source_vals + 360, source_vals
-    )
+    source_vals = np.where(source_vals < wrap_point - 360, source_vals + 360, source_vals)
     source_vals = np.where(source_vals > wrap_point, source_vals - 360, source_vals)
     obj = update_coord(obj, lon_coord, source_vals)
 
@@ -447,9 +431,7 @@ def format_lon(
     return obj
 
 
-def coord_is_covered(
-    obj: xr.DataArray | xr.Dataset, target: xr.Dataset, coord: Hashable
-) -> bool:
+def coord_is_covered(obj: xr.DataArray | xr.Dataset, target: xr.Dataset, coord: Hashable) -> bool:
     """Check if the source coord fully covers the target coord."""
     pad = target[coord].diff(coord).max().values
     left_covered = obj[coord].min() <= target[coord].min() - pad
@@ -465,9 +447,7 @@ def ensure_monotonic(obj: xr.DataArray, coord: Hashable) -> xr.DataArray: ...
 def ensure_monotonic(obj: xr.Dataset, coord: Hashable) -> xr.Dataset: ...
 
 
-def ensure_monotonic(
-    obj: xr.DataArray | xr.Dataset, coord: Hashable
-) -> xr.DataArray | xr.Dataset:
+def ensure_monotonic(obj: xr.DataArray | xr.Dataset, coord: Hashable) -> xr.DataArray | xr.Dataset:
     """Ensure that an object has monotonically increasing indexes for a
     given coordinate. Only sort and drop duplicates if needed because this
     requires reindexing which can be expensive."""
@@ -479,20 +459,14 @@ def ensure_monotonic(
 
 
 @overload
-def update_coord(
-    obj: xr.DataArray, coord: Hashable, coord_vals: np.ndarray
-) -> xr.DataArray: ...
+def update_coord(obj: xr.DataArray, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray: ...
 
 
 @overload
-def update_coord(
-    obj: xr.Dataset, coord: Hashable, coord_vals: np.ndarray
-) -> xr.Dataset: ...
+def update_coord(obj: xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.Dataset: ...
 
 
-def update_coord(
-    obj: xr.DataArray | xr.Dataset, coord: Hashable, coord_vals: np.ndarray
-) -> xr.DataArray | xr.Dataset:
+def update_coord(obj: xr.DataArray | xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray | xr.Dataset:
     """Update the values of a coordinate, ensuring indexes stay in sync."""
     attrs = obj.coords[coord].attrs
     obj = obj.assign_coords({coord: coord_vals})
@@ -502,16 +476,16 @@ def update_coord(
 
 def _get_grid_type(ds: xr.Dataset) -> GridType:
     """Detect the grid type of the dataset using cf-xarray.
-    
+
     Uses cf-xarray to access coordinate information and determine if the grid
     is rectilinear (1D coordinates) or curvilinear (2D coordinates).
-    
+
     Args:
         ds: Input xarray dataset
-        
+
     Returns:
         GridType: Either GridType.RECTILINEAR or GridType.CURVILINEAR
-        
+
     Raises:
         ValueError: If coordinates cannot be identified or if mixed dimensions are found
     """
@@ -545,10 +519,12 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
         except KeyError:
             # Fallback to manual search for coordinate names and check their dimensions
             # Look for coordinates that represent latitude/longitude regardless of name
-            lat_coord_names = [name for name in ds.coords
-                              if any(keyword in str(name).lower() for keyword in ["lat", "yc", "y"])]
-            lon_coord_names = [name for name in ds.coords
-                              if any(keyword in str(name).lower() for keyword in ["lon", "xc", "x"])]
+            lat_coord_names = [
+                name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["lat", "yc", "y"])
+            ]
+            lon_coord_names = [
+                name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["lon", "xc", "x"])
+            ]
 
             # If we have both lat and lon coordinates, check their dimensions
             if lat_coord_names and lon_coord_names:
@@ -561,7 +537,9 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
 
                 # Both coordinates should have the same number of dimensions
                 if lat_ndim != lon_ndim:
-                    msg = f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
+                    msg = (
+                        f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
+                    )
                     raise ValueError(msg)
 
                 # Determine grid type based on dimensionality
@@ -582,9 +560,17 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                     coord_var = ds[coord_name]
                     if coord_var.ndim == 2:
                         # If we find 2D coordinates, check if they look like latitude/longitude
-                        if "lat" in str(coord_name).lower() or "yc" in str(coord_name).lower() or "y" in str(coord_name).lower():
+                        if (
+                            "lat" in str(coord_name).lower()
+                            or "yc" in str(coord_name).lower()
+                            or "y" in str(coord_name).lower()
+                        ):
                             potential_lat_coords.append(coord_name)
-                        elif "lon" in str(coord_name).lower() or "xc" in str(coord_name).lower() or "x" in str(coord_name).lower():
+                        elif (
+                            "lon" in str(coord_name).lower()
+                            or "xc" in str(coord_name).lower()
+                            or "x" in str(coord_name).lower()
+                        ):
                             potential_lon_coords.append(coord_name)
 
                 # If we still don't have any lat/lon coords, look for any 2D coordinates
@@ -617,13 +603,24 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                     for coord_name in ds.coords:
                         coord_var = ds[coord_name]
                         if coord_var.ndim == 1:
-                            if "lat" in str(coord_name).lower() or "lon" in str(coord_name).lower() or "y" in str(coord_name).lower() or "x" in str(coord_name).lower():
+                            if (
+                                "lat" in str(coord_name).lower()
+                                or "lon" in str(coord_name).lower()
+                                or "y" in str(coord_name).lower()
+                                or "x" in str(coord_name).lower()
+                            ):
                                 # This is likely a rectilinear grid with 1D coordinates
                                 # Look for both lat and lon
-                                lat_1d_names = [name for name in ds.coords
-                                              if ds[name].ndim == 1 and ("lat" in str(name).lower() or "y" in str(name).lower())]
-                                lon_1d_names = [name for name in ds.coords
-                                              if ds[name].ndim == 1 and ("lon" in str(name).lower() or "x" in str(name).lower())]
+                                lat_1d_names = [
+                                    name
+                                    for name in ds.coords
+                                    if ds[name].ndim == 1 and ("lat" in str(name).lower() or "y" in str(name).lower())
+                                ]
+                                lon_1d_names = [
+                                    name
+                                    for name in ds.coords
+                                    if ds[name].ndim == 1 and ("lon" in str(name).lower() or "x" in str(name).lower())
+                                ]
 
                                 if lat_1d_names and lon_1d_names:
                                     return GridType.RECTILINEAR
@@ -641,14 +638,14 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
 
 def validate_grid_compatibility(source_ds: xr.Dataset, target_ds: xr.Dataset) -> tuple[GridType, GridType]:
     """Validate that both source and target grids have supported types.
-    
+
     Args:
         source_ds: Source dataset
         target_ds: Target dataset
-        
+
     Returns:
         Tuple of (source_grid_type, target_grid_type)
-        
+
     Raises:
         ValueError: If either grid has an unsupported type
     """

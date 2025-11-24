@@ -1,7 +1,9 @@
 """Test for polar interpolation fix in curvilinear interpolation."""
+
 import numpy as np
-import xarray as xr
 import pytest
+import xarray as xr
+
 from monet_regrid.curvilinear import CurvilinearInterpolator
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
@@ -16,51 +18,33 @@ def test_polar_interpolation_no_nan():
     lon_1d = np.linspace(-180, 180, nx)
     lat_1d = np.linspace(-90, 90, ny)  # Include the poles
     source_lon_2d, source_lat_2d = np.meshgrid(lon_1d, lat_1d)
-    
+
     # Create source dataset
     source_ds = xr.Dataset(
-        {
-            'temperature': (
-                ('y', 'x'),
-                np.random.random((ny, nx)).astype(np.float32),
-                {'units': 'K'}
-            )
-        },
-        coords={
-            'lon': (('y', 'x'), source_lon_2d),
-            'lat': (('y', 'x'), source_lat_2d)
-        }
+        {"temperature": (("y", "x"), np.random.random((ny, nx)).astype(np.float32), {"units": "K"})},
+        coords={"lon": (("y", "x"), source_lon_2d), "lat": (("y", "x"), source_lat_2d)},
     )
-    
+
     # Create a target grid that includes points very close to the poles
     ny_target, nx_target = 10, 20
     lon_target_1d = np.linspace(-180, 180, nx_target)
     # Use latitudes very close to the poles to trigger the issue
     lat_target_1d = np.linspace(-89.9, 89.9, ny_target)
     target_lon_2d, target_lat_2d = np.meshgrid(lon_target_1d, lat_target_1d)
-    
+
     # Create target dataset
-    target_ds = xr.Dataset(
-        coords={
-            'lon': (('y', 'x'), target_lon_2d),
-            'lat': (('y', 'x'), target_lat_2d)
-        }
-    )
-    
+    target_ds = xr.Dataset(coords={"lon": (("y", "x"), target_lon_2d), "lat": (("y", "x"), target_lat_2d)})
+
     # Perform bilinear interpolation
-    interpolator = CurvilinearInterpolator(
-        source_grid=source_ds,
-        target_grid=target_ds,
-        method="linear"
-    )
-    
+    interpolator = CurvilinearInterpolator(source_grid=source_ds, target_grid=target_ds, method="linear")
+
     # Interpolate the data
-    result = interpolator(source_ds['temperature'])
-    
+    result = interpolator(source_ds["temperature"])
+
     # Check that there are no NaN values in the polar regions
     # Specifically check the first and last latitude rows (closest to poles)
     assert not np.any(np.isnan(result.values)), "Found NaN values in polar interpolation"
-    
+
     # Additional check: ensure result has the expected shape
     assert result.shape == (ny_target, nx_target), f"Expected shape {(ny_target, nx_target)}, got {result.shape}"
 
@@ -72,58 +56,41 @@ def test_polar_interpolation_with_nan_fill_method():
     lon_1d = np.linspace(-180, 180, nx)
     lat_1d = np.linspace(-90, 90, ny)  # Include the poles
     source_lon_2d, source_lat_2d = np.meshgrid(lon_1d, lat_1d)
-    
+
     # Create source dataset with some NaN values to test fill behavior
     source_data = np.random.random((ny, nx)).astype(np.float32)
     source_data[0, :] = np.nan  # NaN values near one pole
     source_data[-1, :] = np.nan  # NaN values near other pole
-    
+
     source_ds = xr.Dataset(
-        {
-            'temperature': (
-                ('y', 'x'),
-                source_data,
-                {'units': 'K'}
-            )
-        },
-        coords={
-            'lon': (('y', 'x'), source_lon_2d),
-            'lat': (('y', 'x'), source_lat_2d)
-        }
+        {"temperature": (("y", "x"), source_data, {"units": "K"})},
+        coords={"lon": (("y", "x"), source_lon_2d), "lat": (("y", "x"), source_lat_2d)},
     )
-    
+
     # Create a target grid that includes points very close to the poles
     ny_target, nx_target = 10, 20
     lon_target_1d = np.linspace(-180, 180, nx_target)
     # Use latitudes very close to the poles to trigger the issue
     lat_target_1d = np.linspace(-89.9, 89.9, ny_target)
     target_lon_2d, target_lat_2d = np.meshgrid(lon_target_1d, lat_target_1d)
-    
+
     # Create target dataset
-    target_ds = xr.Dataset(
-        coords={
-            'lon': (('y', 'x'), target_lon_2d),
-            'lat': (('y', 'x'), target_lat_2d)
-        }
-    )
-    
+    target_ds = xr.Dataset(coords={"lon": (("y", "x"), target_lon_2d), "lat": (("y", "x"), target_lat_2d)})
+
     # Perform bilinear interpolation with nearest fill method
     interpolator = CurvilinearInterpolator(
-        source_grid=source_ds,
-        target_grid=target_ds,
-        method="linear",
-        fill_method="nearest"
+        source_grid=source_ds, target_grid=target_ds, method="linear", fill_method="nearest"
     )
-    
+
     # Interpolate the data
-    result = interpolator(source_ds['temperature'])
-    
+    result = interpolator(source_ds["temperature"])
+
     # With fill_method='nearest', polar regions should have values (not NaN)
     # even when source has NaN values at the poles
     nan_count = np.sum(np.isnan(result.values))
     print(f"NaN count in result: {nan_count}")
     print(f"Result shape: {result.shape}")
-    
+
     # The result should have fewer NaN values than a strict linear interpolation would have
     # due to the fallback to nearest neighbor in polar regions
     # The important thing is that the interpolation doesn't crash or produce all NaNs

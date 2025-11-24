@@ -43,10 +43,10 @@ class InterpolationEngine:
         method: Literal["nearest", "linear"] = "linear",
         spherical: bool = True,
         fill_method: Literal["nan", "nearest"] = "nan",
-        extrapolate: bool = False
+        extrapolate: bool = False,
     ):
         """Initialize the interpolation engine.
-        
+
         Args:
             method: Interpolation method ('nearest' or 'linear')
             spherical: Whether to use spherical barycentrics (True) or planar (False)
@@ -72,13 +72,10 @@ class InterpolationEngine:
         self.target_points_3d: np.ndarray | None = None
 
     def build_structures(
-        self,
-        source_points_3d: np.ndarray,
-        target_points_3d: np.ndarray,
-        radius_of_influence: float | None = None
+        self, source_points_3d: np.ndarray, target_points_3d: np.ndarray, radius_of_influence: float | None = None
     ) -> None:
         """Build interpolation structures based on method.
-        
+
         Args:
             source_points_3d: Array of 3D source points (n, 3)
             target_points_3d: Array of 3D target points (m, 3)
@@ -86,21 +83,14 @@ class InterpolationEngine:
         """
         self.target_points_3d = target_points_3d
         if self.method == "nearest":
-            self._build_nearest_neighbour(
-                source_points_3d, target_points_3d, radius_of_influence
-            )
+            self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)
         elif self.method == "linear":
-            self._build_linear_interpolation(
-                source_points_3d, target_points_3d, radius_of_influence
-            )
+            self._build_linear_interpolation(source_points_3d, target_points_3d, radius_of_influence)
         else:
             raise ValueError(f"Unsupported method: {self.method}. Use 'nearest' or 'linear'")
 
     def _build_nearest_neighbour(
-        self,
-        source_points_3d: np.ndarray,
-        target_points_3d: np.ndarray,
-        radius_of_influence: float | None = None
+        self, source_points_3d: np.ndarray, target_points_3d: np.ndarray, radius_of_influence: float | None = None
     ) -> None:
         """Build KDTree for nearest neighbor interpolation."""
         # Create KDTree from source points in 3D space
@@ -134,15 +124,14 @@ class InterpolationEngine:
             self.distance_threshold = float("inf")
 
     def _build_linear_interpolation(
-        self,
-        source_points_3d: np.ndarray,
-        target_points_3d: np.ndarray,
-        radius_of_influence: float | None = None
+        self, source_points_3d: np.ndarray, target_points_3d: np.ndarray, radius_of_influence: float | None = None
     ) -> None:
         """Build Delaunay triangulation and interpolation structures for linear interpolation."""
         # Delaunay requires at least N+1 points in N dimensions. For 3D, we need at least 4 points.
         if len(source_points_3d) < 4:
-            warnings.warn("Linear interpolation requires at least 4 source points for robust 3D Delaunay triangulation. Falling back to nearest neighbor.")
+            warnings.warn(
+                "Linear interpolation requires at least 4 source points for robust 3D Delaunay triangulation. Falling back to nearest neighbor."
+            )
             self.method = "nearest"
             self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)
             return
@@ -151,7 +140,9 @@ class InterpolationEngine:
             # Use 'QJ' to joggle input to avoid QhullErrors for coplanar points
             self.triangles = Delaunay(source_points_3d, qhull_options="QJ")
         except Exception as e:
-            warnings.warn(f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor.")
+            warnings.warn(
+                f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor."
+            )
             self.method = "nearest"
             self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)
             return
@@ -169,11 +160,7 @@ class InterpolationEngine:
         # Precompute barycentric coordinates for target points
         self._precompute_barycentric_weights(target_points_3d, source_points_3d)
 
-    def _precompute_barycentric_weights(
-        self,
-        target_points_3d: np.ndarray,
-        source_points_3d: np.ndarray
-    ) -> None:
+    def _precompute_barycentric_weights(self, target_points_3d: np.ndarray, source_points_3d: np.ndarray) -> None:
         """Precompute barycentric weights for all target points."""
         # Initialize weights storage
         n_targets = len(target_points_3d)
@@ -181,7 +168,7 @@ class InterpolationEngine:
         self.precomputed_weights = {
             "simplex_indices": np.full(n_targets, -1, dtype=np.int32),
             "barycentric_weights": np.zeros((n_targets, 4), dtype=np.float64),
-            "valid_points": np.zeros(n_targets, dtype=bool)
+            "valid_points": np.zeros(n_targets, dtype=bool),
         }
 
         if self.triangles is None:
@@ -324,24 +311,20 @@ class InterpolationEngine:
             inv_denom = 1 / (dot00 * dot11 - dot01 * dot01)
             u = (dot11 * dot02 - dot01 * dot12) * inv_denom
             v = (dot00 * dot12 - dot01 * dot02) * inv_denom
-            w = 1 - u - v # Weight for first vertex
+            w = 1 - u - v  # Weight for first vertex
         except ZeroDivisionError:
             # Degenerate triangle, return equal weights
-            return np.array([1/3.0, 1/3.0, 1/3.0])
+            return np.array([1 / 3.0, 1 / 3.0, 1 / 3.0])
 
         return np.array([w, u, v])  # weights for vertices 0, 1, 2
 
-    def interpolate(
-        self,
-        source_data: np.ndarray,
-        use_precomputed: bool = True
-    ) -> np.ndarray:
+    def interpolate(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
         """Apply interpolation to source data.
-        
+
         Args:
             source_data: Input data array with source grid dimensions
             use_precomputed: Whether to use precomputed weights (default True)
-            
+
         Returns:
             Interpolated data on target grid
         """
@@ -357,7 +340,7 @@ class InterpolationEngine:
         # source_data shape: (..., source_spatial_count)
         # Reshape to handle multiple dimensions
         original_shape = source_data.shape
-        n_spatial = original_shape[-1] # Last dimension is spatial
+        n_spatial = original_shape[-1]  # Last dimension is spatial
         n_other_dims = len(original_shape) - 1
 
         if n_other_dims > 0:
@@ -370,21 +353,15 @@ class InterpolationEngine:
 
         # Create result array
         if self.source_indices is None:
-             raise RuntimeError("Source indices not computed")
+            raise RuntimeError("Source indices not computed")
 
-        result = np.full(
-            (reshaped_data.shape[0], len(self.source_indices)),
-            np.nan,
-            dtype=source_data.dtype
-        )
+        result = np.full((reshaped_data.shape[0], len(self.source_indices)), np.nan, dtype=source_data.dtype)
 
         # For each non-spatial slice
         for i in range(reshaped_data.shape[0]):
             slice_values = reshaped_data[i, :]
 
-            if (self.fill_method == "nan" and
-                self.distances is not None and
-                self.distance_threshold is not None):
+            if self.fill_method == "nan" and self.distances is not None and self.distance_threshold is not None:
                 # Only fill points that are within the domain (distance below threshold)
                 valid_mask = self.distances < self.distance_threshold
                 for j in range(len(valid_mask)):
@@ -396,8 +373,7 @@ class InterpolationEngine:
                             # If nearest value is NaN, find the next valid neighbor
                             k = min(len(slice_values), 20)  # Search up to 20 neighbors
                             distances_to_neighbors, indices_to_neighbors = self.source_kdtree.query(
-                                self.target_points_3d[j],
-                                k=k
+                                self.target_points_3d[j], k=k
                             )
                             # Make sure indices_to_neighbors is an array
                             if np.isscalar(indices_to_neighbors):
@@ -419,8 +395,7 @@ class InterpolationEngine:
                         # If nearest value is NaN, find the next valid neighbor
                         k = min(len(slice_values), 20)  # Search up to 20 neighbors
                         distances_to_neighbors, indices_to_neighbors = self.source_kdtree.query(
-                            self.target_points_3d[j],
-                            k=k
+                            self.target_points_3d[j], k=k
                         )
                         # Make sure indices_to_neighbors is an array
                         if np.isscalar(indices_to_neighbors):
@@ -440,11 +415,7 @@ class InterpolationEngine:
         else:
             return result.reshape(-1)
 
-    def _interpolate_linear(
-        self,
-        source_data: np.ndarray,
-        use_precomputed: bool = True
-    ) -> np.ndarray:
+    def _interpolate_linear(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
         """Perform linear interpolation using Delaunay triangulation."""
         if not use_precomputed or self.precomputed_weights is None:
             # Fallback to direct computation if precomputed weights not available
@@ -466,11 +437,7 @@ class InterpolationEngine:
 
         # Create result array
         n_targets = len(self.precomputed_weights["valid_points"])
-        result = np.full(
-            (reshaped_data.shape[0], n_targets),
-            np.nan,
-            dtype=source_data.dtype
-        )
+        result = np.full((reshaped_data.shape[0], n_targets), np.nan, dtype=source_data.dtype)
 
         # Apply precomputed weights
         for target_idx in range(n_targets):
@@ -482,19 +449,26 @@ class InterpolationEngine:
                     weights = self.precomputed_weights["barycentric_weights"][target_idx]
 
                     # Get the source point indices for this triangle
-                    if hasattr(self, "triangles") and self.triangles is not None and hasattr(self.triangles, "simplices"):
+                    if (
+                        hasattr(self, "triangles")
+                        and self.triangles is not None
+                        and hasattr(self.triangles, "simplices")
+                    ):
                         vertex_indices = self.triangles.simplices[simplex_idx]
 
                         for slice_idx in range(reshaped_data.shape[0]):
                             slice_values = reshaped_data[slice_idx, :]
                             vertex_values = slice_values[vertex_indices]
                             if np.any(np.isnan(vertex_values)):
-                                if self.fill_method == "nearest" and self.source_kdtree is not None and self.target_points_3d is not None:
+                                if (
+                                    self.fill_method == "nearest"
+                                    and self.source_kdtree is not None
+                                    and self.target_points_3d is not None
+                                ):
                                     # Fallback to nearest neighbor if any vertex is NaN
                                     k = min(len(slice_values), 20)  # Search up to 20 neighbors
                                     _, indices_to_neighbors = self.source_kdtree.query(
-                                        self.target_points_3d[target_idx],
-                                        k=k
+                                        self.target_points_3d[target_idx], k=k
                                     )
                                     # Make sure indices_to_neighbors is an array
                                     if np.isscalar(indices_to_neighbors):

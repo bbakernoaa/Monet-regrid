@@ -13,6 +13,8 @@ jobs:
     name: Linting build
     runs-on: ubuntu-latest
     strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
       fail-fast: false
     steps:
     - uses: actions/checkout@v3
@@ -27,5 +29,7 @@ jobs:
         python3 --version
     - name: Upgrade pip and install hatch
       run: python3 -m pip install --upgrade pip hatch
+    - name: Install dependencies
+      run: python3 -m pip install .[dev]
     - name: Check style against standards
       run: hatch run lint

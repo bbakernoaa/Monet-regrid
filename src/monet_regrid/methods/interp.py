@@ -88,7 +88,7 @@ def interp_regrid(
     for coord in coord_names:
         interped[coord].attrs = coord_attrs[coord]
 
-    return interped # type: ignore
+    return interped  # type: ignore
 
 
 def _interp_regrid_fast(
@@ -98,7 +98,7 @@ def _interp_regrid_fast(
     coord_names: Sequence[Hashable],
 ) -> xr.DataArray:
     """Fast interpolation using scipy.interpolate.RegularGridInterpolator directly.
-    
+
     This avoids some overhead from xarray's interp() method.
     """
     # Sort coordinate names to match data dimensions order where possible
@@ -122,7 +122,7 @@ def _interp_regrid_fast(
         is_monotonic_dec = np.all(np.diff(coord_vals) < 0)
 
         if not (is_monotonic_inc or is_monotonic_dec):
-             raise ValueError(f"Coordinate {dim} is not monotonic")
+            raise ValueError(f"Coordinate {dim} is not monotonic")
         src_coords.append(coord_vals)
 
     # Prepare target coordinates
@@ -139,11 +139,7 @@ def _interp_regrid_fast(
     # Create interpolator
     # Note: fill_value=np.nan is safer but might be slower; xarray default is usually nan
     interpolator = RegularGridInterpolator(
-        tuple(src_coords),
-        data.values,
-        method=scipy_method,
-        bounds_error=False,
-        fill_value=np.nan
+        tuple(src_coords), data.values, method=scipy_method, bounds_error=False, fill_value=np.nan
     )
 
     # Generate target points grid
@@ -179,12 +175,6 @@ def _interp_regrid_fast(
         new_coords[dim] = target_ds.coords[dim]
 
     # Add back attributes
-    result = xr.DataArray(
-        new_values,
-        dims=interp_dims,
-        coords=new_coords,
-        attrs=data.attrs,
-        name=data.name
-    )
+    result = xr.DataArray(new_values, dims=interp_dims, coords=new_coords, attrs=data.attrs, name=data.name)
 
     return result

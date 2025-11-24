@@ -121,7 +121,7 @@ def conservative_regrid(
 
     regridded_data = regridded_data.reindex_like(target_ds, copy=False)
 
-    return regridded_data # type: ignore
+    return regridded_data  # type: ignore
 
 
 def conservative_regrid_dataset(
@@ -143,17 +143,13 @@ def conservative_regrid_dataset(
     weights = {}
     covered = {}
     for coord in coords:  # noqa: PLC0206
-        covered[coord] = (coords[coord] <= data[coord].max()) & (
-            coords[coord] >= data[coord].min()
-        )
+        covered[coord] = (coords[coord] <= data[coord].max()) & (coords[coord] >= data[coord].min())
 
         target_coords = coords[coord].to_numpy()
         source_coords = data[coord].to_numpy()
         nd_weights = get_weights(source_coords, target_coords)
 
-        da_weights = utils.create_dot_dataarray(
-            nd_weights, str(coord), target_coords, source_coords
-        )
+        da_weights = utils.create_dot_dataarray(nd_weights, str(coord), target_coords, source_coords)
         # Modify weights to correct for latitude distortion
         if coord == latitude_coord:
             da_weights = apply_spherical_correction(da_weights, latitude_coord)
@@ -211,14 +207,10 @@ def apply_weights(
     coords = list(weights.keys())
     weight_arrays = list(weights.values())
 
-    da_regrid: xr.DataArray = xr.dot(
-        da.fillna(0), *weight_arrays, dim=list(weights.keys()), optimize=True
-    )
+    da_regrid: xr.DataArray = xr.dot(da.fillna(0), *weight_arrays, dim=list(weights.keys()), optimize=True)
 
     if skipna:
-        valid_frac = xr.dot(
-            da.notnull(), *weight_arrays, dim=list(weights.keys()), optimize=True
-        )
+        valid_frac = xr.dot(da.notnull(), *weight_arrays, dim=list(weights.keys()), optimize=True)
         da_regrid /= valid_frac
         da_regrid = da_regrid.where(valid_frac >= get_valid_threshold(nan_threshold))
 
@@ -254,15 +246,13 @@ def get_weights(source_coords: np.ndarray, target_coords: np.ndarray) -> np.ndar
     return utils.normalize_overlap(overlap)
 
 
-def apply_spherical_correction(
-    dot_array: xr.DataArray, latitude_coord: Hashable
-) -> xr.DataArray:
+def apply_spherical_correction(dot_array: xr.DataArray, latitude_coord: Hashable) -> xr.DataArray:
     """Apply a sperical earth correction on the prepared dot product weights."""
     da = dot_array.copy()
     latitude_res = float(np.median(np.diff(dot_array[latitude_coord].to_numpy(), 1)))
     lat_weights = lat_weight(dot_array[latitude_coord].to_numpy(), latitude_res)
     da.values = utils.normalize_overlap(dot_array.values * lat_weights[:, np.newaxis])
-    return da # type: ignore
+    return da  # type: ignore
 
 
 def lat_weight(latitude: np.ndarray, latitude_res: float) -> np.ndarray:
@@ -297,7 +287,7 @@ def format_weights(
         See: https://github.com/dask/dask/issues/2225
     3. Weights are converted to a sparse representation (on a per chunk basis)
         if the `sparse` package is available.
-    
+
     Returns weights that are compatible with both sparse and dense numpy arrays.
     """
     # Use single precision weights at minimum, double if input is double
@@ -323,4 +313,4 @@ def format_weights(
     # elif sparse is not None:
     #     new_weights.data = sparse.COO(weights.data)
 
-    return new_weights # type: ignore
+    return new_weights  # type: ignore

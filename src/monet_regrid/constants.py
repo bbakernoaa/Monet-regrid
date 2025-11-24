@@ -12,7 +12,4 @@ class GridType(Enum):
 
 
 # Grid validation constants
-GRID_TYPE_VALIDATION_ERROR = (
-    "Unsupported grid type detected. "
-    "Only rectilinear and curvilinear grids are supported."
-)
+GRID_TYPE_VALIDATION_ERROR = "Unsupported grid type detected. Only rectilinear and curvilinear grids are supported."

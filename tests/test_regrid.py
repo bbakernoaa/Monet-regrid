@@ -78,9 +78,7 @@ def conservative_sample_grid():
 
 @pytest.mark.parametrize("method", ["linear", "nearest"])
 @pytest.mark.parametrize("chunks", CHUNK_SCHEMES)
-def test_basic_regridders_ds(
-    sample_input_data, sample_grid_ds, cdo_comparison_data, method, chunks
-):
+def test_basic_regridders_ds(sample_input_data, sample_grid_ds, cdo_comparison_data, method, chunks):
     """Test the dataset regridders (except conservative)."""
     regridder = getattr(sample_input_data.chunk(chunks).regrid, method)
     ds_regrid = regridder(sample_grid_ds)
@@ -90,9 +88,7 @@ def test_basic_regridders_ds(
 
 @pytest.mark.parametrize("method", ["linear", "nearest"])
 @pytest.mark.parametrize("chunks", CHUNK_SCHEMES)
-def test_basic_regridders_da(
-    sample_input_data, sample_grid_ds, cdo_comparison_data, method, chunks
-):
+def test_basic_regridders_da(sample_input_data, sample_grid_ds, cdo_comparison_data, method, chunks):
     """Test the dataarray regridders (except conservative)."""
     regridder = getattr(sample_input_data["d2m"].chunk(chunks).regrid, method)
     da_regrid = regridder(sample_grid_ds)
@@ -108,9 +104,7 @@ def test_conservative_regridder(
     chunks,
 ):
     input_data = conservative_input_data.chunk(chunks)
-    ds_regrid = input_data.regrid.conservative(
-        conservative_sample_grid, latitude_coord="latitude"
-    )
+    ds_regrid = input_data.regrid.conservative(conservative_sample_grid, latitude_coord="latitude")
     ds_cdo = cdo_comparison_data["conservative"]
 
     xr.testing.assert_allclose(
@@ -121,14 +115,10 @@ def test_conservative_regridder(
     )
 
 
-def test_conservative_nans(
-    conservative_input_data, conservative_sample_grid, cdo_comparison_data
-):
+def test_conservative_nans(conservative_input_data, conservative_sample_grid, cdo_comparison_data):
     ds = conservative_input_data
     ds["tp"] = ds["tp"].where(ds.latitude >= 0).where(ds.longitude < 180)
-    ds_regrid = ds.regrid.conservative(
-        conservative_sample_grid, latitude_coord="latitude"
-    )
+    ds_regrid = ds.regrid.conservative(conservative_sample_grid, latitude_coord="latitude")
     ds_cdo = cdo_comparison_data["conservative"]
 
     no_nans = {"latitude": slice(1, 90), "longitude": slice(1, 179)}
@@ -149,9 +139,7 @@ def test_attrs_dataarray(sample_input_data, sample_grid_ds, method):
 
 
 def test_attrs_dataarray_conservative(sample_input_data, sample_grid_ds):
-    da_regrid = sample_input_data["d2m"].regrid.conservative(
-        sample_grid_ds, latitude_coord="latitude"
-    )
+    da_regrid = sample_input_data["d2m"].regrid.conservative(sample_grid_ds, latitude_coord="latitude")
     assert da_regrid.attrs == sample_input_data["d2m"].attrs
     assert da_regrid["longitude"].attrs == sample_input_data["longitude"].attrs
 
@@ -165,9 +153,7 @@ def test_attrs_dataset(sample_input_data, sample_grid_ds, method):
 
 
 def test_attrs_dataset_conservative(sample_input_data, sample_grid_ds):
-    ds_regrid = sample_input_data.regrid.conservative(
-        sample_grid_ds, latitude_coord="latitude"
-    )
+    ds_regrid = sample_input_data.regrid.conservative(sample_grid_ds, latitude_coord="latitude")
     assert ds_regrid.attrs == sample_input_data.attrs
     assert ds_regrid["d2m"].attrs == sample_input_data["d2m"].attrs
     assert ds_regrid["longitude"].attrs == sample_input_data["longitude"].attrs
@@ -229,9 +215,7 @@ def test_conservative_output_chunks():
     assert result.chunks == ((2, 2), (2, 2))
 
     # Specified output chunks should be respected
-    result = data.chunk({"x": 4, "y": 4}).regrid.conservative(
-        target, output_chunks={"x": 2, "y": 2}
-    )
+    result = data.chunk({"x": 4, "y": 4}).regrid.conservative(target, output_chunks={"x": 2, "y": 2})
     assert result.chunks == ((2, 2), (2, 2))
 
 
@@ -251,9 +235,7 @@ def test_conservative_nan_thresholds_against_xesmf():
     regridder = xesmf.Regridder(ds, target_dataset, "conservative")
 
     for nan_threshold in [0.0, 0.25, 0.5, 0.75, 1.0]:
-        data_regrid = ds.regrid.conservative(
-            target_dataset, skipna=True, nan_threshold=nan_threshold
-        )
+        data_regrid = ds.regrid.conservative(target_dataset, skipna=True, nan_threshold=nan_threshold)
         data_esmf = regridder(ds, keep_attrs=True, na_thres=nan_threshold, skipna=True)
         xr.testing.assert_equal(data_regrid.isnull(), data_esmf.isnull())
 
@@ -271,9 +253,7 @@ class TestCoordOrder:
     @pytest.mark.parametrize("coord", ["latitude", "longitude"])
     @pytest.mark.parametrize("method", ["linear", "nearest", "cubic"])
     @pytest.mark.parametrize("dataarray", [True, False])
-    def test_reversed(
-        self, sample_input_data, sample_grid_ds, method, coord, dataarray
-    ):
+    def test_reversed(self, sample_input_data, sample_grid_ds, method, coord, dataarray):
         input_data = sample_input_data["d2m"] if dataarray else sample_input_data
         regridder = getattr(input_data.regrid, method)
         sample_grid_ds[coord] = list(reversed(sample_grid_ds[coord]))
@@ -284,21 +264,15 @@ class TestCoordOrder:
     @pytest.mark.parametrize("dataarray", [True, False])
     def test_conservative_original(self, sample_input_data, sample_grid_ds, dataarray):
         input_data = sample_input_data["d2m"] if dataarray else sample_input_data
-        ds_regrid = input_data.regrid.conservative(
-            sample_grid_ds, latitude_coord="latitude"
-        )
+        ds_regrid = input_data.regrid.conservative(sample_grid_ds, latitude_coord="latitude")
         assert_array_equal(ds_regrid["latitude"], sample_grid_ds["latitude"])
         assert_array_equal(ds_regrid["longitude"], sample_grid_ds["longitude"])
 
     @pytest.mark.parametrize("coord", ["latitude", "longitude"])
     @pytest.mark.parametrize("dataarray", [True, False])
-    def test_conservative_reversed(
-        self, sample_input_data, sample_grid_ds, coord, dataarray
-    ):
+    def test_conservative_reversed(self, sample_input_data, sample_grid_ds, coord, dataarray):
         input_data = sample_input_data["d2m"] if dataarray else sample_input_data
         sample_grid_ds[coord] = list(reversed(sample_grid_ds[coord]))
-        ds_regrid = input_data.regrid.conservative(
-            sample_grid_ds, latitude_coord="latitude"
-        )
+        ds_regrid = input_data.regrid.conservative(sample_grid_ds, latitude_coord="latitude")
         assert_array_equal(ds_regrid["latitude"], sample_grid_ds["latitude"])
         assert_array_equal(ds_regrid["longitude"], sample_grid_ds["longitude"])
