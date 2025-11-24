@@ -4,7 +4,6 @@
 import numpy as np
 import xarray as xr
 
-
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 # Old import: import xarray_regrid  # Import to register the accessor
 # New import: import monet_regrid  # Import to register the accessor
@@ -137,7 +136,7 @@ def test_coordinate_mapping():
         # print(f"    Result coordinates: {list(result_ds.coords)}")
 
         return True
-    except Exception as e:
+    except Exception:
         # print(f" ✗ Failed: {e}")
         import traceback
 
@@ -169,7 +168,7 @@ def test_backward_compatibility():
         # print(f"    Result shape: {result.shape}")
 
         return True
-    except Exception as e:
+    except Exception:
         # print(f"  ✗ Failed: {e}")
         import traceback
 

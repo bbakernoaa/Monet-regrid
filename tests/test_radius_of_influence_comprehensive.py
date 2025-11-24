@@ -306,7 +306,7 @@ def test_error_handling():
         result_negative = interpolator_negative(test_data)
         nan_count_negative = np.sum(np.isnan(result_negative.data))
         # print(f"  Negative radius handled, NaN count: {nan_count_negative}")
-    except Exception as e:
+    except Exception:
         # print(f"  Negative radius raised exception: {e}")
         pass
 
@@ -322,7 +322,7 @@ def test_error_handling():
         result_extreme = interpolator_extreme(test_data)
         nan_count_extreme = np.sum(np.isnan(result_extreme.data))
         # print(f" Extremely large radius, NaN count: {nan_count_extreme}")
-    except Exception as e:
+    except Exception:
         # print(f"  Extremely large radius raised exception: {e}")
         pass
 
