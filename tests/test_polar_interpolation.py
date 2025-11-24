@@ -1,5 +1,7 @@
 """Test for polar interpolation fix in curvilinear interpolation."""
 
+import logging
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -88,8 +90,8 @@ def test_polar_interpolation_with_nan_fill_method():
     # With fill_method='nearest', polar regions should have values (not NaN)
     # even when source has NaN values at the poles
     nan_count = np.sum(np.isnan(result.values))
-    print(f"NaN count in result: {nan_count}")
-    print(f"Result shape: {result.shape}")
+    logging.info("NaN count in result: %s", nan_count)
+    logging.info("Result shape: %s", result.shape)
 
     # The result should have fewer NaN values than a strict linear interpolation would have
     # due to the fallback to nearest neighbor in polar regions
@@ -99,4 +101,4 @@ def test_polar_interpolation_with_nan_fill_method():
 if __name__ == "__main__":
     test_polar_interpolation_no_nan()
     test_polar_interpolation_with_nan_fill_method()
-    print("All polar interpolation tests passed!")
+    logging.info("All polar interpolation tests passed!")

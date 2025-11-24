@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 """Test script to verify the RASM dataset coordinate validation fix."""
 
+import logging
+import traceback
+
 import numpy as np
 import xarray as xr
 
@@ -11,72 +14,70 @@ import xarray as xr
 
 def test_rasm_coordinate_validation():
     """Test the exact scenario from the user's issue with RASM dataset."""
-    print("Testing RASM dataset coordinate validation fix...")
+    logging.info("Testing RASM dataset coordinate validation fix...")
 
     try:
         # Load RASM dataset (curvilinear grid with xc, yc coordinates)
-        print("Loading RASM dataset...")
+        logging.info("Loading RASM dataset...")
         ds = xr.tutorial.open_dataset("rasm")
-        print("✓ RASM dataset loaded successfully")
-        print(f"  Dimensions: {ds.dims}")
-        print(f"  Coordinates: {list(ds.coords)}")
-        print(f"  Data variables: {list(ds.data_vars)}")
+        logging.info("✓ RASM dataset loaded successfully")
+        logging.info("  Dimensions: %s", ds.dims)
+        logging.info("  Coordinates: %s", list(ds.coords))
+        logging.info("  Data variables: %s", list(ds.data_vars))
 
         # Create rectilinear target grid with lat/lon coordinates
-        print("\nCreating rectilinear target grid...")
+        logging.info("\nCreating rectilinear target grid...")
         ds_out = xr.Dataset(
             {
                 "lat": (["lat"], np.arange(16, 75, 1.0), {"units": "degrees_north"}),
                 "lon": (["lon"], np.arange(200, 330, 1.5), {"units": "degrees_east"}),
             }
         )
-        print("✓ Target grid created")
-        print(f"  Dimensions: {ds_out.dims}")
-        print(f"  Coordinates: {list(ds_out.coords)}")
+        logging.info("✓ Target grid created")
+        logging.info("  Dimensions: %s", ds_out.dims)
+        logging.info("  Coordinates: %s", list(ds_out.coords))
 
         # This should now work without ValueError
-        print("\nTesting build_regridder with RASM dataset...")
+        logging.info("\nTesting build_regridder with RASM dataset...")
         regridder = ds.regrid.build_regridder(ds_out, method="linear")
-        print("✓ Success: Regridder created successfully")
-        print(f"  Regridder type: {type(regridder).__name__}")
-        print(f"  Regridder info: {regridder.info()}")
+        logging.info("✓ Success: Regridder created successfully")
+        logging.info("  Regridder type: %s", type(regridder).__name__)
+        logging.info("  Regridder info: %s", regridder.info())
 
         # Test that the regridder can be applied to data
-        print("\nTesting regridder application...")
+        logging.info("\nTesting regridder application...")
         # Use one of the data variables from RASM dataset
-        var_name = list(ds.data_vars)[0]  # Get first data variable
-        print(f"  Using variable: {var_name}")
+        var_name = list(ds.data_vars)  # Get first data variable
+        logging.info("  Using variable: %s", var_name)
 
         # Apply regridding to a single variable
         result = ds[var_name].regrid.linear(ds_out)
-        print("✓ Success: Data regridded successfully")
-        print(f" Original shape: {ds[var_name].shape}")
-        print(f" Regridded shape: {result.shape}")
-        print(f" Result coordinates: {list(result.coords)}")
+        logging.info("✓ Success: Data regridded successfully")
+        logging.info(" Original shape: %s", ds[var_name].shape)
+        logging.info(" Regridded shape: %s", result.shape)
+        logging.info(" Result coordinates: %s", list(result.coords))
 
         # Test with the full dataset
-        print("\nTesting regridder with full dataset...")
+        logging.info("\nTesting regridder with full dataset...")
         result_ds = ds.regrid.linear(ds_out)
-        print("✓ Success: Full dataset regridded successfully")
-        print(f"  Result variables: {list(result_ds.data_vars)}")
+        logging.info("✓ Success: Full dataset regridded successfully")
+        logging.info("  Result variables: %s", list(result_ds.data_vars))
 
-        print("\n" + "=" * 60)
-        print("ALL TESTS PASSED! RASM coordinate validation fix works correctly.")
-        print("=" * 60)
+        logging.info("\n%s", "=" * 60)
+        logging.info("ALL TESTS PASSED! RASM coordinate validation fix works correctly.")
+        logging.info("=" * 60)
 
         return True
 
     except Exception as e:
-        print(f"\n✗ FAILED: {e}")
-        import traceback
-
+        logging.error("\n✗ FAILED: %s", e)
         traceback.print_exc()
         return False
 
 
 def test_coordinate_mapping():
     """Test that coordinate mapping works properly (xc->lon, yc->lat)."""
-    # print("\nTesting coordinate mapping...")
+    # logging.info("\nTesting coordinate mapping...")
 
     # Create a simple curvilinear dataset similar to RASM
 
@@ -110,43 +111,39 @@ def test_coordinate_mapping():
     )
 
     try:
-        # print(" Creating regridder with curvilinear source and rectilinear target...")
+        # logging.info(" Creating regridder with curvilinear source and rectilinear target...")
 
         # Debug: Check grid type detection
-        # print("  Debug: Checking grid types...")
-        # from monet_regrid.utils import _get_grid_type
-
+        # logging.info("  Debug: Checking grid types...")
         # source_type = _get_grid_type(ds)
         # target_type = _get_grid_type(ds_out)
-        # print(f"    Source grid type: {source_type}")
-        # print(f"    Target grid type: {target_type}")
-        # print(f"    Source coordinates: {list(ds.coords)}")
-        # print(f"    Target coordinates: {list(ds_out.coords)}")
-        # print(f"    Source dims: {list(ds.dims)}")
-        # print(f"    Target dims: {list(ds_out.dims)}")
+        # logging.info("    Source grid type: %s", source_type)
+        # logging.info("    Target grid type: %s", target_type)
+        # logging.info("    Source coordinates: %s", list(ds.coords))
+        # logging.info("    Target coordinates: %s", list(ds_out.coords))
+        # logging.info("    Source dims: %s", list(ds.dims))
+        # logging.info("    Target dims: %s", list(ds_out.dims))
 
         # regridder = ds.regrid.build_regridder(ds_out, method="linear")
-        # print(f"  ✓ Success: {type(regridder).__name__} created")
+        # logging.info("  ✓ Success: %s created", type(regridder).__name__)
 
         # Apply regridding using the accessor method (which handles validation properly)
         ds.regrid.linear(ds_out)
-        # print("  ✓ Success: Regridding completed")
-        # print(f"    Original shape: {ds['test_var'].shape}")
-        # print(f"    Result shape: {result_ds['test_var'].shape}")
-        # print(f"    Result coordinates: {list(result_ds.coords)}")
+        # logging.info("  ✓ Success: Regridding completed")
+        # logging.info("    Original shape: %s", ds['test_var'].shape)
+        # logging.info("    Result shape: %s", result_ds['test_var'].shape)
+        # logging.info("    Result coordinates: %s", list(result_ds.coords))
 
         return True
-    except Exception:
-        # print(f" ✗ Failed: {e}")
-        import traceback
-
+    except Exception as e:
+        logging.error(" ✗ Failed: %s", e)
         traceback.print_exc()
         return False
 
 
 def test_backward_compatibility():
     """Test that existing rectilinear-to-rectilinear workflows still work."""
-    # print("\nTesting backward compatibility...")
+    # logging.info("\nTesting backward compatibility...")
 
     try:
         # Create standard rectilinear data
@@ -158,26 +155,24 @@ def test_backward_compatibility():
 
         target_grid = xr.Dataset({"lat": ("lat", np.linspace(-4, 4, 8)), "lon": ("lon", np.linspace(-4, 4, 8))})
 
-        # print("  Testing rectilinear-to-rectilinear regridding...")
+        # logging.info("  Testing rectilinear-to-rectilinear regridding...")
         regridder = source_data.regrid.build_regridder(target_grid, method="linear")
-        # print(f"  ✓ Success: {type(regridder).__name__} created")
+        # logging.info("  ✓ Success: %s created", type(regridder).__name__)
 
-        regridder()
-        # print("  ✓ Success: Regridding completed")
-        # print(f"    Original shape: {source_data.shape}")
-        # print(f"    Result shape: {result.shape}")
+        result = regridder()
+        # logging.info("  ✓ Success: Regridding completed")
+        # logging.info("    Original shape: %s", source_data.shape)
+        # logging.info("    Result shape: %s", result.shape)
 
         return True
-    except Exception:
-        # print(f"  ✗ Failed: {e}")
-        import traceback
-
+    except Exception as e:
+        logging.error("  ✗ Failed: %s", e)
         traceback.print_exc()
         return False
 
 
 if __name__ == "__main__":
-    # print("Running comprehensive RASM coordinate validation tests...\n")
+    # logging.info("Running comprehensive RASM coordinate validation tests...\n")
 
     # Test the main RASM scenario
     success1 = test_rasm_coordinate_validation()
@@ -188,16 +183,16 @@ if __name__ == "__main__":
     # Test backward compatibility
     success3 = test_backward_compatibility()
 
-    # print(f"\n{'='*60}")
-    # print("SUMMARY:")
-    # print(f"  RASM test: {'PASS' if success1 else 'FAIL'}")
-    # print(f"  Coordinate mapping test: {'PASS' if success2 else 'FAIL'}")
-    # print(f"  Backward compatibility test: {'PASS' if success3 else 'FAIL'}")
-    # print(f"{'='*60}")
+    # logging.info("\n%s", '='*60)
+    # logging.info("SUMMARY:")
+    # logging.info("  RASM test: %s", 'PASS' if success1 else 'FAIL')
+    # logging.info("  Coordinate mapping test: %s", 'PASS' if success2 else 'FAIL')
+    # logging.info("  Backward compatibility test: %s", 'PASS' if success3 else 'FAIL')
+    # logging.info("%s", '='*60)
 
     if all([success1, success2, success3]):
-        # print("🎉 ALL TESTS PASSED! The fix is working correctly.")
+        # logging.info("🎉 ALL TESTS PASSED! The fix is working correctly.")
         pass
     else:
-        # print("❌ Some tests failed. Please review the implementation.")
+        # logging.info("❌ Some tests failed. Please review the implementation.")
         pass

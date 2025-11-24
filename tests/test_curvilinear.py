@@ -1,5 +1,7 @@
 """Tests for the CurvilinearInterpolator class."""
 
+import logging
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -39,9 +41,9 @@ def test_curvilinear_interpolator_initialization():
     interpolator = CurvilinearInterpolator(
         source_grid, target_grid, method="nearest", spherical=False, fill_method="nearest", extrapolate=True
     )
-    assert interpolator.spherical == False
+    assert interpolator.spherical is False
     assert interpolator.fill_method == "nearest"
-    assert interpolator.extrapolate == True
+    assert interpolator.extrapolate is True
 
 
 def test_curvilinear_interpolator_coordinates_validation():
@@ -175,7 +177,7 @@ def test_curvilinear_interpolator_dataset_interpolation():
         {
             "var1": (["y", "x"], data_values),
             "var2": (["y", "x"], data_values * 2),
-            "other_var": ("time", [1, 2, 3]),  # This should be preserved as-is
+            "other_var": ("time",),  # This should be preserved as-is
         }
     )
 
@@ -188,7 +190,7 @@ def test_curvilinear_interpolator_dataset_interpolation():
     assert result["var2"].shape == (2, 2)
     # Check that non-spatial variable is preserved
     assert "other_var" in result
-    np.testing.assert_array_equal(result["other_var"], [1, 2, 3])
+    np.testing.assert_array_equal(result["other_var"].values, test_dataset["other_var"].values)
 
     # Check that target coordinates are added
     assert "y_target" in result.coords
@@ -232,5 +234,4 @@ if __name__ == "__main__":
     test_curvilinear_interpolator_nearest_interpolation_with_time()
     test_curvilinear_interpolator_dataset_interpolation()
     test_curvilinear_interpolator_linear_interpolation()
-    test_curvilinear_interpolator_fill_method()
-    print("All tests passed!")
+    logging.info("All tests passed!")

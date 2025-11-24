@@ -4,6 +4,8 @@ This module tests the spatial indexing, nearest neighbor queries, and triangulat
 structures used for efficient interpolation in 3D space.
 """
 
+import logging
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -334,4 +336,4 @@ if __name__ == "__main__":
     edge_test.test_single_point_grid()
     edge_test.test_empty_target_grid()
 
-    # print("All spatial structure tests passed!")
+    logging.info("All spatial structure tests passed!")

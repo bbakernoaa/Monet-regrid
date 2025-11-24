@@ -9,6 +9,9 @@ This script tests:
 5. Edge cases with very small and very large radius values
 """
 
+import logging
+import os
+import sys
 import time
 
 import numpy as np
@@ -19,9 +22,6 @@ try:
     from src.monet_regrid.curvilinear import CurvilinearInterpolator
 except ImportError:
     # When running from tests directory
-    import os
-    import sys
-
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from src.monet_regrid.curvilinear import CurvilinearInterpolator
 
@@ -78,7 +78,7 @@ def create_test_data(source_grid, with_nans=False):
 
 def test_radius_of_influence_various_values():
     """Test radius_of_influence parameter with various values."""
-    # print("\n=== Testing radius_of_influence with various values ===")
+    # logging.info("\n=== Testing radius_of_influence with various values ===")
 
     source_grid, target_grid = create_curvilinear_grids()
     test_data = create_test_data(source_grid)
@@ -89,7 +89,7 @@ def test_radius_of_influence_various_values():
     results = {}
 
     for radius in radius_values:
-        # print(f"Testing radius_of_influence: {radius}")
+        # logging.info("Testing radius_of_influence: %s", radius)
 
         interpolator = CurvilinearInterpolator(source_grid, target_grid, method="nearest", radius_of_influence=radius)
 
@@ -106,26 +106,25 @@ def test_radius_of_influence_various_values():
             "nan_percentage": (nan_count / total_points) * 100 if total_points > 0 else 0,
         }
 
-        # print(f"  NaN count: {nan_count}/{total_points} ({results[radius]['nan_percentage']:.2f}%)")
+        # logging.info("  NaN count: %s/%s (%s%%)", nan_count, total_points, results[radius]['nan_percentage'])
 
-    # Print summary
-    # print("\nSummary of radius_of_influence effects:")
+    # logging.info("\nSummary of radius_of_influence effects:")
     # for radius, data in results.items():
     #     radius_str = "None (default)" if radius is None else f"{radius:,}m"
-    #     # print(f"  Radius {radius_str}: {data['nan_count']} NaNs ({data['nan_percentage']:.2f}%)")
+    #     logging.info("  Radius %s: %s NaNs (%s%%)", radius_str, data['nan_count'], data['nan_percentage'])
 
     return results
 
 
 def test_before_after_behavior():
     """Demonstrate before/after behavior showing how the fix resolves excessive NaN values."""
-    # print("\n=== Testing before/after behavior (simulated fix) ===")
+    # logging.info("\n=== Testing before/after behavior (simulated fix) ===")
 
     source_grid, target_grid = create_curvilinear_grids()
     test_data = create_test_data(source_grid, with_nans=True)
 
     # Simulate "before" behavior by using a very small radius (simulating the old issue)
-    # print("Simulating 'before' behavior (very restrictive radius):")
+    # logging.info("Simulating 'before' behavior (very restrictive radius):")
     interpolator_before = CurvilinearInterpolator(
         source_grid,
         target_grid,
@@ -134,10 +133,10 @@ def test_before_after_behavior():
     )
     result_before = interpolator_before(test_data)
     nan_count_before = np.sum(np.isnan(result_before.data))
-    # print(f"  Before fix (small radius): {nan_count_before} NaNs")
+    # logging.info("  Before fix (small radius): %s NaNs", nan_count_before)
 
     # Simulate "after" behavior with a reasonable radius
-    # print("Simulating 'after' behavior (reasonable radius):")
+    # logging.info("Simulating 'after' behavior (reasonable radius):")
     interpolator_after = CurvilinearInterpolator(
         source_grid,
         target_grid,
@@ -146,12 +145,12 @@ def test_before_after_behavior():
     )
     result_after = interpolator_after(test_data)
     nan_count_after = np.sum(np.isnan(result_after.data))
-    # print(f"  After fix (reasonable radius): {nan_count_after} NaNs")
+    # logging.info("  After fix (reasonable radius): %s NaNs", nan_count_after)
 
     # improvement = nan_count_before - nan_count_after
     # improvement_pct = ((nan_count_before - nan_count_after) / nan_count_before * 100) if nan_count_before > 0 else 0
 
-    # print(f"  Improvement: {improvement} fewer NaNs ({improvement_pct:.2f}% reduction)")
+    # logging.info("  Improvement: %s fewer NaNs (%s%% reduction)", improvement, improvement_pct)
 
     return {
         "before": {"result": result_before, "nan_count": nan_count_before},
@@ -161,40 +160,40 @@ def test_before_after_behavior():
 
 def test_backward_compatibility():
     """Verify that the fix maintains backward compatibility."""
-    # print("\n=== Testing backward compatibility ===")
+    # logging.info("\n=== Testing backward compatibility ===")
 
     source_grid, target_grid = create_curvilinear_grids()
     test_data = create_test_data(source_grid)
 
     # Test without radius_of_influence (should work as before)
-    # print("Testing without radius_of_influence parameter (backward compatibility):")
+    # logging.info("Testing without radius_of_influence parameter (backward compatibility):")
     interpolator_default = CurvilinearInterpolator(source_grid, target_grid, method="nearest")
     result_default = interpolator_default(test_data)
     # nan_count_default = np.sum(np.isnan(result_default.data))
-    # print(f"  Default behavior (no radius): {nan_count_default} NaNs")
+    # logging.info("  Default behavior (no radius): %s NaNs", nan_count_default)
 
     # Test with radius_of_influence=None (should be equivalent to no radius)
-    # print("Testing with radius_of_influence=None:")
+    # logging.info("Testing with radius_of_influence=None:")
     interpolator_none = CurvilinearInterpolator(source_grid, target_grid, method="nearest", radius_of_influence=None)
     result_none = interpolator_none(test_data)
     # nan_count_none = np.sum(np.isnan(result_none.data))
-    # print(f"  With radius_of_influence=None: {nan_count_none} NaNs")
+    # logging.info("  With radius_of_influence=None: %s NaNs", nan_count_none)
 
     # Results should be equivalent
     are_equivalent = np.allclose(result_default.data, result_none.data, equal_nan=True)
-    # print(f"  Results are equivalent: {are_equivalent}")
+    # logging.info("  Results are equivalent: %s", are_equivalent)
 
     if not are_equivalent:
-        # print("  WARNING: Backward compatibility issue detected!")
+        # logging.warning("  WARNING: Backward compatibility issue detected!")
         return False
     else:
-        # print("  Backward compatibility maintained.")
+        # logging.info("  Backward compatibility maintained.")
         return True
 
 
 def benchmark_performance():
     """Include performance benchmarks comparing different radius values."""
-    # print("\n=== Performance benchmarking ===")
+    # logging.info("\n=== Performance benchmarking ===")
 
     source_grid, target_grid = create_curvilinear_grids()
     test_data = create_test_data(source_grid)
@@ -205,7 +204,7 @@ def benchmark_performance():
     performance_results = {}
 
     for radius in radius_values:
-        # print(f"Benchmarking radius_of_influence: {radius}")
+        # logging.info("Benchmarking radius_of_influence: %s", radius)
 
         # Warm up
         interpolator = CurvilinearInterpolator(source_grid, target_grid, method="nearest", radius_of_influence=radius)
@@ -222,26 +221,25 @@ def benchmark_performance():
 
         performance_results[radius] = {"avg_time": avg_time, "std_time": std_time, "times": times}
 
-        # print(f"  Average time: {avg_time:.4f}s ± {std_time:.4f}s")
+        # logging.info("  Average time: %ss ± %ss", avg_time, std_time)
 
-    # Print performance summary
-    # print("\nPerformance summary:")
+    # logging.info("\nPerformance summary:")
     # for radius, perf_data in performance_results.items():
     #     radius_str = "None (default)" if radius is None else f"{radius:,}m"
-    #     # print(f" Radius {radius_str}: {perf_data['avg_time']:.4f}s ± {perf_data['std_time']:.4f}s")
+    #     logging.info(" Radius %s: %ss ± %ss", radius_str, perf_data['avg_time'], perf_data['std_time'])
 
     return performance_results
 
 
 def test_edge_cases():
     """Test edge cases like very small and very large radius values."""
-    # print("\n=== Testing edge cases ===")
+    # logging.info("\n=== Testing edge cases ===")
 
     source_grid, target_grid = create_curvilinear_grids()
     test_data = create_test_data(source_grid)
 
     # Test very small radius (should result in many NaNs)
-    # print("Testing very small radius (100m):")
+    # logging.info("Testing very small radius (100m):")
     interpolator_small = CurvilinearInterpolator(
         source_grid,
         target_grid,
@@ -250,10 +248,10 @@ def test_edge_cases():
     )
     result_small = interpolator_small(test_data)
     nan_count_small = np.sum(np.isnan(result_small.data))
-    # print(f"  Very small radius: {nan_count_small} NaNs")
+    # logging.info("  Very small radius: %s NaNs", nan_count_small)
 
     # Test very large radius (should result in few NaNs, almost all points filled)
-    # print("Testing very large radius (10,000,000m):")
+    # logging.info("Testing very large radius (10,000,000m):")
     interpolator_large = CurvilinearInterpolator(
         source_grid,
         target_grid,
@@ -262,10 +260,10 @@ def test_edge_cases():
     )
     result_large = interpolator_large(test_data)
     nan_count_large = np.sum(np.isnan(result_large.data))
-    # print(f"  Very large radius: {nan_count_large} NaNs")
+    # logging.info("  Very large radius: %s NaNs", nan_count_large)
 
     # Test zero radius (should result in maximum NaNs)
-    # print("Testing zero radius:")
+    # logging.info("Testing zero radius:")
     interpolator_zero = CurvilinearInterpolator(
         source_grid,
         target_grid,
@@ -274,7 +272,7 @@ def test_edge_cases():
     )
     result_zero = interpolator_zero(test_data)
     nan_count_zero = np.sum(np.isnan(result_zero.data))
-    # print(f"  Zero radius: {nan_count_zero} NaNs")
+    # logging.info("  Zero radius: %s NaNs", nan_count_zero)
 
     edge_case_results = {
         "small": {"result": result_small, "nan_count": nan_count_small},
@@ -282,36 +280,36 @@ def test_edge_cases():
         "zero": {"result": result_zero, "nan_count": nan_count_zero},
     }
 
-    # print("\nEdge case summary:")
-    # print(f"  Zero radius: {nan_count_zero} NaNs (maximum possible)")
-    # print(f" Small radius (10m): {nan_count_small} NaNs")
-    # print(f"  Large radius (10Mm): {nan_count_large} NaNs (minimum possible)")
+    # logging.info("\nEdge case summary:")
+    # logging.info("  Zero radius: %s NaNs (maximum possible)", nan_count_zero)
+    # logging.info(" Small radius (10m): %s NaNs", nan_count_small)
+    # logging.info("  Large radius (10Mm): %s NaNs (minimum possible)", nan_count_large)
 
     return edge_case_results
 
 
 def test_error_handling():
     """Test error handling for invalid radius values."""
-    # print("\n=== Testing error handling ===")
+    # logging.info("\n=== Testing error handling ===")
 
     source_grid, target_grid = create_curvilinear_grids()
     test_data = create_test_data(source_grid)
 
     # Test negative radius (should raise an error or handle gracefully)
-    # print("Testing negative radius:")
+    # logging.info("Testing negative radius:")
     try:
         interpolator_negative = CurvilinearInterpolator(
             source_grid, target_grid, method="nearest", radius_of_influence=-100000
         )
-        interpolator_negative(test_data)
-        # nan_count_negative = np.sum(np.isnan(result_negative.data))
-        # print(f"  Negative radius handled, NaN count: {nan_count_negative}")
-    except Exception:
-        # print(f"  Negative radius raised exception: {e}")
+        result_negative = interpolator_negative(test_data)
+        nan_count_negative = np.sum(np.isnan(result_negative.data))
+        # logging.info("  Negative radius handled, NaN count: %s", nan_count_negative)
+    except Exception as e:
+        # logging.info("  Negative radius raised exception: %s", e)
         pass
 
     # Test extremely large radius (should work but might be slow)
-    # print("Testing extremely large radius:")
+    # logging.info("Testing extremely large radius:")
     try:
         interpolator_extreme = CurvilinearInterpolator(
             source_grid,
@@ -319,17 +317,17 @@ def test_error_handling():
             method="nearest",
             radius_of_influence=1e10,  # Extremely large radius
         )
-        interpolator_extreme(test_data)
-        # nan_count_extreme = np.sum(np.isnan(result_extreme.data))
-        # print(f" Extremely large radius, NaN count: {nan_count_extreme}")
-    except Exception:
-        # print(f"  Extremely large radius raised exception: {e}")
+        result_extreme = interpolator_extreme(test_data)
+        nan_count_extreme = np.sum(np.isnan(result_extreme.data))
+        # logging.info(" Extremely large radius, NaN count: %s", nan_count_extreme)
+    except Exception as e:
+        # logging.info("  Extremely large radius raised exception: %s", e)
         pass
 
 
 def main():
     """Run all comprehensive tests."""
-    # print("Running comprehensive radius_of_influence tests...\n")
+    # logging.info("Running comprehensive radius_of_influence tests...\n")
 
     # 1. Test various radius values
     results_various = test_radius_of_influence_various_values()
@@ -350,23 +348,23 @@ def main():
     test_error_handling()
 
     # Final summary
-    # print("\n" + "="*60)
-    # print("COMPREHENSIVE TEST SUMMARY")
-    # print("="*60)
+    # logging.info("\n%s", "="*60)
+    # logging.info("COMPREHENSIVE TEST SUMMARY")
+    # logging.info("="*60)
 
-    # print(f"✓ Various radius values tested: {len(results_various)} different values")
-    # print("✓ Before/after behavior demonstrated")
-    # print(f"✓ Backward compatibility: {'PASSED' if backward_compatible else 'FAILED'}")
-    # print(f"✓ Performance benchmarks completed: {len(performance_results)} configurations tested")
-    # print(f"✓ Edge cases tested: {len(edge_case_results)} scenarios")
-    # print("✓ Error handling verified")
+    # logging.info("✓ Various radius values tested: %s different values", len(results_various))
+    # logging.info("✓ Before/after behavior demonstrated")
+    # logging.info("✓ Backward compatibility: %s", 'PASSED' if backward_compatible else 'FAILED')
+    # logging.info("✓ Performance benchmarks completed: %s configurations tested", len(performance_results))
+    # logging.info("✓ Edge cases tested: %s scenarios", len(edge_case_results))
+    # logging.info("✓ Error handling verified")
 
-    # print("\nKey findings:")
-    # print("- Radius of influence significantly affects NaN count in results")
-    # print("- Larger radii result in fewer NaN values (more points filled)")
-    # print("- Smaller radii result in more NaN values (stricter matching)")
-    # print("- Backward compatibility maintained when radius_of_influence is None")
-    # print("- Performance impact is minimal across different radius values")
+    # logging.info("\nKey findings:")
+    # logging.info("- Radius of influence significantly affects NaN count in results")
+    # logging.info("- Larger radii result in fewer NaN values (more points filled)")
+    # logging.info("- Smaller radii result in more NaN values (stricter matching)")
+    # logging.info("- Backward compatibility maintained when radius_of_influence is None")
+    # logging.info("- Performance impact is minimal across different radius values")
 
     return {
         "various_values": results_various,

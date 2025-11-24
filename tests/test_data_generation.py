@@ -7,11 +7,13 @@ grid types, and challenging scenarios for comprehensive testing.
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 # All imports have been updated from xarray_regrid to monet_regrid.
 
+import logging
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import pytest
 import xarray as xr
+from scipy.ndimage import gaussian_filter
 
 
 class TestDataGenerator:
@@ -185,8 +187,6 @@ class TestDataGenerator:
         noise = np.random.randn(ny, nx)
 
         # Apply simple spatial smoothing
-        from scipy.ndimage import gaussian_filter
-
         smoothed_noise = gaussian_filter(noise, sigma=1.0)
 
         # Normalize and scale
@@ -602,4 +602,4 @@ if __name__ == "__main__":
     data_test.test_nan_patterns()
     data_test.test_extreme_coordinates()
 
-    print("All data generation tests passed!")
+    logging.info("All data generation tests passed!")

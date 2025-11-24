@@ -4,6 +4,7 @@ This module tests edge cases, boundary conditions, and robustness scenarios
 including poles, date lines, empty grids, and NaN propagation.
 """
 
+import logging
 from typing import Tuple
 
 import numpy as np
@@ -24,10 +25,10 @@ class TestPoleProximityHandling:
         """Set up test data for pole proximity tests."""
         # Create grids near the North Pole
         self.polar_source_lat = np.array([[89.5, 89.6], [89.5, 89.6]])
-        self.polar_source_lon = np.array([[0, 0], [90, 90]])
+        self.polar_source_lon = np.array([,])
 
         self.polar_target_lat = np.array([[89.55, 89.65], [89.55, 89.65]])
-        self.polar_target_lon = np.array([[45, 45], [135, 135]])
+        self.polar_target_lon = np.array([,])
 
         self.polar_source_grid = xr.Dataset(
             {"latitude": (["y", "x"], self.polar_source_lat), "longitude": (["y", "x"], self.polar_source_lon)}
@@ -52,18 +53,18 @@ class TestPoleProximityHandling:
 
         # Result should be finite and reasonable
         assert result.shape == self.polar_target_lat.shape
-        assert np.all(np.isfinite(result))
-        assert np.all(result >= 270.0)  # Reasonable temperature bounds
-        assert np.all(result <= 300.0)
+        assert np.all(np.isfinite(result.values))
+        assert np.all(result.values >= 270.0)  # Reasonable temperature bounds
+        assert np.all(result.values <= 300.0)
 
     def test_south_pole_handling(self):
         """Test interpolation near the South Pole."""
         # Create grids near the South Pole
         south_source_lat = np.array([[-89.6, -89.5], [-89.6, -89.5]])
-        south_source_lon = np.array([[0, 0], [90, 90]])
+        south_source_lon = np.array([,])
 
         south_target_lat = np.array([[-89.65, -89.55], [-89.65, -89.55]])
-        south_target_lon = np.array([[45, 45], [135, 135]])
+        south_target_lon = np.array([,])
 
         south_source_grid = xr.Dataset(
             {"latitude": (["y", "x"], south_source_lat), "longitude": (["y", "x"], south_source_lon)}
@@ -86,9 +87,9 @@ class TestPoleProximityHandling:
 
         # Result should be finite and reasonable
         assert result.shape == south_target_lat.shape
-        assert np.all(np.isfinite(result))
-        assert np.all(result >= 260.0)  # Reasonable temperature bounds
-        assert np.all(result <= 290.0)
+        assert np.all(np.isfinite(result.values))
+        assert np.all(result.values >= 260.0)  # Reasonable temperature bounds
+        assert np.all(result.values <= 290.0)
 
     def test_polar_linear_interpolation_fallback(self):
         """Test that linear interpolation falls back to nearest neighbor in polar regions."""
@@ -102,13 +103,13 @@ class TestPoleProximityHandling:
 
         # Should complete without error and produce reasonable results
         assert result.shape == self.polar_target_lat.shape
-        assert np.all(np.isfinite(result) | np.isnan(result))  # Allow NaNs where triangulation fails
+        assert np.all(np.isfinite(result.values) | np.isnan(result.values))  # Allow NaNs where triangulation fails
 
     def test_pole_coordinate_singularity(self):
         """Test handling of coordinate singularities at poles."""
         # Test with exactly 90 degree latitude
         singular_source_lat = np.array([[90.0, 90.0], [90.0, 90.0]])
-        singular_source_lon = np.array([[0, 90], [180, -90]])
+        singular_source_lon = np.array([, [180, -90]])
 
         singular_target_lat = np.array([[90.0]])
         singular_target_lon = np.array([[45.0]])
@@ -135,7 +136,7 @@ class TestPoleProximityHandling:
 
             # If it succeeds, verify result properties
             assert result.shape == singular_target_lat.shape
-            assert np.all(np.isfinite(result)) or np.any(np.isnan(result))  # Allow NaNs
+            assert np.all(np.isfinite(result.values)) or np.any(np.isnan(result.values))  # Allow NaNs
         except Exception:
             # If it raises an exception, that's acceptable for this edge case
             pass
@@ -147,11 +148,11 @@ class TestDateLineCrossing:
     def setup_method(self):
         """Set up test data for date line tests."""
         # Create grids that cross the International Date Line
-        self.dateline_source_lat = np.array([[0, 10], [0, 10]])
-        self.dateline_source_lon = np.array([[170, 170], [-170, -170]])  # Crosses 180°
+        self.dateline_source_lat = np.array([,])
+        self.dateline_source_lon = np.array([, [-170, -170]])  # Crosses 180°
 
-        self.dateline_target_lat = np.array([[5, 8], [5, 8]])
-        self.dateline_target_lon = np.array([[175, 175], [-175, -175]])  # Also crosses 180°
+        self.dateline_target_lat = np.array([,])
+        self.dateline_target_lon = np.array([, [-175, -175]])  # Also crosses 180°
 
         self.dateline_source_grid = xr.Dataset(
             {"latitude": (["y", "x"], self.dateline_source_lat), "longitude": (["y", "x"], self.dateline_source_lon)}
@@ -176,20 +177,20 @@ class TestDateLineCrossing:
 
         # Result should be finite and reasonable
         assert result.shape == self.dateline_target_lat.shape
-        assert np.all(np.isfinite(result))
-        assert np.all(result >= 270.0)  # Reasonable bounds
-        assert np.all(result <= 300.0)
+        assert np.all(np.isfinite(result.values))
+        assert np.all(result.values >= 270.0)  # Reasonable bounds
+        assert np.all(result.values <= 300.0)
 
     def test_longitude_wrapping_consistency(self):
         """Test that longitude wrapping is handled consistently."""
         # Create grids with different longitude representations
         # Grid 1: -180 to 180
-        lon1 = np.array([[170, 175], [-175, 179]])
+        lon1 = np.array([, [-175, 179]])
 
         # Grid 2: 0 to 360
-        lon2 = np.array([[170, 175], [185, 179]])
+        lon2 = np.array([,])
 
-        source_lat = np.array([[0, 10], [0, 10]])
+        source_lat = np.array([,])
 
         source_grid_180 = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], lon1)})
 
@@ -209,13 +210,13 @@ class TestDateLineCrossing:
             result = interpolator(test_data)
 
             assert result.shape == source_lat.shape
-            assert np.all(np.isfinite(result))
+            assert np.all(np.isfinite(result.values))
 
     def test_antimeridian_continuity(self):
         """Test continuity across the antimeridian."""
         # Create a grid that wraps around the antimeridian
-        source_lat = np.array([[0, 1], [0, 1]])
-        source_lon = np.array([[179, 179], [-179, -179]])  # Close to antimeridian
+        source_lat = np.array([,])
+        source_lon = np.array([, [-179, -179]])  # Close to antimeridian
 
         target_lat = np.array([[0.5, 0.8], [0.5, 0.8]])
         target_lon = np.array([[179.5, 179.5], [-179.5, -179.5]])  # Even closer to antimeridian
@@ -235,7 +236,7 @@ class TestDateLineCrossing:
 
         # Should handle antimeridian proximity gracefully
         assert result.shape == target_lat.shape
-        assert np.all(np.isfinite(result))
+        assert np.all(np.isfinite(result.values))
 
 
 class TestEmptyAndDegenerateGrids:
@@ -253,8 +254,8 @@ class TestEmptyAndDegenerateGrids:
 
         target_grid = xr.Dataset(
             {
-                "latitude": (["y_target", "x_target"], np.array([[0]])),
-                "longitude": (["y_target", "x_target"], np.array([[0]])),
+                "latitude": (["y_target", "x_target"], np.array([[]])),
+                "longitude": (["y_target", "x_target"], np.array([[]])),
             }
         )
 
@@ -298,7 +299,7 @@ class TestEmptyAndDegenerateGrids:
         result = interpolator(test_data)
 
         assert result.shape == single_target_lat.shape
-        assert np.all(np.isfinite(result))
+        assert np.all(np.isfinite(result.values))
 
         # Linear interpolation should handle single point gracefully with fallback
         try:
@@ -307,7 +308,7 @@ class TestEmptyAndDegenerateGrids:
 
             # Should complete with reasonable result (using fallback method)
             assert result.shape == single_target_lat.shape
-            assert np.all(np.isfinite(result) | np.isnan(result))  # Allow NaNs where triangulation fails
+            assert np.all(np.isfinite(result.values) | np.isnan(result.values))  # Allow NaNs where triangulation fails
         except ValueError as e:
             # If it raises ValueError for single point, that's also acceptable
             assert "Could not build Delaunay triangulation" in str(e)
@@ -316,7 +317,7 @@ class TestEmptyAndDegenerateGrids:
         """Test handling of degenerate triangles in triangulation."""
         # Create nearly collinear points that might cause degenerate triangles
         degenerate_lat = np.array([[0, 0.001, 0.002], [0, 0.001, 0.002], [0, 0.001, 0.002]])
-        degenerate_lon = np.array([[0, 0, 0], [0.001, 0.001, 0.001], [0.002, 0.002, 0.002]])
+        degenerate_lon = np.array([, [0.001, 0.001, 0.001], [0.002, 0.002, 0.002]])
 
         degenerate_source_grid = xr.Dataset(
             {"latitude": (["y", "x"], degenerate_lat), "longitude": (["y", "x"], degenerate_lon)}
@@ -336,7 +337,7 @@ class TestEmptyAndDegenerateGrids:
         result = interpolator(test_data)
 
         assert result.shape == target_grid["latitude"].shape
-        assert np.all(np.isfinite(result))
+        assert np.all(np.isfinite(result.values))
 
     def test_identical_coordinates(self):
         """Test handling of grids with identical coordinates."""
@@ -362,7 +363,7 @@ class TestEmptyAndDegenerateGrids:
 
             # If it succeeds, verify result
             assert result.shape == identical_lat.shape
-            assert np.all(result == 280.0)  # Should preserve constant value
+            assert np.all(result.values == 280.0)  # Should preserve constant value
         except Exception:
             # If it raises an exception for identical coordinates, that's acceptable
             pass
@@ -374,8 +375,8 @@ class TestNaNPropagation:
     def setup_method(self):
         """Set up test data for NaN propagation tests."""
         # Create test grids
-        self.source_lat = np.array([[0, 1, 2], [0, 1, 2], [0, 1, 2]])
-        self.source_lon = np.array([[-1, -1, -1], [0, 0, 0], [1, 1, 1]])
+        self.source_lat = np.array([,,])
+        self.source_lon = np.array([[-1, -1, -1],,])
 
         self.target_lat = np.array([[0.5, 1.5], [0.5, 1.5]])
         self.target_lon = np.array([[-0.5, -0.5], [0.5, 0.5]])
@@ -406,7 +407,7 @@ class TestNaNPropagation:
         assert result.shape == self.target_lat.shape
 
         # Some NaN values may propagate, but not all should be NaN
-        nan_count = np.sum(np.isnan(result))
+        nan_count = np.sum(np.isnan(result.values))
         assert nan_count <= result.size  # Allow some NaNs
         assert nan_count < result.size  # But not all NaN
 
@@ -429,7 +430,7 @@ class TestNaNPropagation:
 
         # Linear interpolation should handle NaN in triangulation
         assert result.shape == self.target_lat.shape
-        assert np.all(np.isfinite(result) | np.isnan(result))  # Allow NaNs where triangulation fails
+        assert np.all(np.isfinite(result.values) | np.isnan(result.values))  # Allow NaNs where triangulation fails
 
     def test_all_nan_input(self):
         """Test behavior with all-NaN input data."""
@@ -444,7 +445,7 @@ class TestNaNPropagation:
 
             # Result should be all NaN
             assert result.shape == self.target_lat.shape
-            assert np.all(np.isnan(result))
+            assert np.all(np.isnan(result.values))
 
     def test_nan_filling_behavior(self):
         """Test NaN filling behavior with different fill methods."""
@@ -470,8 +471,8 @@ class TestNaNPropagation:
         assert result_nan.shape == self.target_lat.shape
 
         # Fill method should produce fewer NaNs (or equal)
-        fill_nan_count = np.sum(np.isnan(result_fill))
-        nan_nan_count = np.sum(np.isnan(result_nan))
+        fill_nan_count = np.sum(np.isnan(result_fill.values))
+        nan_nan_count = np.sum(np.isnan(result_nan.values))
         assert fill_nan_count <= nan_nan_count
 
 
@@ -499,7 +500,7 @@ class TestBoundaryEdgeCases:
 
             # If it succeeds, verify result
             assert result.shape == invalid_lat.shape
-            assert np.all(np.isfinite(result) | np.isnan(result))
+            assert np.all(np.isfinite(result.values) | np.isnan(result.values))
         except Exception:
             # If it raises an exception for invalid bounds, that's acceptable
             pass
@@ -532,7 +533,7 @@ class TestBoundaryEdgeCases:
 
         # Should handle extreme coordinate differences
         assert result.shape == extreme_target_lat.shape
-        assert np.all(np.isfinite(result) | np.isnan(result))  # Allow NaNs for out-of-domain points
+        assert np.all(np.isfinite(result.values) | np.isnan(result.values))  # Allow NaNs for out-of-domain points
 
     def test_coordinate_precision_limits(self):
         """Test interpolation at coordinate precision limits."""
@@ -558,7 +559,7 @@ class TestBoundaryEdgeCases:
 
         # Should handle precision limits gracefully
         assert result.shape == precision_lat.shape
-        assert np.all(np.isfinite(result))
+        assert np.all(np.isfinite(result.values))
 
 
 if __name__ == "__main__":
@@ -598,4 +599,4 @@ if __name__ == "__main__":
     boundary_test.test_extreme_coordinate_differences()
     boundary_test.test_coordinate_precision_limits()
 
-    print("All boundary condition tests passed!")
+    logging.info("All boundary condition tests passed!")

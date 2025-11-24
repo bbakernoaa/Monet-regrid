@@ -1,5 +1,7 @@
 """Integration tests for the complete monet-regrid rebranding pipeline."""
 
+import logging
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -261,4 +263,4 @@ if __name__ == "__main__":
     test_backward_compatibility()
     test_different_methods_curvilinear()
     test_grid_detection_accuracy()
-    print("All integration tests passed!")
+    logging.info("All integration tests passed!")
