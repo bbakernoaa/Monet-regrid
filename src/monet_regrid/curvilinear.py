@@ -459,104 +459,84 @@ class CurvilinearInterpolator:
         if len(spatial_dims) != 2:
             spatial_dims = tuple(data.dims[-2:])  # Use last two dimensions as spatial
 
-        # Reshape data to 1D for interpolation (flatten the spatial dimensions)
-        data_values = data.values
-        original_shape = data_values.shape
+        # Define wrapper function for apply_ufunc
+        def _apply_interpolation(data_slice, engine=self.interpolation_engine):
+            # Reshape to 1D for interpolation (flatten the spatial dimensions)
+            original_shape = data_slice.shape
+            # Flatten all dimensions except the last N (spatial)
+            # data_slice here is expected to be (..., y, x)
+            # but flatten to (..., flattened_spatial)
 
-        # Find non-spatial dimensions
-        non_spatial_dims = tuple(dim for dim in data.dims if dim not in spatial_dims)
-        non_spatial_shape = tuple(data.sizes[dim] for dim in non_spatial_dims)
+            # The input will be (..., source_lat, source_lon)
+            # We reshape to (..., source_points_flat)
+            reshaped_data = data_slice.reshape(*data_slice.shape[:-2], -1)
 
-        # Reshape to (non_spatial_dims, flattened_spatial)
-        if non_spatial_dims:
-            # Data has additional dimensions (e.g., time, level)
-            # Move spatial dims to the end for reshaping
-            data_values = data.transpose(*non_spatial_dims, *spatial_dims).values
-            reshaped_data = data_values.reshape(np.prod(non_spatial_shape), -1)
-        else:
-            # Only spatial dimensions
-            reshaped_data = data_values.reshape(1, -1)
+            # Use interpolation engine
+            interpolated = engine.interpolate(reshaped_data)
 
-        # Perform interpolation for each non-spatial slice
-        interpolated_values = self.interpolation_engine.interpolate(reshaped_data)
+            # Reshape back to target grid shape
+            # The output of interpolate is (..., target_points_flat)
+            # We reshape to (..., target_lat, target_lon)
 
-        # Reshape back to target grid shape
-        # Get the target coordinate dimensions - for 2D coordinates, these will be the shape dimensions
+            # Get target shape from the engine attributes or grid properties
+            target_lat = self.target_grid[self.target_lat_name]
+            if target_lat.ndim == 2:
+                 target_shape = target_lat.shape
+            else:
+                 target_shape = (self.target_grid[self.target_lat_name].size,
+                                 self.target_grid[self.target_lon_name].size)
+
+            final_shape = (*data_slice.shape[:-2], *target_shape)
+            return interpolated.reshape(final_shape)
+
+        # Use xr.apply_ufunc to handle Dask arrays lazily
+        # input_core_dims: the dimensions that will be consumed (source spatial dims)
+        # output_core_dims: the dimensions that will be produced (target spatial dims)
+
+        # Determine target dims
         target_lat_coord = self.target_grid[self.target_lat_name]
         target_lon_coord = self.target_grid[self.target_lon_name]
 
-        # Both coordinates should have the same dimensions for 2D curvilinear grids
         if target_lat_coord.ndim == 2:
-            # 2D coordinates - get the shape dimensions
-            target_lat_size, target_lon_size = target_lat_coord.shape
+             target_dims = list(target_lat_coord.dims)
+             target_shape = target_lat_coord.shape
         else:
-            # 1D coordinates
-            target_lat_size = target_lat_coord.size
-            target_lon_size = target_lon_coord.size
+             target_dims = [target_lat_coord.dims[0], target_lon_coord.dims[0]]
+             target_shape = (target_lat_coord.size, target_lon_coord.size)
 
-        if non_spatial_dims:
-            # The final shape should be (non_spatial_shape, target_lat_size, target_lon_size)
-            final_shape = non_spatial_shape + (target_lat_size, target_lon_size)
-            # Make sure the interpolated_values has the right size before reshaping
-            expected_size = np.prod(non_spatial_shape) * target_lat_size * target_lon_size
-            if interpolated_values.size != expected_size:
-                raise ValueError(
-                    f"Interpolated values size {interpolated_values.size} doesn't match expected size {expected_size} for final shape {final_shape}"
-                )
-            interpolated_values = interpolated_values.reshape(final_shape)
+        # Create output coordinates dictionary for apply_ufunc (optional but good for metadata)
+        # Actually apply_ufunc handles coords if we provide output_core_dims properly
 
-            # Create new coordinates for target grid
-            new_coords = {}
-            for dim in non_spatial_dims:
-                new_coords[dim] = data.coords[dim]
+        # Create dictionary mapping target dim names to sizes for apply_ufunc
+        output_sizes = {dim: size for dim, size in zip(target_dims, target_shape)}
 
-            # Add target grid coordinates - use the target grid coordinates properly
-            new_coords[self.target_lat_name] = self.target_grid[self.target_lat_name]
-            new_coords[self.target_lon_name] = self.target_grid[self.target_lon_name]
-        else:
-            # The final shape should be (target_lat_size, target_lon_size)
-            final_shape = (target_lat_size, target_lon_size)
-            # Make sure the interpolated_values has the right size before reshaping
-            expected_size = target_lat_size * target_lon_size
-            if interpolated_values.size != expected_size:
-                raise ValueError(
-                    f"Interpolated values size {interpolated_values.size} doesn't match expected size {expected_size} for final shape {final_shape}"
-                )
-            interpolated_values = interpolated_values.reshape(final_shape)
-
-            # Create new coordinates for target grid
-            new_coords = {}
-            new_coords[self.target_lat_name] = self.target_grid[self.target_lat_name]
-            new_coords[self.target_lon_name] = self.target_grid[self.target_lon_name]
-
-        # Create result DataArray
-        # The target coordinates should have the right dimensions to match the data shape
-        # Use the target coordinate dimension names as the result dimensions
-        if non_spatial_dims:
-            # For data with additional dimensions, include them first
-            # Determine the spatial dimensions based on target grid
-            if target_lat_coord.ndim == 2:
-                # For 2D target coordinates, use the coordinate's dimension names
-                spatial_dims = list(target_lat_coord.dims)
-            else:
-                # For 1D target coordinates, use the coordinate names as dimensions
-                spatial_dims = [target_lat_coord.dims[0], target_lon_coord.dims[0]]
-            result_dims = list(non_spatial_dims) + spatial_dims
-        # Just the target coordinate dimensions
-        elif target_lat_coord.ndim == 2:
-            # For 2D target coordinates, use the coordinate's dimension names
-            result_dims = list(target_lat_coord.dims)
-        else:
-            # For 1D target coordinates, use the coordinate names as dimensions
-            result_dims = [target_lat_coord.dims[0], target_lon_coord.dims[0]]
-
-        # Create the final result DataArray
-        result = xr.DataArray(
-            interpolated_values,
-            coords=new_coords,
-            dims=result_dims,
-            attrs=data.attrs,  # Preserve original attributes
+        result = xr.apply_ufunc(
+            _apply_interpolation,
+            data,
+            input_core_dims=[list(spatial_dims)],
+            output_core_dims=[target_dims],
+            exclude_dims=set(spatial_dims),  # These dimensions change size
+            vectorize=False,  # Handle extra dims manually in _apply_interpolation
+            dask="parallelized",  # Enable Dask parallel execution
+            output_dtypes=[data.dtype],
+            dask_gufunc_kwargs={"allow_rechunk": True, "output_sizes": output_sizes},
         )
+
+        # Attach coordinates to result
+        # Coordinates from data (non-spatial) are preserved by apply_ufunc
+        # We need to add target spatial coordinates
+
+        if target_lat_coord.ndim == 2:
+             result.coords[self.target_lat_name] = target_lat_coord
+             result.coords[self.target_lon_name] = target_lon_coord
+        else:
+             result.coords[self.target_lat_name] = target_lat_coord
+             result.coords[self.target_lon_name] = target_lon_coord
+
+        # Also ensure dimension coordinates exist
+        for dim in target_dims:
+             if dim in self.target_grid.coords:
+                 result.coords[dim] = self.target_grid.coords[dim]
 
         return result
 
