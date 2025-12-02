@@ -28,6 +28,7 @@ dependencies = [
   "scipy",
   "pyproj",
   "cf-xarray",
+  "dask[distributed]",
 ]
 
 [tool.hatch.build]
@@ -44,7 +45,6 @@ Source = "https://github.com/EXCITED-CO2/monet-regrid"
 accel = [
   "sparse",
   "opt-einsum",
-  "dask[distributed]",
 ]
 benchmarking = [
   "matplotlib",
