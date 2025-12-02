@@ -84,9 +84,17 @@ def test_radius_of_influence_various_values():
     test_data = create_test_data(source_grid)
 
     # Test different radius values
-    radius_values = [None, 1000, 500000, 1000000, 5000000]  # in meters
+    # Note: None effectively means infinite radius, so it should have 0 NaNs (or minimal)
+    # The order here matters for the monotonic check
+    # We expect: minimal NaNs (None) <= few NaNs (large radius) <= more NaNs (small radius)
+    # But the loop below checks nan_counts[i] >= nan_counts[i+1], so we need decreasing order of NaNs
+    # which means increasing order of radius?
+    # No, small radius -> many NaNs. Large radius -> few NaNs.
+    # So [1000, 500000, 1000000, 5000000, None] should give decreasing NaN counts.
 
-    results = {}
+    radius_values = [1000, 500000, 1000000, 5000000, None]  # in meters, ordered by expected decreasing NaNs
+
+    nan_counts = []
 
     for radius in radius_values:
         # logging.info("Testing radius_of_influence: %s", radius)
@@ -97,23 +105,11 @@ def test_radius_of_influence_various_values():
 
         # Count NaN values in the result
         nan_count = np.sum(np.isnan(result.data))
-        total_points = result.data.size
+        nan_counts.append(nan_count)
 
-        results[radius] = {
-            "result": result,
-            "nan_count": nan_count,
-            "total_points": total_points,
-            "nan_percentage": (nan_count / total_points) * 100 if total_points > 0 else 0,
-        }
-
-        # logging.info("  NaN count: %s/%s (%s%%)", nan_count, total_points, results[radius]['nan_percentage'])
-
-    # logging.info("\nSummary of radius_of_influence effects:")
-    # for radius, data in results.items():
-    #     radius_str = "None (default)" if radius is None else f"{radius:,}m"
-    #     logging.info("  Radius %s: %s NaNs (%s%%)", radius_str, data['nan_count'], data['nan_percentage'])
-
-    return results
+    # Assert that nan_counts is monotonically decreasing
+    for i in range(len(nan_counts) - 1):
+        assert nan_counts[i] >= nan_counts[i + 1]
 
 
 def test_before_after_behavior():
@@ -152,10 +148,7 @@ def test_before_after_behavior():
 
     # logging.info("  Improvement: %s fewer NaNs (%s%% reduction)", improvement, improvement_pct)
 
-    return {
-        "before": {"result": result_before, "nan_count": nan_count_before},
-        "after": {"result": result_after, "nan_count": nan_count_after},
-    }
+    assert nan_count_before > nan_count_after
 
 
 def test_backward_compatibility():
@@ -183,12 +176,7 @@ def test_backward_compatibility():
     are_equivalent = np.allclose(result_default.data, result_none.data, equal_nan=True)
     # logging.info("  Results are equivalent: %s", are_equivalent)
 
-    if not are_equivalent:
-        # logging.warning("  WARNING: Backward compatibility issue detected!")
-        return False
-    else:
-        # logging.info("  Backward compatibility maintained.")
-        return True
+    assert are_equivalent
 
 
 def benchmark_performance():
@@ -274,18 +262,8 @@ def test_edge_cases():
     nan_count_zero = np.sum(np.isnan(result_zero.data))
     # logging.info("  Zero radius: %s NaNs", nan_count_zero)
 
-    edge_case_results = {
-        "small": {"result": result_small, "nan_count": nan_count_small},
-        "large": {"result": result_large, "nan_count": nan_count_large},
-        "zero": {"result": result_zero, "nan_count": nan_count_zero},
-    }
-
-    # logging.info("\nEdge case summary:")
-    # logging.info("  Zero radius: %s NaNs (maximum possible)", nan_count_zero)
-    # logging.info(" Small radius (10m): %s NaNs", nan_count_small)
-    # logging.info("  Large radius (10Mm): %s NaNs (minimum possible)", nan_count_large)
-
-    return edge_case_results
+    assert nan_count_zero == result_zero.data.size
+    assert nan_count_large == 0
 
 
 def test_error_handling():

@@ -44,6 +44,23 @@ from .coordinate_transformer import CoordinateTransformer
 from .interpolation_engine import InterpolationEngine
 
 
+def _apply_interpolation_wrapper(data_slice, engine, target_shape):
+    """Wrapper for interpolation to be used with apply_ufunc (picklable)."""
+    # Reshape to 1D for interpolation (flatten the spatial dimensions)
+    # The input will be (..., source_lat, source_lon)
+    # We reshape to (..., source_points_flat)
+    reshaped_data = data_slice.reshape(*data_slice.shape[:-2], -1)
+
+    # Use interpolation engine
+    interpolated = engine.interpolate(reshaped_data)
+
+    # Reshape back to target grid shape
+    # The output of interpolate is (..., target_points_flat)
+    # We reshape to (..., target_lat, target_lon)
+    final_shape = (*data_slice.shape[:-2], *target_shape)
+    return interpolated.reshape(final_shape)
+
+
 class CurvilinearInterpolator:
     """Optimized interpolator for curvilinear grids using 3D coordinate transformations.
 
@@ -511,41 +528,7 @@ class CurvilinearInterpolator:
         if len(spatial_dims) != 2:
             spatial_dims = tuple(data.dims[-2:])  # Use last two dimensions as spatial
 
-        # Define wrapper function for apply_ufunc
-        def _apply_interpolation(data_slice, engine=self.interpolation_engine):
-            # Reshape to 1D for interpolation (flatten the spatial dimensions)
-            original_shape = data_slice.shape
-            # Flatten all dimensions except the last N (spatial)
-            # data_slice here is expected to be (..., y, x)
-            # but flatten to (..., flattened_spatial)
-
-            # The input will be (..., source_lat, source_lon)
-            # We reshape to (..., source_points_flat)
-            reshaped_data = data_slice.reshape(*data_slice.shape[:-2], -1)
-
-            # Use interpolation engine
-            interpolated = engine.interpolate(reshaped_data)
-
-            # Reshape back to target grid shape
-            # The output of interpolate is (..., target_points_flat)
-            # We reshape to (..., target_lat, target_lon)
-
-            # Get target shape from the engine attributes or grid properties
-            target_lat = self.target_grid[self.target_lat_name]
-            if target_lat.ndim == 2:
-                 target_shape = target_lat.shape
-            else:
-                 target_shape = (self.target_grid[self.target_lat_name].size,
-                                 self.target_grid[self.target_lon_name].size)
-
-            final_shape = (*data_slice.shape[:-2], *target_shape)
-            return interpolated.reshape(final_shape)
-
-        # Use xr.apply_ufunc to handle Dask arrays lazily
-        # input_core_dims: the dimensions that will be consumed (source spatial dims)
-        # output_core_dims: the dimensions that will be produced (target spatial dims)
-
-        # Determine target dims
+        # Determine target dims and shape
         target_lat_coord = self.target_grid[self.target_lat_name]
         target_lon_coord = self.target_grid[self.target_lon_name]
 
@@ -556,15 +539,14 @@ class CurvilinearInterpolator:
              target_dims = [target_lat_coord.dims[0], target_lon_coord.dims[0]]
              target_shape = (target_lat_coord.size, target_lon_coord.size)
 
-        # Create output coordinates dictionary for apply_ufunc (optional but good for metadata)
-        # Actually apply_ufunc handles coords if we provide output_core_dims properly
-
         # Create dictionary mapping target dim names to sizes for apply_ufunc
         output_sizes = {dim: size for dim, size in zip(target_dims, target_shape)}
 
+        # Use xr.apply_ufunc to handle Dask arrays lazily
         result = xr.apply_ufunc(
-            _apply_interpolation,
+            _apply_interpolation_wrapper,
             data,
+            kwargs={"engine": self.interpolation_engine, "target_shape": target_shape},
             input_core_dims=[list(spatial_dims)],
             output_core_dims=[target_dims],
             exclude_dims=set(spatial_dims),  # These dimensions change size

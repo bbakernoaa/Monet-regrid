@@ -152,6 +152,7 @@ def test_oversized_most_common(dummy_lc_data, oversized_dummy_target_grid):
         dummy_lc_data["lc"].regrid.most_common(
             oversized_dummy_target_grid,
             values=EXP_LABELS,
+            fill_value=np.nan,
         ),
         expected["lc"],
     )

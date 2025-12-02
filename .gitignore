@@ -5,6 +5,7 @@
 .mypy_cache
 .ruff_cache
 .venv
+.venv-py312
 
 build
 backup

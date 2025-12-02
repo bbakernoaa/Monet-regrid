@@ -28,6 +28,8 @@ dependencies = [
   "scipy",
   "pyproj",
   "cf-xarray",
+  "pooch",
+  "cftime",
 ]
 
 [tool.hatch.build]
@@ -45,6 +47,7 @@ accel = [
   "sparse",
   "opt-einsum",
   "dask[distributed]",
+  "pykdtree",
 ]
 benchmarking = [
   "matplotlib",
