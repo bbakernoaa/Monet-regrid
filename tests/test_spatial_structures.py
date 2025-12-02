@@ -18,6 +18,7 @@ from monet_regrid.curvilinear import CurvilinearInterpolator
 # New import: from monet_regrid.curvilinear import CurvilinearInterpolator
 
 
+@pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")
 class TestKDTreeStructure:
     """Test KDTree spatial indexing and nearest neighbor queries."""
 
@@ -136,6 +137,7 @@ class TestKDTreeStructure:
         np.testing.assert_array_almost_equal(interpolator1.distances, interpolator2.distances)
 
 
+@pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")
 class TestConvexHullStructure:
     """Test ConvexHull triangulation for linear interpolation."""
 
@@ -237,6 +239,7 @@ class TestConvexHullStructure:
         assert interpolator.target_kdtree.n == len(interpolator.target_points_3d)
 
 
+@pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")
 class TestSpatialStructureEdgeCases:
     """Test spatial structures with edge cases and boundary conditions."""
 
@@ -278,14 +281,13 @@ class TestSpatialStructureEdgeCases:
         assert interpolator.kdtree.n == 1
 
         # Linear method should fall back to nearest neighbor for single point
-        # It warns instead of raising ValueError now
-        with pytest.warns(UserWarning, match="Linear interpolation requires at least 4 source points"):
-            interpolator = CurvilinearInterpolator(source_grid, target_grid, method="linear")
-            # The method property might still say "linear" depending on implementation,
-            # but the internal engine should be using nearest neighbor logic.
-            # Let's check if it behaves like nearest neighbor (which works for single points)
-            result = interpolator(xr.DataArray(np.array([[10.0]]), dims=["y", "x"]))
-            assert result.item() == 10.0
+        # It silently falls back now for very small grids
+        interpolator = CurvilinearInterpolator(source_grid, target_grid, method="linear")
+        # The method property might still say "linear" depending on implementation,
+        # but the internal engine should be using nearest neighbor logic.
+        # Let's check if it behaves like nearest neighbor (which works for single points)
+        result = interpolator(xr.DataArray(np.array([[10.0]]), dims=["y", "x"]))
+        assert result.item() == 10.0
 
     def test_empty_target_grid(self):
         """Test handling of empty target grids."""

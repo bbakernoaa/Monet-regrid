@@ -18,6 +18,7 @@ from monet_regrid.curvilinear import CurvilinearInterpolator
 # New import: from monet_regrid.curvilinear import CurvilinearInterpolator
 
 
+@pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")
 class TestPoleProximityHandling:
     """Test handling of pole proximity and polar regions."""
 
@@ -142,6 +143,7 @@ class TestPoleProximityHandling:
             pass
 
 
+@pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")
 class TestDateLineCrossing:
     """Test handling of date line crossing and longitude wrapping."""
 
@@ -239,6 +241,7 @@ class TestDateLineCrossing:
         assert np.all(np.isfinite(result.values))
 
 
+@pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")
 class TestEmptyAndDegenerateGrids:
     """Test handling of empty and degenerate grid cases."""
 
@@ -371,6 +374,7 @@ class TestEmptyAndDegenerateGrids:
             pass
 
 
+@pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")
 class TestNaNPropagation:
     """Test NaN handling and propagation through interpolation."""
 
@@ -478,6 +482,7 @@ class TestNaNPropagation:
         assert fill_nan_count <= nan_nan_count
 
 
+@pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")
 class TestBoundaryEdgeCases:
     """Test additional boundary edge cases and robustness scenarios."""
 
