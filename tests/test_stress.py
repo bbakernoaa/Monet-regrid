@@ -12,13 +12,14 @@ def test_high_resolution_stress_dask():
     try:
         from dask.distributed import Client
         # Start a local cluster
-        client = Client(processes=False, dashboard_address=None)
+        client = Client(dashboard_address=None)
     except ImportError:
         client = None
 
     # Create large source grid (e.g., 500x500)
     # Using smaller size for CI/local testing to avoid OOM, but large enough to stress
-    ny, nx = 10000, 10000
+    # Reduce size slightly to avoid large graph warning (2.46 GiB graph for 10000x10000 with (50,50) chunks)
+    ny, nx = 5000, 5000
     source_x, source_y = np.meshgrid(np.arange(nx), np.arange(ny))
     source_lat = 30 + 0.05 * source_x
     source_lon = -100 + 0.05 * source_y
@@ -38,8 +39,9 @@ def test_high_resolution_stress_dask():
     )
 
     # Create large dask array data
-    # Chunk size is small to create many chunks
-    data_dask = da.random.random((ny, nx), chunks=(50, 50))
+    # Increase chunk size to reduce graph size (chunks=(50,50) creates 40000 chunks for 2000x2000)
+    # Using larger chunks is better practice
+    data_dask = da.random.random((ny, nx), chunks=(200, 200))
     test_data = xr.DataArray(data_dask, dims=["y", "x"])
 
     # Interpolate using nearest neighbor (efficient for large grids)

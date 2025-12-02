@@ -172,11 +172,11 @@ def compute_conservative_weights(
     # Strategy: Parallelize over targets, write to pre-allocated chunks?
     # Or just use a simple loop if Numba parallel reduction is hard.
 
-    # Better: Return a jagged array or max-padded array (n_targets, max_overlaps)
-    # and let the caller flatten it.
+    # Return 1D flattened arrays with counts to save memory
+    # We first compute counts in a parallel loop, then allocate, then fill
 
-    result_source_indices = np.full((n_targets, max_overlaps), -1, dtype=np.int32)
-    result_weights = np.zeros((n_targets, max_overlaps), dtype=np.float64)
+    # Pass 1: Count overlaps per target
+    overlap_counts = np.zeros(n_targets, dtype=np.int32)
 
     for t_idx in prange(n_targets):
         t_poly = target_vertices[t_idx]
@@ -185,7 +185,6 @@ def compute_conservative_weights(
         if t_area < 1e-12:
             continue
 
-        count = 0
         n_candidates = candidate_counts[t_idx]
 
         for k in range(n_candidates):
@@ -194,16 +193,54 @@ def compute_conservative_weights(
                 break
 
             s_poly = source_vertices[s_idx]
-
             overlap = calculate_overlap_area(s_poly, t_poly)
 
             if overlap > 1e-12:
-                # Weight is fraction of target area covered by source
+                overlap_counts[t_idx] += 1
+
+    # Compute offsets for flattened arrays
+    offsets = np.zeros(n_targets + 1, dtype=np.int32)
+    # Numba doesn't support cumsum well on arrays in nopython mode sometimes, but let's try manual loop or objmode
+    # For parallel safety we need prefix sum. Sequential prefix sum is fast enough for 1D array.
+
+    total_overlaps = 0
+    for i in range(n_targets):
+        offsets[i] = total_overlaps
+        total_overlaps += overlap_counts[i]
+    offsets[n_targets] = total_overlaps
+
+    # Allocate flattened arrays
+    out_source_indices = np.full(total_overlaps, -1, dtype=np.int32)
+    out_weights = np.zeros(total_overlaps, dtype=np.float64)
+    out_target_indices = np.zeros(total_overlaps, dtype=np.int32)
+
+    # Pass 2: Fill arrays
+    for t_idx in prange(n_targets):
+        count = overlap_counts[t_idx]
+        if count == 0:
+            continue
+
+        start_idx = offsets[t_idx]
+        current_idx = start_idx
+
+        t_poly = target_vertices[t_idx]
+        t_area = polygon_area(t_poly)
+
+        n_candidates = candidate_counts[t_idx]
+
+        for k in range(n_candidates):
+            s_idx = candidate_indices[t_idx, k]
+            if s_idx == -1:
+                break
+
+            s_poly = source_vertices[s_idx]
+            overlap = calculate_overlap_area(s_poly, t_poly)
+
+            if overlap > 1e-12:
                 weight = overlap / t_area
+                out_source_indices[current_idx] = s_idx
+                out_weights[current_idx] = weight
+                out_target_indices[current_idx] = t_idx
+                current_idx += 1
 
-                if count < max_overlaps:
-                    result_source_indices[t_idx, count] = s_idx
-                    result_weights[t_idx, count] = weight
-                    count += 1
-
-    return result_source_indices, result_weights
+    return out_source_indices, out_weights, out_target_indices

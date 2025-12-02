@@ -307,10 +307,14 @@ def format_weights(
 
     if chunks:
         new_weights = new_weights.chunk(chunks)
-        # TEMPORARY: Disable sparse conversion to fix hanging issue
-        # if sparse is not None:
-        #     new_weights.data = new_weights.data.map_blocks(sparse.COO)
-    # elif sparse is not None:
-    #     new_weights.data = sparse.COO(weights.data)
+        if sparse is not None:
+            # Use a safe sparse conversion that doesn't hang
+            # We wrap sparse.COO in a way that dask handles correctly
+            new_weights.data = new_weights.data.map_blocks(
+                lambda x: sparse.COO.from_numpy(x) if isinstance(x, np.ndarray) else x,
+                dtype=new_weights.dtype
+            )
+    elif sparse is not None:
+        new_weights.data = sparse.COO.from_numpy(weights.data)
 
     return new_weights  # type: ignore

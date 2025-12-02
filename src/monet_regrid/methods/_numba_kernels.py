@@ -129,46 +129,62 @@ def apply_weights_nearest(
 @jit(nopython=True, nogil=True, parallel=True)
 def apply_weights_conservative(
     data_flat,  # (n_samples, n_source_points)
-    source_indices,  # (n_target_points, max_overlaps)
-    weights,  # (n_target_points, max_overlaps)
-    valid_mask,  # (n_target_points,) or similar validity check? No, (n_target_points, max_overlaps)
+    source_indices,  # (n_interactions,)
+    target_indices,  # (n_interactions,)
+    weights,  # (n_interactions,)
+    n_targets, # int
 ):
     """
-    Apply conservative regridding weights.
+    Apply conservative regridding weights using sparse COO format.
 
     Args:
         data_flat: 2D array of source data
-        source_indices: Indices of source cells contributing to each target cell
-        weights: Weights for each contribution
-        valid_mask: Boolean mask indicating valid overlaps (padded entries are False)
+        source_indices: Indices of source cells
+        target_indices: Indices of target cells
+        weights: Weights for each interaction
+        n_targets: Number of target cells (to size the output)
 
     Returns:
-        Regridded data
+        Regridded data (n_samples, n_targets)
     """
     n_samples = data_flat.shape[0]
-    n_targets = source_indices.shape[0]
-    max_overlaps = source_indices.shape[1]
+    n_interactions = len(weights)
+
+    # We need to be careful with parallelization here because multiple threads might write to the same target
+    # Standard parallel reduction or atomics are needed.
+    # Numba supports atomics but they can be slow.
+    # Alternatively, we can parallelize over samples if n_samples is large.
 
     result = np.zeros((n_samples, n_targets), dtype=data_flat.dtype)
 
-    for i in prange(n_targets):
-        for k in range(max_overlaps):
-            # Check validity
-            if not valid_mask[i, k]:
-                continue
+    # If n_samples is large, parallelize over samples
+    if n_samples > 1:
+        for s in prange(n_samples):
+            for k in range(n_interactions):
+                t_idx = target_indices[k]
+                s_idx = source_indices[k]
+                w = weights[k]
 
-            s_idx = source_indices[i, k]
-            w = weights[i, k]
+                val = data_flat[s, s_idx]
+                if not np.isnan(val):
+                    result[s, t_idx] += val * w
+    else:
+        # If n_samples is 1, parallelize over interactions? No, race condition on t_idx.
+        # We can't easily parallelize over interactions without race conditions unless we sort by target index
+        # and process chunks.
+        # But for now, let's keep it serial over interactions if n_samples is small.
+        # Actually, if we use atomics we can parallelize.
+        # Or we can accept serial execution for n_samples=1 case, which is still fast in C/Numba.
+
+        for k in range(n_interactions):
+            t_idx = target_indices[k]
+            s_idx = source_indices[k]
+            w = weights[k]
 
             for s in range(n_samples):
                 val = data_flat[s, s_idx]
-                # Conservative regridding typically assumes NaNs are 0 or ignored in sum
-                # But strict conservation requires handling them.
-                # If we assume 'skipna=True' logic where NaNs don't contribute:
                 if not np.isnan(val):
-                    result[s, i] += val * w
-                # If we wanted to propagate NaN, we'd check if any contributor is NaN -> result NaN
-                # But usually conservative is about aggregation.
+                    result[s, t_idx] += val * w
 
     return result
 

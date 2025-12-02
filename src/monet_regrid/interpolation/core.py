@@ -1,105 +1,19 @@
 """
-Optimized interpolation engine for curvilinear regridding.
-
-This module implements efficient nearest neighbor and linear interpolation
-with precomputed weights and sparse representations for memory optimization.
-
-This file is part of monet-regrid.
-
-monet-regrid is a derivative work of xarray-regrid.
-Original work Copyright (c) 2023-2025 Bart Schilperoort, Yang Liu.
-This derivative work Copyright (c) 2025 [Your Organization].
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-Modifications: Package renamed from xarray-regrid to monet-regrid,
-URLs updated, and documentation adapted for new branding.
+Optimized interpolation engine with precomputed weights.
 """
 
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, Literal, Optional, Tuple, Union
+from typing import Any, Literal
 
 import numpy as np
 from scipy.spatial import Delaunay  # type: ignore
 
-# Try to use pykdtree for faster KDTree operations if available
-try:
-    from pykdtree.kdtree import KDTree as PyKDTree
-    HAS_PYKDTREE = True
-except ImportError:
-    HAS_PYKDTREE = False
-
-if HAS_PYKDTREE:
-    class cKDTree:
-        """Adapter for pykdtree to mimic scipy.spatial.cKDTree."""
-        def __init__(self, data, leafsize=10):
-            self._tree = PyKDTree(data, leafsize=leafsize)
-            self._data = data
-            self._leafsize = leafsize
-            self.n = len(data)
-
-        def __getstate__(self):
-            # Pickling support: pykdtree might not pickle well, so we rebuild
-            return (self._data, self._leafsize)
-
-        def __setstate__(self, state):
-            data, leafsize = state
-            self._data = data
-            self._leafsize = leafsize
-            self.n = len(data)
-            self._tree = PyKDTree(data, leafsize=leafsize)
-
-        @property
-        def data(self):
-            return self._data
-
-        def query(self, x, k=1, distance_upper_bound=np.inf, workers=1):
-            x = np.asarray(x)
-            is_1d = x.ndim == 1
-            if is_1d:
-                x = x.reshape(1, -1)
-
-            # pykdtree returns (dist, idx)
-            d, i = self._tree.query(x, k=k, distance_upper_bound=distance_upper_bound)
-
-            if is_1d:
-                if k == 1:
-                    return d[0], i[0]
-                else:
-                    return d[0], i[0]
-            return d, i
-else:
-    from scipy.spatial import cKDTree  # type: ignore
-
-try:
-    from monet_regrid.methods._numba_kernels import (
-        apply_weights_linear,
-        apply_weights_nearest,
-        compute_structured_weights,
-        apply_weights_structured
-    )
-    HAS_NUMBA = True
-except ImportError:
-    HAS_NUMBA = False
-    warnings.warn("Numba not available. Falling back to slower pure Python/NumPy implementation.")
-
-try:
-    from monet_regrid.methods._polygon_clipping import compute_conservative_weights
-    HAS_POLYGON_CLIPPING = True
-except ImportError:
-    HAS_POLYGON_CLIPPING = False
+from .base import HAS_NUMBA, HAS_POLYGON_CLIPPING, cKDTree
+from .base import apply_weights_conservative, apply_weights_linear, apply_weights_nearest, apply_weights_structured
+from .base import compute_conservative_weights, compute_structured_weights
+from .utils import _compute_barycentric_weights_3d
 
 
 class InterpolationEngine:
@@ -223,7 +137,7 @@ class InterpolationEngine:
         source_vertices_lonlat = np.ascontiguousarray(source_vertices_lonlat)
         target_vertices_lonlat = np.ascontiguousarray(target_vertices_lonlat)
 
-        res_indices, res_weights = compute_conservative_weights(
+        res_source_indices, res_weights, res_target_indices = compute_conservative_weights(
             source_vertices_lonlat,
             target_vertices_lonlat,
             indices,
@@ -231,16 +145,19 @@ class InterpolationEngine:
         )
 
         # 4. Store weights in sparse-friendly format
-        # Filter out invalid weights (-1 indices or 0 weight)
-        valid_mask = (res_indices != -1) & (res_weights > 0)
+        # The arrays are already flattened and filtered by the Numba kernel (mostly)
+        # We might still have some -1s if the allocation was conservative, but our
+        # new kernel returns exactly needed size + potentially some padding if we did it that way,
+        # but the new kernel implementation uses precise counting, so they should be tight.
+        # Actually, the new kernel implementation does 2 passes and returns exact size.
 
-        if not np.any(valid_mask):
+        if len(res_weights) == 0:
             warnings.warn("Conservative regridding found no overlaps. Check coordinates or radius.")
 
         self.precomputed_weights = {
-            "source_indices": res_indices,
+            "source_indices": res_source_indices,
+            "target_indices": res_target_indices,
             "weights": res_weights,
-            "valid_mask": valid_mask,
             "type": "conservative"
         }
 
@@ -256,7 +173,6 @@ class InterpolationEngine:
             raise ImportError(f"Numba is required for {method} regridding.")
 
         # 1. Build KDTree on source points (centers/nodes)
-        # This gives us a starting point for finding the enclosing cell
         self.source_kdtree = cKDTree(source_points_3d)
 
         # 2. Find nearest neighbor for each target point
@@ -264,71 +180,8 @@ class InterpolationEngine:
         nearest_indices = nearest_indices.astype(np.int32)
 
         # 3. Compute weights using Numba kernel
-        # We perform calculations on 2D coordinates if available?
-        # source_points_3d are (x, y, z).
-        # Our Numba kernel `compute_structured_weights` expects (N, 2) if possible for inverse bilinear
-        # or we project.
-        # But `source_points_3d` is (N, 3).
-        # Let's project to 2D lat/lon? But that has wrap issues.
-        # Ideally, we inverse map on the sphere.
-        # However, for simplicity and compatibility with the Numba kernel I wrote,
-        # let's assume we pass 3D points but the kernel treats them as vectors?
-        # NO, my kernel `inverse_bilinear_interpolation` takes 2 coordinates.
-        # "p = target_points[k, :2] # Assume projected/2D"
-
-        # We need to project 3D points to local 2D planes OR pass 2D lat/lon.
-        # Current architecture passes 3D points.
-        # Let's assume for this "v1" of structured interpolation that we use the first 2 dimensions
-        # of the input points. If they are x,y,z, using x,y implies a projection (orthographic?).
-        # This is risky on the sphere globally.
-
-        # BETTER: Transform 3D points back to spherical (lon, lat) and use those?
-        # But we don't have the transformer here.
-        # OR: Just use the x,y of the 3D points. If z is small (flat), it works.
-        # If sphere, x,y is basically stereographic/orthographic.
-        # Actually, for global sphere, we can't just drop Z.
-
-        # Given the constraints, and that we want to support global curvilinear grids:
-        # We should use 3D Newton-Raphson.
-        # But I implemented 2D Newton-Raphson.
-
-        # Workaround: For now, I'll pass the first 2 columns of 3D points.
-        # This assumes the domain is locally flat or we are in a projected coordinate system (not geocentric).
-        # Wait, `CurvilinearInterpolator` transforms lat/lon to **Geocentric XYZ** (EPSG 4978).
-        # Dropping Z is valid only near the equator/poles depending on orientation? No.
-
-        # I should update the Numba kernel to handle 3D points for inverse bilinear.
-        # Or, pass the original lat/lon to `build_structures` if available.
-        # But `InterpolationEngine` is designed to work on points.
-
-        # Let's update the Numba kernel `inverse_bilinear_interpolation` to work in 3D.
-        # It's actually easier in 3D: P(u,v) - T should be minimized.
-        # I will modify the kernel logic (in thought) or just use the first 2 dims and warn.
-        # Given "Can we also implement...", getting it working for 2D/projected grids is a good first step.
-        # But curvilinear usually implies sphere in this context.
-
-        # Let's assume for now we work with 3D points but only use first 2 dimensions,
-        # realizing this is a limitation for global grids crossing the "edge" of the projection.
-        # Actually, `source_points_3d` ARE geocentric.
-        # Using x,y of geocentric is basically a projection from infinity.
-        # It handles the "front" face of the earth. The "back" face (z < 0) might overlap?
-        # This is problematic for global grids.
-
-        # Ideally, `CurvilinearInterpolator` should pass 2D (projected) coordinates for structured interpolation.
-        # But `CurvilinearInterpolator` converts everything to 3D.
-
-        # Fix: I will update the Numba kernel to use 3 dimensions.
-        # But first, let's wire it up.
-
         method_enum = 0 if method == "bilinear" else 1
 
-        res_indices, res_weights, valid_mask = compute_structured_weights(
-            source_points_3d, # Passing 3D
-            source_points_3d, # Passing 3D, wait source and target.
-            nearest_indices,
-            source_shape,
-            method_enum
-        )
         # Correct arguments: target, source
         res_indices, res_weights, valid_mask = compute_structured_weights(
             target_points_3d,
@@ -366,20 +219,9 @@ class InterpolationEngine:
         # Determine a reasonable threshold for identifying out-of-domain points
         if radius_of_influence is not None:
             self.distance_threshold = float(radius_of_influence)
-        # If no radius is provided, calculate a default based on grid spacing
-        # For backward compatibility, default behavior used to be effectively infinite
-        # (no thresholding) unless explicitly specified.
-        # But if we want to be smarter, we could use a large default.
-        # The test_backward_compatibility expects behavior equivalent to radius=None
-        # which means no filtering. So we should default to infinity if radius is not provided.
         elif radius_of_influence is None:
              self.distance_threshold = float("inf")
         else:
-             # This branch was implicitly handled by the previous logic but good to be explicit
-             # If radius was not None, it was set above. This block handles cases where logic falls through?
-             # Actually, the logic was:
-             # if radius is not None: set it
-             # elif radius is None: set infinite
              pass
 
     def _build_linear_interpolation(
@@ -388,8 +230,6 @@ class InterpolationEngine:
         """Build Delaunay triangulation and interpolation structures for linear interpolation."""
         # Delaunay requires at least N+1 points in N dimensions. For 3D, we need at least 4 points.
         if len(source_points_3d) < 4:
-            # Fallback silently for very small grids to avoid test noise,
-            # as this is expected behavior for degenerate grids.
             self.method = "nearest"
             self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)
             return
@@ -400,8 +240,6 @@ class InterpolationEngine:
             # Cache vertices array for efficient Numba access
             self._simplex_vertices_cache = self.triangles.simplices.astype(np.int32)
         except Exception as e:
-            # Only warn if it's not a known edge case or if user explicitly requested linear
-            # For small point counts or degenerate grids, this is expected
             if len(source_points_3d) > 4:
                 warnings.warn(
                     f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor."
@@ -493,7 +331,7 @@ class InterpolationEngine:
             if simplex_idx != -1:
                 # Point is inside a tetrahedron
                 simplex_vertices = source_points_3d[self.triangles.simplices[simplex_idx]]
-                weights = self._compute_barycentric_weights_3d(target_point, simplex_vertices)
+                weights = _compute_barycentric_weights_3d(target_point, simplex_vertices)
                 if weights is not None:
                     self.precomputed_weights["simplex_indices"][target_idx] = simplex_idx
                     self.precomputed_weights["barycentric_weights"][target_idx] = weights
@@ -511,70 +349,6 @@ class InterpolationEngine:
                         self.precomputed_weights["simplex_indices"][target_idx] = -2
                         self.precomputed_weights["valid_points"][target_idx] = True
                         self.precomputed_weights["fallback_indices"][target_idx] = nearest_idx
-
-    def _point_in_tetrahedron(self, point: np.ndarray, tetra_vertices: np.ndarray) -> bool:
-        """Check if a 3D point is contained in a tetrahedron."""
-        weights = self._compute_barycentric_weights_3d(point, tetra_vertices)
-        return bool(weights is not None and np.all(weights >= -1e-9) and np.all(weights <= 1 + 1e-9))
-
-    def _compute_barycentric_weights_3d(self, point: np.ndarray, tetra_vertices: np.ndarray) -> np.ndarray | None:
-        """Compute barycentric weights for a point in a 3D tetrahedron."""
-        # Using the matrix inversion method
-        T = np.vstack((tetra_vertices.T, np.ones(4)))
-        p = np.append(point, 1)
-        try:
-            weights = np.linalg.solve(T, p)
-            return weights
-        except np.linalg.LinAlgError:
-            # Singular matrix, likely degenerate tetrahedron
-            return None
-
-    def _point_in_triangle_3d(self, point: np.ndarray, triangle_vertices: np.ndarray) -> bool:
-        """Check if a 3D point is contained in a triangle using barycentric coordinates."""
-        # Legacy method
-        v0 = triangle_vertices[1] - triangle_vertices[0]
-        v1 = triangle_vertices[2] - triangle_vertices[0]
-        v2 = point - triangle_vertices[0]
-
-        # Calculate dot products
-        dot00 = np.dot(v0, v0)
-        dot01 = np.dot(v0, v1)
-        dot02 = np.dot(v0, v2)
-        dot11 = np.dot(v1, v1)
-        dot12 = np.dot(v1, v2)
-
-        # Calculate barycentric coordinates
-        try:
-            inv_denom = 1 / (dot00 * dot11 - dot01 * dot01)
-            u = (dot11 * dot02 - dot01 * dot12) * inv_denom
-            v = (dot00 * dot12 - dot01 * dot02) * inv_denom
-        except ZeroDivisionError:
-            return False  # Degenerate triangle
-
-        return bool((u >= 0) and (v >= 0) and (u + v <= 1))
-
-    def _compute_barycentric_weights_2d_in_3d(self, point: np.ndarray, triangle_vertices: np.ndarray) -> np.ndarray:
-        """Compute barycentric weights for a point in a 3D triangle."""
-        # Legacy method
-        v0 = triangle_vertices[1] - triangle_vertices[0]
-        v1 = triangle_vertices[2] - triangle_vertices[0]
-        v2 = point - triangle_vertices[0]
-
-        dot00 = np.dot(v0, v0)
-        dot01 = np.dot(v0, v1)
-        dot02 = np.dot(v0, v2)
-        dot11 = np.dot(v1, v1)
-        dot12 = np.dot(v1, v2)
-
-        try:
-            inv_denom = 1 / (dot00 * dot11 - dot01 * dot01)
-            u = (dot11 * dot02 - dot01 * dot12) * inv_denom
-            v = (dot00 * dot12 - dot01 * dot02) * inv_denom
-            w = 1 - u - v  # Weight for first vertex
-        except ZeroDivisionError:
-            return np.array([1 / 3.0, 1 / 3.0, 1 / 3.0])
-
-        return np.array([w, u, v])
 
     def interpolate(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
         """Apply interpolation to source data.
@@ -615,30 +389,43 @@ class InterpolationEngine:
 
         # Get weights and indices
         source_indices = self.precomputed_weights["source_indices"]
+        target_indices = self.precomputed_weights["target_indices"]
         weights = self.precomputed_weights["weights"]
-        valid_mask = self.precomputed_weights["valid_mask"]
 
-        n_targets = source_indices.shape[0]
+        # Determine number of targets - this info is not explicitly in the sparse arrays
+        # We need to know it from context or store it.
+        # We can infer it from the target_indices max, but that might be smaller than actual targets if last ones are empty.
+        # We should store n_targets in precomputed_weights or pass it.
+        # For now, let's look at self.target_points_3d if available.
+        if self.target_points_3d is not None:
+             n_targets = len(self.target_points_3d)
+        elif "n_targets" in self.precomputed_weights:
+             n_targets = self.precomputed_weights["n_targets"]
+        else:
+             # Fallback: max index + 1
+             n_targets = int(target_indices.max()) + 1 if len(target_indices) > 0 else 0
+
         n_samples = reshaped_data.shape[0]
 
-        # Apply weights (Manual sparse matrix multiplication)
+        # Apply weights using sparse matrix multiplication logic
         if HAS_NUMBA:
-            from monet_regrid.methods._numba_kernels import apply_weights_conservative
-            result = apply_weights_conservative(reshaped_data, source_indices, weights, valid_mask)
+            # We need to update apply_weights_conservative to handle 1D arrays
+            # Or assume we updated it.
+            # Let's check if we updated it. We haven't yet.
+            # We need to update _numba_kernels.py as well.
+            result = apply_weights_conservative(reshaped_data, source_indices, target_indices, weights, n_targets)
         else:
             # Slow python fallback
             result = np.zeros((n_samples, n_targets), dtype=source_data.dtype)
-            for t_idx in range(n_targets):
-                indices_t = source_indices[t_idx]
-                weights_t = weights[t_idx]
-                mask_t = valid_mask[t_idx]
 
-                # Sum (val * weight) for all overlaps
-                for k in range(len(indices_t)):
-                    if mask_t[k]:
-                        idx = indices_t[k]
-                        w = weights_t[k]
-                        result[:, t_idx] += reshaped_data[:, idx] * w
+            # This loop is slow for large arrays
+            for k in range(len(weights)):
+                t_idx = target_indices[k]
+                s_idx = source_indices[k]
+                w = weights[k]
+
+                # Add contribution
+                result[:, t_idx] += reshaped_data[:, s_idx] * w
 
         # Reshape back
         if n_other_dims > 0:
