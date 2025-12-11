@@ -10,7 +10,7 @@ from monet_regrid import CurvilinearRegridder, RectilinearRegridder
 from monet_regrid.core import BaseRegridder
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: from xarray_regrid import RectilinearRegridder, CurvilinearRegridder
+# Old import: from monet_regrid import RectilinearRegridder, CurvilinearRegridder
 # New import: from monet_regrid import RectilinearRegridder, CurvilinearRegridder
 
 

@@ -12,7 +12,7 @@ except ImportError:
     xesmf = None
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: import xarray_regrid
+# Old import: import monet_regrid
 # New import: import monet_regrid
 
 

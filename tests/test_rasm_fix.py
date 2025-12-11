@@ -8,7 +8,7 @@ import numpy as np
 import xarray as xr
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: import xarray_regrid  # Import to register the accessor
+# Old import: import monet_regrid  # Import to register the accessor
 # New import: import monet_regrid  # Import to register the accessor
 
 
