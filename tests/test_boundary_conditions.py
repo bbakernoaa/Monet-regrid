@@ -320,9 +320,7 @@ class TestEmptyAndDegenerateGrids:
         """Test handling of degenerate triangles in triangulation."""
         # Create nearly collinear points that might cause degenerate triangles
         degenerate_lat = np.array([[0.0, 0.001, 0.002], [0.0, 0.001, 0.002], [0.0, 0.001, 0.002]])
-        degenerate_lon = np.array(
-            [[0.0, 0.0, 0.0], [0.001, 0.001, 0.001], [0.002, 0.002, 0.002]]
-        )
+        degenerate_lon = np.array([[0.0, 0.0, 0.0], [0.001, 0.001, 0.001], [0.002, 0.002, 0.002]])
 
         degenerate_source_grid = xr.Dataset(
             {"latitude": (["y", "x"], degenerate_lat), "longitude": (["y", "x"], degenerate_lon)}

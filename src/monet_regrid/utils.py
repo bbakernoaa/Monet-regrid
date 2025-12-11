@@ -183,7 +183,7 @@ def normalize_overlap(overlap: np.ndarray) -> np.ndarray:
     """Normalize overlap values so they sum up to 1.0 along the first axis."""
     overlap_sum: np.ndarray = overlap.sum(axis=0)
     overlap_sum[overlap_sum == 0] = 1e-12  # Avoid dividing by 0.
-    return overlap / overlap_sum  # type: ignore
+    return overlap / overlap_sum
 
 
 def create_dot_dataarray(
@@ -236,7 +236,7 @@ def call_on_dataset(
         msg = "Trying to convert Dataset with more than one data variable to DataArray"
         if len(result.data_vars) > 1:
             raise TypeError(msg)
-        return next(iter(result.data_vars.values())).rename(obj.name)  # type: ignore
+        return next(iter(result.data_vars.values())).rename(obj.name)
 
     return result
 
@@ -315,7 +315,7 @@ def format_for_regrid(
                 if len(obj[var].chunksizes.get(coord, ())) == 1:
                     result[var] = result[var].chunk({coord: -1})
 
-    return result  # type: ignore
+    return result
 
 
 def format_lat(
@@ -625,7 +625,8 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                                 if lat_1d_names and lon_1d_names:
                                     return GridType.RECTILINEAR
 
-                    raise ValueError("No latitude or longitude coordinates found")
+                    msg = "No latitude or longitude coordinates found"
+                    raise ValueError(msg)
 
     except (KeyError, ValueError) as e:
         msg = f"Could not identify coordinate: {e}"

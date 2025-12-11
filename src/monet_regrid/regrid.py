@@ -103,7 +103,7 @@ class Regridder:
         target_grid_type = _get_grid_type(ds_target_grid)
 
         # Choose the appropriate regridder based on grid types
-        if source_grid_type == GridType.CURVILINEAR or target_grid_type == GridType.CURVILINEAR:
+        if GridType.CURVILINEAR in (source_grid_type, target_grid_type):
             # Use CurvilinearRegridder for any curvilinear grid scenario
             from monet_regrid.core import CurvilinearRegridder
 
@@ -160,7 +160,7 @@ class Regridder:
             target_grid_type = GridType.RECTILINEAR
 
         # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if source_grid_type != GridType.CURVILINEAR and target_grid_type != GridType.CURVILINEAR:
+        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
             ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
         else:
             # For curvilinear grids, just ensure both have latitude/longitude coordinates
@@ -219,7 +219,7 @@ class Regridder:
             target_grid_type = GridType.RECTILINEAR
 
         # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if source_grid_type != GridType.CURVILINEAR and target_grid_type != GridType.CURVILINEAR:
+        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
             ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
         else:
             # For curvilinear grids, just ensure both have latitude/longitude coordinates
@@ -277,7 +277,7 @@ class Regridder:
             target_grid_type = GridType.RECTILINEAR
 
         # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if source_grid_type != GridType.CURVILINEAR and target_grid_type != GridType.CURVILINEAR:
+        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
             ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
         else:
             # For curvilinear grids, just ensure both have latitude/longitude coordinates
@@ -357,7 +357,7 @@ class Regridder:
             target_grid_type = GridType.RECTILINEAR
 
         # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if source_grid_type != GridType.CURVILINEAR and target_grid_type != GridType.CURVILINEAR:
+        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
             ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
         else:
             # For curvilinear grids, just ensure both have latitude/longitude coordinates
@@ -426,7 +426,7 @@ class Regridder:
             target_grid_type = GridType.RECTILINEAR
 
         # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if source_grid_type != GridType.CURVILINEAR and target_grid_type != GridType.CURVILINEAR:
+        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
             ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
         else:
             # For curvilinear grids, just ensure both have latitude/longitude coordinates
@@ -489,7 +489,7 @@ class Regridder:
             target_grid_type = GridType.RECTILINEAR
 
         # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if source_grid_type != GridType.CURVILINEAR and target_grid_type != GridType.CURVILINEAR:
+        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
             ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
         else:
             # For curvilinear grids, just ensure both have latitude/longitude coordinates
@@ -549,7 +549,7 @@ class Regridder:
             target_grid_type = GridType.RECTILINEAR
 
         # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if source_grid_type != GridType.CURVILINEAR and target_grid_type != GridType.CURVILINEAR:
+        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
             ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
         else:
             # For curvilinear grids, just ensure both have latitude/longitude coordinates

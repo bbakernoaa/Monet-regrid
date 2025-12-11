@@ -165,7 +165,7 @@ class TestEndToEndWorkflows:
         result = interpolator(test_data)
 
         # Verify result dimensions
-        expected_shape = (time_dim, level_dim) + self.target_grid["latitude"].shape
+        expected_shape = (time_dim, level_dim, *self.target_grid["latitude"].shape)
         assert result.shape == expected_shape
         assert "time" in result.dims
         assert "level" in result.dims
@@ -421,4 +421,3 @@ if __name__ == "__main__":
     robustness_test.test_workflow_with_nan_values()
     robustness_test.test_workflow_with_different_dtypes()
 
-    print("All integration tests passed!")

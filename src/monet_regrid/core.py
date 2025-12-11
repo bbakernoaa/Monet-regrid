@@ -100,10 +100,12 @@ class BaseRegridder(abc.ABC):
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs."""
         if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
-            raise TypeError("source_data must be an xarray DataArray or Dataset")
+            msg = "source_data must be an xarray DataArray or Dataset"
+            raise TypeError(msg)
 
         if not isinstance(self.target_grid, xr.Dataset):
-            raise TypeError("target_grid must be an xarray Dataset")
+            msg = "target_grid must be an xarray Dataset"
+            raise TypeError(msg)
 
         # Use coordinate identification to check for latitude/longitude coordinates
         # rather than requiring exact coordinate name matches
@@ -135,15 +137,21 @@ class BaseRegridder(abc.ABC):
                     source_lat_coords = [lat_dim]
                     source_lon_coords = [lon_dim]
                 else:
-                    raise ValueError(
+                    msg = (
                         f"Source data must have latitude and longitude coordinates.\n"
                         f"Source coordinates: {list(self.source_data.coords) if hasattr(self.source_data, 'coords') else []}\n"
                         f"Source dimensions: {list(self.source_data.dims) if hasattr(self.source_data, 'dims') else []}"
                     )
+                    raise ValueError(
+                        msg
+                    )
             else:
-                raise ValueError(
+                msg = (
                     f"Source data must have latitude and longitude coordinates.\n"
                     f"Source coordinates: {list(self.source_data.coords) if hasattr(self.source_data, 'coords') else []}"
+                )
+                raise ValueError(
+                    msg
                 )
 
         if not target_lat_coords or not target_lon_coords:
@@ -167,10 +175,13 @@ class BaseRegridder(abc.ABC):
                 target_lat_coords = [target_lat_dim]
                 target_lon_coords = [target_lon_dim]
             else:
-                raise ValueError(
+                msg = (
                     f"Target grid must have latitude and longitude coordinates.\n"
                     f"Target coordinates: {list(self.target_grid.coords)}\n"
                     f"Target dimensions: {list(self.target_grid.dims)}"
+                )
+                raise ValueError(
+                    msg
                 )
 
     def _identify_lat_coords(self, data: xr.DataArray | xr.Dataset) -> list[Hashable]:
@@ -335,8 +346,9 @@ class RectilinearRegridder(BaseRegridder):
                 output_chunks,
             )
         else:
+            msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative"
             raise ValueError(
-                f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative"
+                msg
             )
 
     def to_file(self, filepath: str, **kwargs: Any) -> None:
@@ -656,15 +668,18 @@ class CurvilinearRegridder(BaseRegridder):
 
                 return source_grid
             else:
-                raise ValueError("Source data must have at least 2 dimensions for curvilinear regridding")
+                msg = "Source data must have at least 2 dimensions for curvilinear regridding"
+                raise ValueError(msg)
 
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs for curvilinear regridding."""
         if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
-            raise TypeError("source_data must be an xarray DataArray or Dataset")
+            msg = "source_data must be an xarray DataArray or Dataset"
+            raise TypeError(msg)
 
         if not isinstance(self.target_grid, xr.Dataset):
-            raise TypeError("target_grid must be an xarray Dataset")
+            msg = "target_grid must be an xarray Dataset"
+            raise TypeError(msg)
 
         # For curvilinear regridders, we only need to validate that the target grid has latitude/longitude coordinates
         # The source data can be passed without explicit lat/lon coordinates, as the grid information
@@ -674,8 +689,8 @@ class CurvilinearRegridder(BaseRegridder):
 
             # Use cf-xarray to identify latitude and longitude coordinates in target
             if hasattr(self.target_grid, "cf"):
-                target_lat = self.target_grid.cf["latitude"]
-                target_lon = self.target_grid.cf["longitude"]
+                self.target_grid.cf["latitude"]
+                self.target_grid.cf["longitude"]
             else:
                 # Fallback to manual search
                 lat_coords = [
@@ -690,7 +705,8 @@ class CurvilinearRegridder(BaseRegridder):
                 ]
 
                 if not lat_coords or not lon_coords:
-                    raise ValueError("Target grid must have latitude and longitude coordinates")
+                    msg = "Target grid must have latitude and longitude coordinates"
+                    raise ValueError(msg)
         except (KeyError, AttributeError):
             # Fallback to manual search
             lat_coords = [
@@ -705,7 +721,8 @@ class CurvilinearRegridder(BaseRegridder):
             ]
 
             if not lat_coords or not lon_coords:
-                raise ValueError("Target grid must have latitude and longitude coordinates")
+                msg = "Target grid must have latitude and longitude coordinates"
+                raise ValueError(msg)
 
     def to_file(self, filepath: str, **kwargs: Any) -> None:
         """Save the regridder to a file.

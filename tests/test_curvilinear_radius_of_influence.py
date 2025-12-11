@@ -30,9 +30,7 @@ def test_curvilinear_nearest_with_radius_of_influence():
     test_data = xr.DataArray(data_values, dims=["y", "x"])
 
     # Test with a radius of influence
-    interpolator = CurvilinearInterpolator(
-        source_grid, target_grid, method="nearest", radius_of_influence=100000
-    )
+    interpolator = CurvilinearInterpolator(source_grid, target_grid, method="nearest", radius_of_influence=100000)
     result = interpolator(test_data)
 
     # Result should be finite and reasonable

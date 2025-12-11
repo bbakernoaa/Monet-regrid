@@ -145,7 +145,7 @@ class TestCoordinateTransformation:
         x, y, z = interpolator.transformer.transform(original_lon, original_lat, np.zeros_like(original_lat))
 
         # Inverse transformation
-        recovered_lon, recovered_lat, recovered_h = interpolator.transformer.transform(x, y, z, direction="INVERSE")
+        recovered_lon, recovered_lat, _recovered_h = interpolator.transformer.transform(x, y, z, direction="INVERSE")
 
         # Check recovery precision - should meet scientific tolerance
         lat_error = np.max(np.abs(original_lat - recovered_lat))
@@ -270,4 +270,3 @@ if __name__ == "__main__":
     barycentric_test.test_barycentric_weight_sum_validation()
     barycentric_test.test_barycentric_coordinate_edge_cases()
 
-    print("All coordinate transformation tests passed!")

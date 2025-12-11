@@ -76,7 +76,8 @@ class TestDataGenerator:
             lon_perturb = perturbation * 0.1 * (ny - y_idx) / ny * (nx - x_idx) / nx
 
         else:
-            raise ValueError(f"Unknown grid type: {grid_type}")
+            msg = f"Unknown grid type: {grid_type}"
+            raise ValueError(msg)
 
         return lat_2d + lat_perturb, lon_2d + lon_perturb
 
@@ -315,7 +316,8 @@ class TestDataGenerator:
                     lat_2d[i, j] += i * eps
                     lon_2d[i, j] += j * eps
         else:
-            raise ValueError(f"Unknown challenge type: {challenge_type}")
+            msg = f"Unknown challenge type: {challenge_type}"
+            raise ValueError(msg)
 
         return lat_2d, lon_2d
 
@@ -423,7 +425,8 @@ class TestDataGenerator:
             data_values[:, :edge_width] = np.nan
             data_values[:, -edge_width:] = np.nan
         else:
-            raise ValueError(f"Unknown NaN pattern: {nan_pattern}")
+            msg = f"Unknown NaN pattern: {nan_pattern}"
+            raise ValueError(msg)
 
         return xr.DataArray(data_values, dims=base_data.dims, coords=base_data.coords, attrs=base_data.attrs)
 
@@ -453,7 +456,8 @@ class TestDataGenerator:
             lon_vals = np.array([[179.999, 179.999], [-179.999, -179.999]])
 
         else:
-            raise ValueError(f"Unknown coordinate type: {coordinate_type}")
+            msg = f"Unknown coordinate type: {coordinate_type}"
+            raise ValueError(msg)
 
         return lat_vals, lon_vals
 

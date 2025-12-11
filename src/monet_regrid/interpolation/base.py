@@ -12,13 +12,16 @@ import numpy as np
 # Try to use pykdtree for faster KDTree operations if available
 try:
     from pykdtree.kdtree import KDTree as PyKDTree
+
     HAS_PYKDTREE = True
 except ImportError:
     HAS_PYKDTREE = False
 
 if HAS_PYKDTREE:
+
     class cKDTree:
         """Adapter for pykdtree to mimic scipy.spatial.cKDTree."""
+
         def __init__(self, data, leafsize=10):
             self._tree = PyKDTree(data, leafsize=leafsize)
             self._data = data
@@ -59,19 +62,21 @@ else:
 
 try:
     from monet_regrid.methods._numba_kernels import (
+        apply_weights_conservative,
         apply_weights_linear,
         apply_weights_nearest,
-        compute_structured_weights,
         apply_weights_structured,
-        apply_weights_conservative
+        compute_structured_weights,
     )
+
     HAS_NUMBA = True
 except ImportError:
     HAS_NUMBA = False
-    warnings.warn("Numba not available. Falling back to slower pure Python/NumPy implementation.")
+    warnings.warn("Numba not available. Falling back to slower pure Python/NumPy implementation.", stacklevel=2)
 
 try:
     from monet_regrid.methods._polygon_clipping import compute_conservative_weights
+
     HAS_POLYGON_CLIPPING = True
 except ImportError:
     HAS_POLYGON_CLIPPING = False

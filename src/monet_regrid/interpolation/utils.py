@@ -9,6 +9,7 @@ try:
     from monet_regrid.methods._numba_kernels import (
         inverse_bilinear_interpolation,
     )
+
     HAS_NUMBA = True
 except ImportError:
     HAS_NUMBA = False

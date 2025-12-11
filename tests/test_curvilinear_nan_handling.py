@@ -281,4 +281,3 @@ if __name__ == "__main__":
     test_out_of_domain_points_nan_handling()
     test_nan_handling_with_time_dimension()
     test_nan_comparison_with_rectilinear()
-    print("All NaN handling tests passed!")

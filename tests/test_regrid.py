@@ -6,6 +6,7 @@ import xarray as xr
 from numpy.testing import assert_array_equal
 
 import monet_regrid
+
 try:
     import xesmf
 except ImportError:
@@ -111,7 +112,7 @@ def test_regrid_rectilinear_to_rectilinear_conservative_dataset_and_dataarray():
 
     ds = xr.Dataset({"data": da})
 
-    target_da = xr.DataArray(dims=("y", "x"), coords={"y": range(1), "x": range(1)})
+    xr.DataArray(dims=("y", "x"), coords={"y": range(1), "x": range(1)})
 
     target_ds = xr.Dataset(coords={"y": range(1), "x": range(1)})
 
@@ -139,16 +140,18 @@ def test_regrid_rectilinear_to_rectilinear_conservative_nan_robust():
         # Optimize chunking to avoid PerformanceWarning
         # Suppress potential PerformanceWarning from Dask
         import warnings
+
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
             # Filter PerformanceWarning specifically if available from dask
             try:
                 from dask.array.core import PerformanceWarning
+
                 warnings.filterwarnings("ignore", category=PerformanceWarning)
             except ImportError:
                 pass
 
-            regridded = da_rechunk.regrid.conservative(
+            da_rechunk.regrid.conservative(
                 ds_target, nan_threshold=0.0 if nan_threshold is None else nan_threshold
             )
 

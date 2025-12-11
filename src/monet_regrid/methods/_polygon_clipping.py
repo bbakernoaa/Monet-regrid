@@ -8,6 +8,7 @@ and calculating intersection areas, designed for 2D curvilinear grids.
 import numpy as np
 from numba import jit, prange
 
+
 @jit(nopython=True, nogil=True)
 def polygon_area(vertices):
     """
@@ -27,6 +28,7 @@ def polygon_area(vertices):
         area -= vertices[j, 0] * vertices[i, 1]
     return 0.5 * abs(area)
 
+
 @jit(nopython=True, nogil=True)
 def is_inside(p1, p2, q):
     """
@@ -35,6 +37,7 @@ def is_inside(p1, p2, q):
     """
     # Cross product (p2-p1) x (q-p1)
     return (p2[0] - p1[0]) * (q[1] - p1[1]) - (p2[1] - p1[1]) * (q[0] - p1[0]) >= 0
+
 
 @jit(nopython=True, nogil=True)
 def intersection(p1, p2, p3, p4):
@@ -55,6 +58,7 @@ def intersection(p1, p2, p3, p4):
     x = x1 + ua * (x2 - x1)
     y = y1 + ua * (y2 - y1)
     return np.array([x, y])
+
 
 @jit(nopython=True, nogil=True)
 def clip_polygon(subject_polygon, clip_polygon):
@@ -112,6 +116,7 @@ def clip_polygon(subject_polygon, clip_polygon):
 
     return output_list
 
+
 @jit(nopython=True, nogil=True)
 def calculate_overlap_area(source_cell, target_cell):
     """
@@ -129,12 +134,13 @@ def calculate_overlap_area(source_cell, target_cell):
         return 0.0
     return polygon_area(clipped_poly)
 
+
 @jit(nopython=True, nogil=True, parallel=True)
 def compute_conservative_weights(
     source_vertices,  # (n_source, 4, 2)
     target_vertices,  # (n_target, 4, 2)
-    candidate_indices, # List of list-like or padded array (n_target, max_candidates)
-    candidate_counts, # (n_target,)
+    candidate_indices,  # List of list-like or padded array (n_target, max_candidates)
+    candidate_counts,  # (n_target,)
 ):
     """
     Compute conservative regridding weights.
