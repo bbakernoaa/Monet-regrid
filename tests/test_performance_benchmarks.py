@@ -4,12 +4,9 @@ This module tests performance targets, scalability, and optimization effectivene
 compared to baseline implementations.
 """
 
-import statistics
 import time
-from typing import Dict, List, Tuple
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.curvilinear import CurvilinearInterpolator

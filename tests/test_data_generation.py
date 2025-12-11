@@ -7,11 +7,8 @@ grid types, and challenging scenarios for comprehensive testing.
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 # All imports have been updated from monet_regrid to monet_regrid.
 
-import logging
-from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
-import pytest
 import xarray as xr
 from scipy.ndimage import gaussian_filter
 

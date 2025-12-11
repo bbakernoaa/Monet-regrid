@@ -1,13 +1,12 @@
+import pytest
 """Unit tests for KDTree and ConvexHull spatial structures in curvilinear regridding.
 
 This module tests the spatial indexing, nearest neighbor queries, and triangulation
 structures used for efficient interpolation in 3D space.
 """
 
-import logging
 
 import numpy as np
-import pytest
 import xarray as xr
 from scipy.spatial import Delaunay
 

@@ -1,9 +1,8 @@
+import pytest
 """Tests for the CurvilinearInterpolator class."""
 
-import logging
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.curvilinear import CurvilinearInterpolator

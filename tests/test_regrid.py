@@ -1,12 +1,10 @@
+import pytest
 import warnings
-from pathlib import Path
 
 import numpy as np
-import pytest
 import xarray as xr
 from numpy.testing import assert_array_equal
 
-import monet_regrid
 
 try:
     import xesmf
@@ -14,8 +12,6 @@ except ImportError:
     xesmf = None
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: import monet_regrid
-# New import: import monet_regrid
 
 
 def test_regrid_rectilinear_to_rectilinear_most_common():

@@ -1,13 +1,10 @@
 """Integration tests for the complete monet-regrid rebranding pipeline."""
 
-import logging
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.constants import GridType
-from monet_regrid.core import CurvilinearRegridder, RectilinearRegridder
 from monet_regrid.utils import _get_grid_type
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.

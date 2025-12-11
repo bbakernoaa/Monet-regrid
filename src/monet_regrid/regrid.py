@@ -1,5 +1,5 @@
 from collections.abc import Hashable
-from typing import Any, overload
+from typing import Any
 
 import numpy as np
 import xarray as xr
@@ -30,11 +30,8 @@ and documentation adapted for new branding.
 
 from monet_regrid.constants import GridType
 from monet_regrid.core import BaseRegridder, CurvilinearRegridder, RectilinearRegridder
-from monet_regrid.methods import conservative, flox_reduce, interp
 from monet_regrid.utils import (
     _get_grid_type,
-    format_for_regrid,
-    validate_grid_compatibility,
     validate_input,
 )
 

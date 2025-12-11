@@ -1,14 +1,12 @@
+import pytest
 """Boundary condition tests for curvilinear regridding edge cases.
 
 This module tests edge cases, boundary conditions, and robustness scenarios
 including poles, date lines, empty grids, and NaN propagation.
 """
 
-import logging
-from typing import Tuple
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.curvilinear import CurvilinearInterpolator

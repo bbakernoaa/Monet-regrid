@@ -1,9 +1,9 @@
+import pytest
 """Tests for the new regridder class hierarchy."""
 
 import os
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid import CurvilinearRegridder, RectilinearRegridder

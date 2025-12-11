@@ -5,10 +5,8 @@ and component interactions in the curvilinear regridding system.
 """
 
 import time
-from typing import Any, Dict
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.core import CurvilinearRegridder

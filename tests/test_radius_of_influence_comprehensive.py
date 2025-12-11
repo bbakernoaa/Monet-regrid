@@ -9,13 +9,11 @@ This script tests:
 5. Edge cases with very small and very large radius values
 """
 
-import logging
 import os
 import sys
 import time
 
 import numpy as np
-import pytest
 import xarray as xr
 
 try:

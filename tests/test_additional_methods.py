@@ -1,7 +1,6 @@
 """Tests for bilinear and cubic interpolation methods."""
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.curvilinear import CurvilinearInterpolator

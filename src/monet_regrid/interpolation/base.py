@@ -5,7 +5,6 @@ Base classes and types for interpolation.
 from __future__ import annotations
 
 import warnings
-from typing import Any, Literal, Protocol
 
 import numpy as np
 
@@ -72,6 +71,11 @@ try:
     HAS_NUMBA = True
 except ImportError:
     HAS_NUMBA = False
+    apply_weights_conservative = None
+    apply_weights_linear = None
+    apply_weights_nearest = None
+    apply_weights_structured = None
+    compute_structured_weights = None
     warnings.warn("Numba not available. Falling back to slower pure Python/NumPy implementation.", stacklevel=2)
 
 try:
@@ -80,3 +84,17 @@ try:
     HAS_POLYGON_CLIPPING = True
 except ImportError:
     HAS_POLYGON_CLIPPING = False
+    compute_conservative_weights = None
+
+__all__ = [
+    "HAS_NUMBA",
+    "HAS_POLYGON_CLIPPING",
+    "HAS_PYKDTREE",
+    "apply_weights_conservative",
+    "apply_weights_linear",
+    "apply_weights_nearest",
+    "apply_weights_structured",
+    "cKDTree",
+    "compute_conservative_weights",
+    "compute_structured_weights",
+]
