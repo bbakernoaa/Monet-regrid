@@ -26,11 +26,19 @@ URLs updated, and documentation adapted for new branding.
 from __future__ import annotations
 
 import abc
+import pickle
 from collections.abc import Hashable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import cf_xarray  # noqa: F401
 import numpy as np
 import xarray as xr
+
+from monet_regrid.constants import GridType
+from monet_regrid.curvilinear import CurvilinearInterpolator
+from monet_regrid.methods import conservative, interp
+from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce
+from monet_regrid.utils import format_for_regrid, validate_input
 
 
 class BaseRegridder(abc.ABC):
@@ -188,7 +196,6 @@ class BaseRegridder(abc.ABC):
         """Identify latitude coordinates in the data using cf-xarray or name matching."""
         # First, check for cf-xarray coordinates if available
         try:
-            import cf_xarray  # noqa: F401
 
             # Use cf-xarray to identify latitude coordinates if available
             if hasattr(data, "cf") and "latitude" in data.cf:
@@ -216,7 +223,6 @@ class BaseRegridder(abc.ABC):
         """Identify longitude coordinates in the data using cf-xarray or name matching."""
         # First, check for cf-xarray coordinates if available
         try:
-            import cf_xarray  # noqa: F401
 
             # Use cf-xarray to identify longitude coordinates if available
             if hasattr(data, "cf") and "longitude" in data.cf:
@@ -301,9 +307,6 @@ class RectilinearRegridder(BaseRegridder):
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method", "time_dim"]}}
 
         # Import here to avoid circular imports
-        from monet_regrid.methods import conservative, interp
-        from monet_regrid.regrid import validate_input
-        from monet_regrid.utils import format_for_regrid
 
         # Create a cache key based on input data and time_dim
         cache_key = (id(input_data), time_dim)
@@ -358,7 +361,6 @@ class RectilinearRegridder(BaseRegridder):
             filepath: Path to save the regridder configuration
             **kwargs: Additional arguments for file saving
         """
-        import pickle
 
         # Create a serializable representation
         config = {
@@ -383,7 +385,6 @@ class RectilinearRegridder(BaseRegridder):
         Returns:
             Instance of RectilinearRegridder
         """
-        import pickle
 
         with open(filepath, "rb") as f:
             config = pickle.load(f)
@@ -445,8 +446,6 @@ class RectilinearRegridder(BaseRegridder):
         Returns:
             xarray.dataset with regridded land cover categorical data.
         """
-        from monet_regrid.methods.flox_reduce import statistic_reduce
-        from monet_regrid.utils import format_for_regrid
 
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
 
@@ -489,8 +488,6 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-        from monet_regrid.methods.flox_reduce import compute_mode
-        from monet_regrid.utils import format_for_regrid
 
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
 
@@ -540,8 +537,6 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-        from monet_regrid.methods.flox_reduce import compute_mode
-        from monet_regrid.utils import format_for_regrid
 
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
 
@@ -595,7 +590,6 @@ class CurvilinearRegridder(BaseRegridder):
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method"]}}
 
         # Create the CurvilinearInterpolator
-        from monet_regrid.curvilinear import CurvilinearInterpolator
 
         # Create the interpolator with the source and target grids
         interpolator = CurvilinearInterpolator(
@@ -618,7 +612,6 @@ class CurvilinearRegridder(BaseRegridder):
         # Extract coordinate information from source data
         # First, determine the coordinate names using cf-xarray if available
         try:
-            import cf_xarray
 
             lat_coord = data.cf["latitude"]
             lon_coord = data.cf["longitude"]
@@ -685,7 +678,6 @@ class CurvilinearRegridder(BaseRegridder):
         # The source data can be passed without explicit lat/lon coordinates, as the grid information
         # is handled separately in the _create_source_grid_from_data method
         try:
-            import cf_xarray
 
             # Use cf-xarray to identify latitude and longitude coordinates in target
             if hasattr(self.target_grid, "cf"):
@@ -731,7 +723,6 @@ class CurvilinearRegridder(BaseRegridder):
             filepath: Path to save the regridder
             **kwargs: Additional arguments for file saving
         """
-        import pickle
 
         # Create a serializable representation
         config = {
@@ -755,7 +746,6 @@ class CurvilinearRegridder(BaseRegridder):
         Returns:
             Instance of CurvilinearRegridder
         """
-        import pickle
 
         with open(filepath, "rb") as f:
             config = pickle.load(f)

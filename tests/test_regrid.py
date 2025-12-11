@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -139,13 +140,12 @@ def test_regrid_rectilinear_to_rectilinear_conservative_nan_robust():
 
         # Optimize chunking to avoid PerformanceWarning
         # Suppress potential PerformanceWarning from Dask
-        import warnings
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
             # Filter PerformanceWarning specifically if available from dask
             try:
-                from dask.array.core import PerformanceWarning
+                from dask.array.core import PerformanceWarning  # noqa: PLC0415
 
                 warnings.filterwarnings("ignore", category=PerformanceWarning)
             except ImportError:

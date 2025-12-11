@@ -35,6 +35,7 @@ from monet_regrid.utils import (
     _get_grid_type,
     format_for_regrid,
     validate_grid_compatibility,
+    validate_input,
 )
 
 
@@ -105,7 +106,6 @@ class Regridder:
         # Choose the appropriate regridder based on grid types
         if GridType.CURVILINEAR in (source_grid_type, target_grid_type):
             # Use CurvilinearRegridder for any curvilinear grid scenario
-            from monet_regrid.core import CurvilinearRegridder
 
             return CurvilinearRegridder(source_data=self._obj, target_grid=ds_target_grid, method=method, **kwargs)
         else:
@@ -562,77 +562,3 @@ class Regridder:
         return rectilinear_regridder.stat(method, time_dim, skipna, fill_value)
 
 
-@overload
-def validate_input(
-    data: xr.Dataset,
-    ds_target_grid: xr.Dataset,
-    time_dim: str | None,
-) -> xr.Dataset: ...
-
-
-@overload
-def validate_input(
-    data: xr.DataArray,
-    ds_target_grid: xr.Dataset,
-    time_dim: str | None,
-) -> xr.Dataset: ...
-
-
-def validate_input(
-    data: xr.DataArray | xr.Dataset,
-    ds_target_grid: xr.Dataset,
-    time_dim: str | None,
-) -> xr.Dataset:
-    if time_dim is not None and time_dim in ds_target_grid.coords:
-        ds_target_grid = ds_target_grid.isel({time_dim: 0}).reset_coords()
-
-    # Check for coordinate compatibility using semantic matching instead of exact name matching
-    # This allows latitude/longitude to match with lat/lon, etc.
-
-    def _find_coordinate_matches(source_coords: list[Hashable], target_coords: list[Hashable]) -> list[Hashable]:
-        """Find semantic matches between coordinate names."""
-        matches: list[Hashable] = []
-
-        # Define coordinate name patterns
-        lat_patterns = ["lat", "latitude", "y", "yc"]
-        lon_patterns = ["lon", "longitude", "x", "xc"]
-
-        source_lat_coords = [c for c in source_coords if any(p in str(c).lower() for p in lat_patterns)]
-        source_lon_coords = [c for c in source_coords if any(p in str(c).lower() for p in lon_patterns)]
-        target_lat_coords = [c for c in target_coords if any(p in str(c).lower() for p in lat_patterns)]
-        target_lon_coords = [c for c in target_coords if any(p in str(c).lower() for p in lon_patterns)]
-
-        # If we have both lat and lon coordinates in both source and target, we have matches
-        if source_lat_coords and source_lon_coords and target_lat_coords and target_lon_coords:
-            matches.extend(source_lat_coords[:1])  # Take first match
-            matches.extend(source_lon_coords[:1])  # Take first match
-
-        # Also check for exact coordinate name matches
-        exact_matches = set(source_coords).intersection(set(target_coords))
-        matches.extend(exact_matches)
-
-        return matches
-
-    # Check coordinate compatibility
-    coord_matches = _find_coordinate_matches(list(data.coords), list(ds_target_grid.coords))
-
-    if len(coord_matches) == 0:
-        # Only check dimensions if no coordinate matches found
-        dim_matches = set(data.dims).intersection(set(ds_target_grid.dims))
-
-        if len(dim_matches) == 0:
-            # As a last resort, check for semantic dimension matches
-            semantic_dim_matches = _find_coordinate_matches(list(data.dims), list(ds_target_grid.dims))
-
-            if len(semantic_dim_matches) == 0:
-                msg = (
-                    "No compatible coordinates or dimensions found between source and target:\n"
-                    " regridding is not possible.\n"
-                    f"Target coords: {list(ds_target_grid.coords)}\n"
-                    f"Source coords: {list(data.coords)}\n"
-                    f"Target dims: {list(ds_target_grid.dims)}\n"
-                    f"Source dims: {list(data.dims)}"
-                )
-                raise ValueError(msg)
-
-    return ds_target_grid

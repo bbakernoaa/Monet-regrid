@@ -12,7 +12,7 @@ def test_high_resolution_stress_dask():
     """Test high-resolution interpolation with Dask arrays."""
     # Try to use distributed client if available to simulate cluster behavior
     try:
-        from dask.distributed import Client
+        from dask.distributed import Client  # noqa: PLC0415
 
         # Start a local cluster
         client = Client(dashboard_address=None)

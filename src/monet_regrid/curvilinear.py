@@ -32,16 +32,18 @@ URLs updated, and documentation adapted for new branding.
 
 from __future__ import annotations
 
-import abc
-from typing import Any, Literal, Tuple
+from typing import Any, Literal
 
 import numpy as np
-import pyproj
 import xarray as xr
 from scipy.spatial import Delaunay, cKDTree  # type: ignore
 
 from monet_regrid.coordinate_transformer import CoordinateTransformer
 from monet_regrid.interpolation import InterpolationEngine
+from monet_regrid.interpolation.utils import (
+    _compute_barycentric_weights_3d,
+    _point_in_tetrahedron,
+)
 
 
 def _apply_interpolation_wrapper(data_slice, engine, target_shape):
@@ -218,7 +220,6 @@ class CurvilinearInterpolator:
 
         # Use the interpolation engine's method to check if point is in triangle
         # For 3D, this checks if a point is in a tetrahedron
-        from monet_regrid.interpolation.utils import _point_in_tetrahedron
 
         return _point_in_tetrahedron(point_3d, simplex_vertices)
 
@@ -247,7 +248,6 @@ class CurvilinearInterpolator:
         triangle_vertices = self.source_points_3d[self.interpolation_engine.triangles.simplices[triangle_idx]]
 
         # Use the interpolation engine's method to compute barycentric weights
-        from monet_regrid.interpolation.utils import _compute_barycentric_weights_3d
 
         weights = _compute_barycentric_weights_3d(point_3d, triangle_vertices)
         return tuple(weights) if weights is not None else (np.nan, np.nan, np.nan, np.nan)
