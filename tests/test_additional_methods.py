@@ -1,13 +1,14 @@
 """Tests for bilinear and cubic interpolation methods."""
 
 import numpy as np
-import pytest
 import xarray as xr
+
 from monet_regrid.curvilinear import CurvilinearInterpolator
+
 
 def create_projected_grid(nx, ny, x_range, y_range):
     """Create a grid that is rectilinear in Geocentric X,Y space (near North Pole)."""
-    R = 6371000.0 # Approx Earth radius in meters
+    R = 6371000.0  # Approx Earth radius in meters
 
     x = np.linspace(x_range[0], x_range[1], nx)
     y = np.linspace(y_range[0], y_range[1], ny)
@@ -26,10 +27,9 @@ def create_projected_grid(nx, ny, x_range, y_range):
     lat_deg = np.degrees(lat_rad)
     lon_deg = np.degrees(lon_rad)
 
-    ds = xr.Dataset(
-        {"latitude": (["y", "x"], lat_deg), "longitude": (["y", "x"], lon_deg)}
-    )
+    ds = xr.Dataset({"latitude": (["y", "x"], lat_deg), "longitude": (["y", "x"], lon_deg)})
     return ds, xx, yy
+
 
 def test_bilinear_interpolation():
     """Test bilinear interpolation."""
@@ -43,7 +43,7 @@ def test_bilinear_interpolation():
     # Create test data (linear in X and Y)
     # Data = a*X + b*Y
     # Since grid is rectilinear in X,Y, bilinear interpolation should be exact
-    data_values = (sx + sy) / 1000.0 # Scale down
+    data_values = (sx + sy) / 1000.0  # Scale down
     test_data = xr.DataArray(data_values, dims=["y", "x"])
 
     # Interpolate
@@ -56,6 +56,7 @@ def test_bilinear_interpolation():
     # Should be very close (floating point errors only)
     np.testing.assert_allclose(result.values, expected, rtol=1e-5, atol=1e-5)
 
+
 def test_cubic_interpolation():
     """Test cubic interpolation."""
     # Create source grid rectilinear in projected space
@@ -66,7 +67,7 @@ def test_cubic_interpolation():
 
     # Create test data (cubic in X and Y)
     # Data = (X/1000)^3 + (Y/1000)^3
-    data_values = (sx/10000.0)**3 + (sy/10000.0)**3
+    data_values = (sx / 10000.0) ** 3 + (sy / 10000.0) ** 3
     test_data = xr.DataArray(data_values, dims=["y", "x"])
 
     # Interpolate
@@ -74,12 +75,13 @@ def test_cubic_interpolation():
     result = interpolator(test_data)
 
     # Check result
-    expected = (tx/10000.0)**3 + (ty/10000.0)**3
+    expected = (tx / 10000.0) ** 3 + (ty / 10000.0) ** 3
 
     # Cubic interpolation should be reasonably accurate
     # Focus on center to avoid boundary artifacts
     center_slice = (slice(2, -2), slice(2, -2))
     np.testing.assert_allclose(result.values[center_slice], expected[center_slice], rtol=0.1, atol=0.1)
+
 
 if __name__ == "__main__":
     test_bilinear_interpolation()

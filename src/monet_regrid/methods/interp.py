@@ -28,7 +28,7 @@ from typing import Literal, overload
 
 import numpy as np
 import xarray as xr
-from scipy.interpolate import RegularGridInterpolator  # type: ignore
+from scipy.interpolate import RegularGridInterpolator
 
 
 @overload
@@ -88,7 +88,7 @@ def interp_regrid(
     for coord in coord_names:
         interped[coord].attrs = coord_attrs[coord]
 
-    return interped  # type: ignore
+    return interped
 
 
 def _interp_regrid_fast(
@@ -108,7 +108,8 @@ def _interp_regrid_fast(
     interp_dims = [dim for dim in data.dims if dim in coord_names]
 
     if not interp_dims:
-        raise ValueError("No interpolation dimensions found")
+        msg = "No interpolation dimensions found"
+        raise ValueError(msg)
 
     # Prepare source coordinates and check monotonicity
     src_coords = []
@@ -122,7 +123,8 @@ def _interp_regrid_fast(
         is_monotonic_dec = np.all(np.diff(coord_vals) < 0)
 
         if not (is_monotonic_inc or is_monotonic_dec):
-            raise ValueError(f"Coordinate {dim} is not monotonic")
+            msg = f"Coordinate {dim} is not monotonic"
+            raise ValueError(msg)
         src_coords.append(coord_vals)
 
     # Prepare target coordinates
@@ -164,7 +166,8 @@ def _interp_regrid_fast(
     if len(data.dims) != len(interp_dims):
         # We could implement iteration over extra dims here for even more speedup
         # compared to xarray's loop, but for now let's just fallback
-        raise NotImplementedError("Extra dimensions not supported in fast path yet")
+        msg = "Extra dimensions not supported in fast path yet"
+        raise NotImplementedError(msg)
 
     new_values = new_values_flat.reshape(target_shape)
 

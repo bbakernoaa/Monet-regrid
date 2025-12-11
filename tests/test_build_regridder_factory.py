@@ -1,13 +1,12 @@
 """Tests for the build_regridder factory API with backward compatibility."""
 
 import numpy as np
-import pytest
 import xarray as xr
 
 import monet_regrid as xrg
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: import xarray_regrid as xrg
+# Old import: import monet_regrid as xrg
 # New import: import monet_regrid as xrg
 
 

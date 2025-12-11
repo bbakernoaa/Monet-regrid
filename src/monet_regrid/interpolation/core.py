@@ -10,10 +10,18 @@ from typing import Any, Literal
 import numpy as np
 from scipy.spatial import Delaunay  # type: ignore
 
-from .base import HAS_NUMBA, HAS_POLYGON_CLIPPING, cKDTree
-from .base import apply_weights_conservative, apply_weights_linear, apply_weights_nearest, apply_weights_structured
-from .base import compute_conservative_weights, compute_structured_weights
-from .utils import _compute_barycentric_weights_3d
+from monet_regrid.interpolation.base import (
+    HAS_NUMBA,
+    HAS_POLYGON_CLIPPING,
+    apply_weights_conservative,
+    apply_weights_linear,
+    apply_weights_nearest,
+    apply_weights_structured,
+    cKDTree,
+    compute_conservative_weights,
+    compute_structured_weights,
+)
+from monet_regrid.interpolation.utils import _compute_barycentric_weights_3d
 
 
 class InterpolationEngine:
@@ -60,7 +68,7 @@ class InterpolationEngine:
         source_points_3d: np.ndarray,
         target_points_3d: np.ndarray,
         radius_of_influence: float | None = None,
-        source_shape: tuple[int, int] | None = None
+        source_shape: tuple[int, int] | None = None,
     ) -> None:
         """Build interpolation structures based on method.
 
@@ -77,20 +85,20 @@ class InterpolationEngine:
             self._build_linear_interpolation(source_points_3d, target_points_3d, radius_of_influence)
         elif self.method in ["bilinear", "cubic"]:
             if source_shape is None:
-                raise ValueError(f"Method '{self.method}' requires source_shape to be provided.")
-            self._build_structured_interpolation(
-                source_points_3d, target_points_3d, source_shape, self.method
-            )
+                msg = f"Method '{self.method}' requires source_shape to be provided."
+                raise ValueError(msg)
+            self._build_structured_interpolation(source_points_3d, target_points_3d, source_shape, self.method)
         elif self.method == "conservative":
             # Conservative regridding requires boundaries, so this method shouldn't be called directly
             # with points. It should be called via build_conservative_structures.
             # However, if called, we can raise an error or fallback.
+            msg = "Conservative regridding requires grid boundaries. Use build_conservative_structures() instead."
             raise ValueError(
-                "Conservative regridding requires grid boundaries. "
-                "Use build_conservative_structures() instead."
+                msg
             )
         else:
-            raise ValueError(f"Unsupported method: {self.method}")
+            msg = f"Unsupported method: {self.method}"
+            raise ValueError(msg)
 
     def build_conservative_structures(
         self,
@@ -98,7 +106,7 @@ class InterpolationEngine:
         target_centers_3d: np.ndarray,
         source_vertices_lonlat: np.ndarray,
         target_vertices_lonlat: np.ndarray,
-        radius_of_influence: float | None = None
+        radius_of_influence: float | None = None,
     ) -> None:
         """Build structures for conservative regridding.
 
@@ -110,18 +118,21 @@ class InterpolationEngine:
             radius_of_influence: Search radius for overlapping cells
         """
         if not HAS_POLYGON_CLIPPING:
-            raise ImportError("Numba is required for conservative regridding.")
+            msg = "Numba is required for conservative regridding."
+            raise ImportError(msg)
 
         # 1. Build KDTree on source centers to find candidates
         self.source_kdtree = cKDTree(source_centers_3d)
 
         # 2. Query KDTree to find potential source cells for each target cell
         if radius_of_influence is None:
-            radius_of_influence = 500000.0 # 500km default
+            radius_of_influence = 500000.0  # 500km default
 
         # Find candidates
         k_candidates = 25
-        dists, indices = self.source_kdtree.query(target_centers_3d, k=k_candidates, distance_upper_bound=radius_of_influence)
+        _dists, indices = self.source_kdtree.query(
+            target_centers_3d, k=k_candidates, distance_upper_bound=radius_of_influence
+        )
 
         # indices has shape (M, k). Invalid indices are self.source_kdtree.n
         # We need to clean this up for the kernel
@@ -138,10 +149,7 @@ class InterpolationEngine:
         target_vertices_lonlat = np.ascontiguousarray(target_vertices_lonlat)
 
         res_source_indices, res_weights, res_target_indices = compute_conservative_weights(
-            source_vertices_lonlat,
-            target_vertices_lonlat,
-            indices,
-            counts
+            source_vertices_lonlat, target_vertices_lonlat, indices, counts
         )
 
         # 4. Store weights in sparse-friendly format
@@ -152,25 +160,22 @@ class InterpolationEngine:
         # Actually, the new kernel implementation does 2 passes and returns exact size.
 
         if len(res_weights) == 0:
-            warnings.warn("Conservative regridding found no overlaps. Check coordinates or radius.")
+            warnings.warn("Conservative regridding found no overlaps. Check coordinates or radius.", stacklevel=2)
 
         self.precomputed_weights = {
             "source_indices": res_source_indices,
             "target_indices": res_target_indices,
             "weights": res_weights,
-            "type": "conservative"
+            "type": "conservative",
         }
 
     def _build_structured_interpolation(
-        self,
-        source_points_3d: np.ndarray,
-        target_points_3d: np.ndarray,
-        source_shape: tuple[int, int],
-        method: str
+        self, source_points_3d: np.ndarray, target_points_3d: np.ndarray, source_shape: tuple[int, int], method: str
     ) -> None:
         """Build structures for structured interpolation (bilinear/cubic)."""
         if not HAS_NUMBA:
-            raise ImportError(f"Numba is required for {method} regridding.")
+            msg = f"Numba is required for {method} regridding."
+            raise ImportError(msg)
 
         # 1. Build KDTree on source points (centers/nodes)
         self.source_kdtree = cKDTree(source_points_3d)
@@ -184,21 +189,17 @@ class InterpolationEngine:
 
         # Correct arguments: target, source
         res_indices, res_weights, valid_mask = compute_structured_weights(
-            target_points_3d,
-            source_points_3d,
-            nearest_indices,
-            source_shape,
-            method_enum
+            target_points_3d, source_points_3d, nearest_indices, source_shape, method_enum
         )
 
         if not np.any(valid_mask):
-            warnings.warn(f"{method} interpolation found no valid points. Check geometry.")
+            warnings.warn(f"{method} interpolation found no valid points. Check geometry.", stacklevel=2)
 
         self.precomputed_weights = {
             "indices": res_indices,
             "weights": res_weights,
             "valid_mask": valid_mask,
-            "type": method
+            "type": method,
         }
 
     def _build_nearest_neighbour(
@@ -220,9 +221,9 @@ class InterpolationEngine:
         if radius_of_influence is not None:
             self.distance_threshold = float(radius_of_influence)
         elif radius_of_influence is None:
-             self.distance_threshold = float("inf")
+            self.distance_threshold = float("inf")
         else:
-             pass
+            pass
 
     def _build_linear_interpolation(
         self, source_points_3d: np.ndarray, target_points_3d: np.ndarray, radius_of_influence: float | None = None
@@ -242,7 +243,7 @@ class InterpolationEngine:
         except Exception as e:
             if len(source_points_3d) > 4:
                 warnings.warn(
-                    f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor."
+                    f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor.", stacklevel=2
                 )
             self.method = "nearest"
             self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)
@@ -271,14 +272,15 @@ class InterpolationEngine:
             "barycentric_weights": np.zeros((n_targets, 4), dtype=np.float64),
             "valid_points": np.zeros(n_targets, dtype=bool),
             "fallback_indices": np.full(n_targets, -1, dtype=np.int32),
-            "type": "linear"
+            "type": "linear",
         }
 
         # We also maintain _fallback_indices as an attribute for backward compatibility
         self._fallback_indices = self.precomputed_weights["fallback_indices"]
 
         if self.triangles is None:
-            raise RuntimeError("Triangulation not initialized")
+            msg = "Triangulation not initialized"
+            raise RuntimeError(msg)
 
         # If fill_method is 'nearest', precompute all fallback indices first.
         if self.fill_method == "nearest" and self.source_kdtree is not None:
@@ -369,12 +371,14 @@ class InterpolationEngine:
         elif self.method in ["bilinear", "cubic"]:
             return self._interpolate_structured(source_data, use_precomputed)
         else:
-            raise ValueError(f"Unsupported method: {self.method}")
+            msg = f"Unsupported method: {self.method}"
+            raise ValueError(msg)
 
     def _interpolate_conservative(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
         """Perform conservative regridding."""
         if not use_precomputed or self.precomputed_weights is None:
-            raise RuntimeError("Weights not precomputed for conservative regridding.")
+            msg = "Weights not precomputed for conservative regridding."
+            raise RuntimeError(msg)
 
         # source_data shape: (..., source_spatial_count)
         original_shape = source_data.shape
@@ -398,12 +402,12 @@ class InterpolationEngine:
         # We should store n_targets in precomputed_weights or pass it.
         # For now, let's look at self.target_points_3d if available.
         if self.target_points_3d is not None:
-             n_targets = len(self.target_points_3d)
+            n_targets = len(self.target_points_3d)
         elif "n_targets" in self.precomputed_weights:
-             n_targets = self.precomputed_weights["n_targets"]
+            n_targets = self.precomputed_weights["n_targets"]
         else:
-             # Fallback: max index + 1
-             n_targets = int(target_indices.max()) + 1 if len(target_indices) > 0 else 0
+            # Fallback: max index + 1
+            n_targets = int(target_indices.max()) + 1 if len(target_indices) > 0 else 0
 
         n_samples = reshaped_data.shape[0]
 
@@ -429,7 +433,7 @@ class InterpolationEngine:
 
         # Reshape back
         if n_other_dims > 0:
-            target_shape = original_shape[:-1] + (n_targets,)
+            target_shape = (*original_shape[:-1], n_targets)
             return result.reshape(target_shape)
         else:
             return result.reshape(-1)
@@ -437,7 +441,8 @@ class InterpolationEngine:
     def _interpolate_structured(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
         """Perform structured interpolation (bilinear/cubic)."""
         if not use_precomputed or self.precomputed_weights is None:
-            raise RuntimeError(f"Weights not precomputed for {self.method} regridding.")
+            msg = f"Weights not precomputed for {self.method} regridding."
+            raise RuntimeError(msg)
 
         # source_data shape: (..., source_spatial_count)
         original_shape = source_data.shape
@@ -457,12 +462,13 @@ class InterpolationEngine:
         if HAS_NUMBA:
             result = apply_weights_structured(reshaped_data, indices, weights, valid_mask)
         else:
-            raise ImportError("Numba required for structured interpolation")
+            msg = "Numba required for structured interpolation"
+            raise ImportError(msg)
 
         # Reshape back
         n_targets = indices.shape[0]
         if n_other_dims > 0:
-            target_shape = original_shape[:-1] + (n_targets,)
+            target_shape = (*original_shape[:-1], n_targets)
             return result.reshape(target_shape)
         else:
             return result.reshape(-1)
@@ -487,7 +493,8 @@ class InterpolationEngine:
         if HAS_NUMBA:
             # Prepare arguments for Numba kernel
             if self.source_indices is None:
-                raise RuntimeError("Source indices not computed")
+                msg = "Source indices not computed"
+                raise RuntimeError(msg)
 
             # Determine valid mask
             if self.fill_method == "nan" and self.distances is not None and self.distance_threshold is not None:
@@ -499,15 +506,12 @@ class InterpolationEngine:
             # Note: We don't implement the complex "neighbor search fallback" in the Numba kernel yet
             # as it requires KDTree which isn't Numba-compatible.
             # But for the vast majority of points, this will be much faster.
-            result = apply_weights_nearest(
-                reshaped_data,
-                self.source_indices,
-                valid_mask
-            )
+            result = apply_weights_nearest(reshaped_data, self.source_indices, valid_mask)
         else:
             # Fallback to original implementation
             if self.source_indices is None:
-                raise RuntimeError("Source indices not computed")
+                msg = "Source indices not computed"
+                raise RuntimeError(msg)
 
             result = np.full((reshaped_data.shape[0], len(self.source_indices)), np.nan, dtype=source_data.dtype)
 
@@ -534,7 +538,7 @@ class InterpolationEngine:
 
         # Reshape back to target shape
         if n_other_dims > 0:
-            target_shape = original_shape[:-1] + (len(self.source_indices),)
+            target_shape = (*original_shape[:-1], len(self.source_indices))
             return result.reshape(target_shape)
         else:
             return result.reshape(-1)
@@ -543,7 +547,7 @@ class InterpolationEngine:
         """Perform linear interpolation using Delaunay triangulation."""
         if not use_precomputed or self.precomputed_weights is None:
             # Fallback to direct computation if precomputed weights not available
-            warnings.warn("Precomputed weights not available, using direct computation")
+            warnings.warn("Precomputed weights not available, using direct computation", stacklevel=2)
             return self._interpolate_linear_direct(source_data)
 
         # source_data shape: (..., source_spatial_count)
@@ -563,7 +567,8 @@ class InterpolationEngine:
         if HAS_NUMBA:
             if self.triangles is None:
                 # Should not happen if build_structures succeeded
-                raise RuntimeError("Triangulation not initialized")
+                msg = "Triangulation not initialized"
+                raise RuntimeError(msg)
 
             # Ensure we have the vertices cached as simple array
             if self._simplex_vertices_cache is None:
@@ -576,7 +581,7 @@ class InterpolationEngine:
                 self.precomputed_weights["barycentric_weights"],
                 self.precomputed_weights["valid_points"],
                 self._simplex_vertices_cache,
-                self.precomputed_weights["fallback_indices"]
+                self.precomputed_weights["fallback_indices"],
             )
         else:
             # Fallback to original implementation
@@ -614,14 +619,14 @@ class InterpolationEngine:
                                     result[slice_idx, target_idx] = np.dot(weights, vertex_values)
 
                     elif simplex_idx == -2:  # Fallback to nearest neighbor for points outside hull
-                         if self.precomputed_weights["fallback_indices"][target_idx] != -1:
+                        if self.precomputed_weights["fallback_indices"][target_idx] != -1:
                             nearest_idx = self.precomputed_weights["fallback_indices"][target_idx]
                             for slice_idx in range(reshaped_data.shape[0]):
                                 result[slice_idx, target_idx] = reshaped_data[slice_idx, nearest_idx]
 
         # Reshape back to target shape
         if n_other_dims > 0:
-            target_shape = original_shape[:-1] + (len(self.precomputed_weights["valid_points"]),)
+            target_shape = (*original_shape[:-1], len(self.precomputed_weights["valid_points"]))
             return result.reshape(target_shape)
         else:
             return result.reshape(-1)
@@ -630,7 +635,10 @@ class InterpolationEngine:
         """Direct computation of linear interpolation (fallback)."""
         # This is a fallback implementation if precomputed weights are not available
         # In practice, we should always have precomputed weights
-        raise NotImplementedError(
+        msg = (
             "Direct linear interpolation computation is not implemented. "
             "Use precomputed weights by calling build_structures first."
+        )
+        raise NotImplementedError(
+            msg
         )

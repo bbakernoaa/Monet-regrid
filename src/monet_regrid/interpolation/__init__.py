@@ -2,6 +2,6 @@
 Interpolation engine module.
 """
 
-from .core import InterpolationEngine
+from monet_regrid.interpolation.core import InterpolationEngine
 
 __all__ = ["InterpolationEngine"]

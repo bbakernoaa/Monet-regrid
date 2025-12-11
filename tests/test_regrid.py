@@ -1,19 +1,17 @@
-from pathlib import Path
+import pytest
+import warnings
 
 import numpy as np
-import pytest
 import xarray as xr
 from numpy.testing import assert_array_equal
 
-import monet_regrid
+
 try:
     import xesmf
 except ImportError:
     xesmf = None
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: import xarray_regrid
-# New import: import monet_regrid
 
 
 def test_regrid_rectilinear_to_rectilinear_most_common():
@@ -111,7 +109,7 @@ def test_regrid_rectilinear_to_rectilinear_conservative_dataset_and_dataarray():
 
     ds = xr.Dataset({"data": da})
 
-    target_da = xr.DataArray(dims=("y", "x"), coords={"y": range(1), "x": range(1)})
+    xr.DataArray(dims=("y", "x"), coords={"y": range(1), "x": range(1)})
 
     target_ds = xr.Dataset(coords={"y": range(1), "x": range(1)})
 
@@ -138,17 +136,18 @@ def test_regrid_rectilinear_to_rectilinear_conservative_nan_robust():
 
         # Optimize chunking to avoid PerformanceWarning
         # Suppress potential PerformanceWarning from Dask
-        import warnings
+
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
             # Filter PerformanceWarning specifically if available from dask
             try:
-                from dask.array.core import PerformanceWarning
+                from dask.array.core import PerformanceWarning  # noqa: PLC0415
+
                 warnings.filterwarnings("ignore", category=PerformanceWarning)
             except ImportError:
                 pass
 
-            regridded = da_rechunk.regrid.conservative(
+            da_rechunk.regrid.conservative(
                 ds_target, nan_threshold=0.0 if nan_threshold is None else nan_threshold
             )
 

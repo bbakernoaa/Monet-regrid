@@ -1,12 +1,12 @@
-import numpy as np
 import pytest
+import numpy as np
 import xarray as xr
 
 from monet_regrid.constants import GridType
 from monet_regrid.utils import _get_grid_type, validate_grid_compatibility
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old imports: from xarray_regrid.constants import ...; from xarray_regrid.utils import ...
+# Old imports: from monet_regrid.constants import ...; from monet_regrid.utils import ...
 # New imports: from monet_regrid.constants import ...; from monet_regrid.utils import ...
 
 

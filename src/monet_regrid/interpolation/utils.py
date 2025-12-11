@@ -3,15 +3,23 @@ Utility functions for interpolation.
 """
 
 import numpy as np
-from numba import jit
 
 try:
     from monet_regrid.methods._numba_kernels import (
         inverse_bilinear_interpolation,
     )
+
     HAS_NUMBA = True
 except ImportError:
     HAS_NUMBA = False
+    inverse_bilinear_interpolation = None
+
+__all__ = [
+    "HAS_NUMBA",
+    "_compute_barycentric_weights_3d",
+    "_point_in_tetrahedron",
+    "inverse_bilinear_interpolation",
+]
 
 
 def _point_in_tetrahedron(point: np.ndarray, tetra_vertices: np.ndarray) -> bool:

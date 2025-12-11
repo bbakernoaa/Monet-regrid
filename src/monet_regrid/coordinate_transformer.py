@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import hashlib
 import pickle
-from typing import Tuple  # noqa: UP035
 
 import numpy as np
 import pyproj

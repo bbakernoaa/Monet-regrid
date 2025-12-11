@@ -32,10 +32,7 @@ URLs updated, and documentation adapted for new branding.
 from monet_regrid.constants import GridType
 
 # Import cf_xarray to ensure it's registered with xarray
-try:
-    import cf_xarray  # noqa: F401
-except ImportError:
-    pass  # cf_xarray will be imported when needed
+import cf_xarray  # noqa: F401
 
 
 class InvalidBoundsError(Exception): ...
@@ -183,7 +180,7 @@ def normalize_overlap(overlap: np.ndarray) -> np.ndarray:
     """Normalize overlap values so they sum up to 1.0 along the first axis."""
     overlap_sum: np.ndarray = overlap.sum(axis=0)
     overlap_sum[overlap_sum == 0] = 1e-12  # Avoid dividing by 0.
-    return overlap / overlap_sum  # type: ignore
+    return overlap / overlap_sum
 
 
 def create_dot_dataarray(
@@ -236,7 +233,7 @@ def call_on_dataset(
         msg = "Trying to convert Dataset with more than one data variable to DataArray"
         if len(result.data_vars) > 1:
             raise TypeError(msg)
-        return next(iter(result.data_vars.values())).rename(obj.name)  # type: ignore
+        return next(iter(result.data_vars.values())).rename(obj.name)
 
     return result
 
@@ -315,7 +312,7 @@ def format_for_regrid(
                 if len(obj[var].chunksizes.get(coord, ())) == 1:
                     result[var] = result[var].chunk({coord: -1})
 
-    return result  # type: ignore
+    return result
 
 
 def format_lat(
@@ -491,7 +488,6 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
     """
     try:
         # Import cf_xarray to ensure it's registered with xarray
-        import cf_xarray  # noqa: F401
 
         # Access latitude and longitude coordinates using cf-xarray
         try:
@@ -625,7 +621,8 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                                 if lat_1d_names and lon_1d_names:
                                     return GridType.RECTILINEAR
 
-                    raise ValueError("No latitude or longitude coordinates found")
+                    msg = "No latitude or longitude coordinates found"
+                    raise ValueError(msg)
 
     except (KeyError, ValueError) as e:
         msg = f"Could not identify coordinate: {e}"
@@ -662,3 +659,78 @@ def validate_grid_compatibility(source_ds: xr.Dataset, target_ds: xr.Dataset) ->
         raise ValueError(msg)
 
     return source_type, target_type
+
+@overload
+def validate_input(
+    data: xr.Dataset,
+    ds_target_grid: xr.Dataset,
+    time_dim: str | None,
+) -> xr.Dataset: ...
+
+
+@overload
+def validate_input(
+    data: xr.DataArray,
+    ds_target_grid: xr.Dataset,
+    time_dim: str | None,
+) -> xr.Dataset: ...
+
+
+def validate_input(
+    data: xr.DataArray | xr.Dataset,
+    ds_target_grid: xr.Dataset,
+    time_dim: str | None,
+) -> xr.Dataset:
+    if time_dim is not None and time_dim in ds_target_grid.coords:
+        ds_target_grid = ds_target_grid.isel({time_dim: 0}).reset_coords()
+
+    # Check for coordinate compatibility using semantic matching instead of exact name matching
+    # This allows latitude/longitude to match with lat/lon, etc.
+
+    def _find_coordinate_matches(source_coords: list[Hashable], target_coords: list[Hashable]) -> list[Hashable]:
+        """Find semantic matches between coordinate names."""
+        matches: list[Hashable] = []
+
+        # Define coordinate name patterns
+        lat_patterns = ["lat", "latitude", "y", "yc"]
+        lon_patterns = ["lon", "longitude", "x", "xc"]
+
+        source_lat_coords = [c for c in source_coords if any(p in str(c).lower() for p in lat_patterns)]
+        source_lon_coords = [c for c in source_coords if any(p in str(c).lower() for p in lon_patterns)]
+        target_lat_coords = [c for c in target_coords if any(p in str(c).lower() for p in lat_patterns)]
+        target_lon_coords = [c for c in target_coords if any(p in str(c).lower() for p in lon_patterns)]
+
+        # If we have both lat and lon coordinates in both source and target, we have matches
+        if source_lat_coords and source_lon_coords and target_lat_coords and target_lon_coords:
+            matches.extend(source_lat_coords[:1])  # Take first match
+            matches.extend(source_lon_coords[:1])  # Take first match
+
+        # Also check for exact coordinate name matches
+        exact_matches = set(source_coords).intersection(set(target_coords))
+        matches.extend(exact_matches)
+
+        return matches
+
+    # Check coordinate compatibility
+    coord_matches = _find_coordinate_matches(list(data.coords), list(ds_target_grid.coords))
+
+    if len(coord_matches) == 0:
+        # Only check dimensions if no coordinate matches found
+        dim_matches = set(data.dims).intersection(set(ds_target_grid.dims))
+
+        if len(dim_matches) == 0:
+            # As a last resort, check for semantic dimension matches
+            semantic_dim_matches = _find_coordinate_matches(list(data.dims), list(ds_target_grid.dims))
+
+            if len(semantic_dim_matches) == 0:
+                msg = (
+                    "No compatible coordinates or dimensions found between source and target:\n"
+                    " regridding is not possible.\n"
+                    f"Target coords: {list(ds_target_grid.coords)}\n"
+                    f"Source coords: {list(data.coords)}\n"
+                    f"Target dims: {list(ds_target_grid.dims)}\n"
+                    f"Source dims: {list(data.dims)}"
+                )
+                raise ValueError(msg)
+
+    return ds_target_grid

@@ -5,7 +5,7 @@ import monet_regrid
 from monet_regrid.utils import format_for_regrid
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old imports: import xarray_regrid; from xarray_regrid.utils import format_for_regrid
+# Old imports: import monet_regrid; from monet_regrid.utils import format_for_regrid
 # New imports: import monet_regrid; from monet_regrid.utils import format_for_regrid
 
 

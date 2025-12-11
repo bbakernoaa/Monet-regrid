@@ -5,20 +5,22 @@ Base classes and types for interpolation.
 from __future__ import annotations
 
 import warnings
-from typing import Any, Literal, Protocol
 
 import numpy as np
 
 # Try to use pykdtree for faster KDTree operations if available
 try:
     from pykdtree.kdtree import KDTree as PyKDTree
+
     HAS_PYKDTREE = True
 except ImportError:
     HAS_PYKDTREE = False
 
 if HAS_PYKDTREE:
+
     class cKDTree:
         """Adapter for pykdtree to mimic scipy.spatial.cKDTree."""
+
         def __init__(self, data, leafsize=10):
             self._tree = PyKDTree(data, leafsize=leafsize)
             self._data = data
@@ -59,19 +61,40 @@ else:
 
 try:
     from monet_regrid.methods._numba_kernels import (
+        apply_weights_conservative,
         apply_weights_linear,
         apply_weights_nearest,
-        compute_structured_weights,
         apply_weights_structured,
-        apply_weights_conservative
+        compute_structured_weights,
     )
+
     HAS_NUMBA = True
 except ImportError:
     HAS_NUMBA = False
-    warnings.warn("Numba not available. Falling back to slower pure Python/NumPy implementation.")
+    apply_weights_conservative = None
+    apply_weights_linear = None
+    apply_weights_nearest = None
+    apply_weights_structured = None
+    compute_structured_weights = None
+    warnings.warn("Numba not available. Falling back to slower pure Python/NumPy implementation.", stacklevel=2)
 
 try:
     from monet_regrid.methods._polygon_clipping import compute_conservative_weights
+
     HAS_POLYGON_CLIPPING = True
 except ImportError:
     HAS_POLYGON_CLIPPING = False
+    compute_conservative_weights = None
+
+__all__ = [
+    "HAS_NUMBA",
+    "HAS_POLYGON_CLIPPING",
+    "HAS_PYKDTREE",
+    "apply_weights_conservative",
+    "apply_weights_linear",
+    "apply_weights_nearest",
+    "apply_weights_structured",
+    "cKDTree",
+    "compute_conservative_weights",
+    "compute_structured_weights",
+]

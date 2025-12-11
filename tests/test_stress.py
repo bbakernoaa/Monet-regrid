@@ -1,16 +1,18 @@
 """High-resolution stress test using Dask."""
 
-import numpy as np
-import pytest
-import xarray as xr
 import dask.array as da
+import numpy as np
+import xarray as xr
+
 from monet_regrid.curvilinear import CurvilinearInterpolator
+
 
 def test_high_resolution_stress_dask():
     """Test high-resolution interpolation with Dask arrays."""
     # Try to use distributed client if available to simulate cluster behavior
     try:
-        from dask.distributed import Client
+        from dask.distributed import Client  # noqa: PLC0415
+
         # Start a local cluster
         client = Client(dashboard_address=None)
     except ImportError:
@@ -24,13 +26,11 @@ def test_high_resolution_stress_dask():
     source_lat = 30 + 0.05 * source_x
     source_lon = -100 + 0.05 * source_y
 
-    source_grid = xr.Dataset(
-        {"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)}
-    )
+    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     # Create target grid
     target_ny, target_nx = 2000, 2000
-    target_x, target_y = np.meshgrid(np.linspace(0, nx-1, target_nx), np.linspace(0, ny-1, target_ny))
+    target_x, target_y = np.meshgrid(np.linspace(0, nx - 1, target_nx), np.linspace(0, ny - 1, target_ny))
     target_lat = 30 + 0.05 * target_x
     target_lon = -100 + 0.05 * target_y
 
@@ -60,6 +60,7 @@ def test_high_resolution_stress_dask():
 
     if client:
         client.close()
+
 
 if __name__ == "__main__":
     test_high_resolution_stress_dask()
