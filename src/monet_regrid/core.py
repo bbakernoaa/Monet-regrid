@@ -26,9 +26,11 @@ URLs updated, and documentation adapted for new branding.
 from __future__ import annotations
 
 import abc
+import pickle
 from collections.abc import Hashable
 from typing import Any
 
+import cf_xarray  # noqa: F401
 import numpy as np
 import xarray as xr
 
@@ -40,7 +42,7 @@ class BaseRegridder(abc.ABC):
     It provides common functionality and ensures consistent API across different grid types.
     """
 
-    def __init__(self, source_data: xr.DataArray | xr.Dataset, target_grid: xr.Dataset, **kwargs: Any):
+    def __init__(self, source_data: xr.DataArray | xr.Dataset, target_grid: xr.Dataset, **kwargs: Any) -> None:
         """Initialize the regridder with source data and target grid.
 
         Args:
@@ -98,7 +100,12 @@ class BaseRegridder(abc.ABC):
         pass
 
     def _validate_inputs(self) -> None:
-        """Validate the source data and target grid inputs."""
+        """Validate the source data and target grid inputs.
+
+        Raises:
+            TypeError: If source_data or target_grid are not valid xarray objects.
+            ValueError: If source or target data lack required latitude/longitude coordinates.
+        """
         if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
             raise TypeError("source_data must be an xarray DataArray or Dataset")
 
@@ -132,8 +139,7 @@ class BaseRegridder(abc.ABC):
 
                 if lat_dim and lon_dim:
                     # If dimensions suggest lat/lon, that's sufficient
-                    source_lat_coords = [lat_dim]
-                    source_lon_coords = [lon_dim]
+                    pass
                 else:
                     raise ValueError(
                         f"Source data must have latitude and longitude coordinates.\n"
@@ -164,8 +170,7 @@ class BaseRegridder(abc.ABC):
 
             if target_lat_dim and target_lon_dim:
                 # If dimensions suggest lat/lon, that's sufficient
-                target_lat_coords = [target_lat_dim]
-                target_lon_coords = [target_lon_dim]
+                pass
             else:
                 raise ValueError(
                     f"Target grid must have latitude and longitude coordinates.\n"
@@ -174,11 +179,16 @@ class BaseRegridder(abc.ABC):
                 )
 
     def _identify_lat_coords(self, data: xr.DataArray | xr.Dataset) -> list[Hashable]:
-        """Identify latitude coordinates in the data using cf-xarray or name matching."""
+        """Identify latitude coordinates in the data using cf-xarray or name matching.
+
+        Args:
+            data: The xarray object to search for latitude coordinates.
+
+        Returns:
+            List of coordinate names identified as latitude.
+        """
         # First, check for cf-xarray coordinates if available
         try:
-            import cf_xarray  # noqa: F401
-
             # Use cf-xarray to identify latitude coordinates if available
             if hasattr(data, "cf") and "latitude" in data.cf:
                 return [data.cf["latitude"].name]
@@ -202,11 +212,16 @@ class BaseRegridder(abc.ABC):
         return []
 
     def _identify_lon_coords(self, data: xr.DataArray | xr.Dataset) -> list[Hashable]:
-        """Identify longitude coordinates in the data using cf-xarray or name matching."""
+        """Identify longitude coordinates in the data using cf-xarray or name matching.
+
+        Args:
+            data: The xarray object to search for longitude coordinates.
+
+        Returns:
+            List of coordinate names identified as longitude.
+        """
         # First, check for cf-xarray coordinates if available
         try:
-            import cf_xarray  # noqa: F401
-
             # Use cf-xarray to identify longitude coordinates if available
             if hasattr(data, "cf") and "longitude" in data.cf:
                 return [data.cf["longitude"].name]
@@ -230,12 +245,20 @@ class BaseRegridder(abc.ABC):
         return []
 
     def __getstate__(self) -> dict[str, Any]:
-        """Prepare the regridder for serialization (Dask compatibility)."""
+        """Prepare the regridder for serialization (Dask compatibility).
+
+        Returns:
+            State dictionary.
+        """
         state = self.__dict__.copy()
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
-        """Restore the regridder from serialized state (Dask compatibility)."""
+        """Restore the regridder from serialized state (Dask compatibility).
+
+        Args:
+            state: State dictionary to restore from.
+        """
         self.__dict__.update(state)
 
 
@@ -253,7 +276,7 @@ class RectilinearRegridder(BaseRegridder):
         method: str = "linear",
         time_dim: str | None = "time",
         **kwargs: Any,
-    ):
+    ) -> None:
         """Initialize the rectilinear regridder.
 
         Args:
@@ -280,6 +303,9 @@ class RectilinearRegridder(BaseRegridder):
 
         Returns:
             Regridded data with the same type as input (DataArray or Dataset)
+
+        Raises:
+            ValueError: If an unsupported regridding method is specified.
         """
         # Use provided data or fall back to source data
         input_data = data if data is not None else self.source_data
@@ -346,8 +372,6 @@ class RectilinearRegridder(BaseRegridder):
             filepath: Path to save the regridder configuration
             **kwargs: Additional arguments for file saving
         """
-        import pickle
-
         # Create a serializable representation
         config = {
             "method": self.method,
@@ -371,8 +395,6 @@ class RectilinearRegridder(BaseRegridder):
         Returns:
             Instance of RectilinearRegridder
         """
-        import pickle
-
         with open(filepath, "rb") as f:
             config = pickle.load(f)
 
@@ -451,7 +473,7 @@ class RectilinearRegridder(BaseRegridder):
         To be used for regridding data to a much coarser resolution, not for regridding
         when the source and target grids are of a similar resolution.
 
-        Note that in the case of two unqiue values with the same count, the behaviour
+        Note that in the case of two unique values with the same count, the behaviour
         is not deterministic, and the resulting "most common" one will randomly be
         either of the two.
 
@@ -467,6 +489,9 @@ class RectilinearRegridder(BaseRegridder):
 
         Returns:
             Regridded data.
+
+        Raises:
+            ValueError: If source_data is a Dataset (must be DataArray).
         """
         if isinstance(self.source_data, xr.Dataset):
             msg = (
@@ -502,7 +527,7 @@ class RectilinearRegridder(BaseRegridder):
         To be used for regridding data to a much coarser resolution, not for regridding
         when the source and target grids are of a similar resolution.
 
-        Note that in the case of two unqiue values with the same count, the behaviour
+        Note that in the case of two unique values with the same count, the behaviour
         is not deterministic, and the resulting "least common" one will randomly be
         either of the two.
 
@@ -518,6 +543,9 @@ class RectilinearRegridder(BaseRegridder):
 
         Returns:
             Regridded data.
+
+        Raises:
+            ValueError: If source_data is a Dataset (must be DataArray).
         """
         if isinstance(self.source_data, xr.Dataset):
             msg = (
@@ -552,7 +580,7 @@ class CurvilinearRegridder(BaseRegridder):
 
     def __init__(
         self, source_data: xr.DataArray | xr.Dataset, target_grid: xr.Dataset, method: str = "linear", **kwargs: Any
-    ):
+    ) -> None:
         """Initialize the curvilinear regridder.
 
         Args:
@@ -599,15 +627,20 @@ class CurvilinearRegridder(BaseRegridder):
         return result
 
     def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
-        """Create a grid specification from source data."""
+        """Create a grid specification from source data.
+
+        Args:
+            source_data: The source data to extract grid from.
+
+        Returns:
+            Dataset containing the grid coordinates.
+        """
         # Use provided data or fall back to source data
         data = source_data if source_data is not None else self.source_data
 
         # Extract coordinate information from source data
         # First, determine the coordinate names using cf-xarray if available
         try:
-            import cf_xarray
-
             lat_coord = data.cf["latitude"]
             lon_coord = data.cf["longitude"]
             lat_name = lat_coord.name
@@ -670,12 +703,10 @@ class CurvilinearRegridder(BaseRegridder):
         # The source data can be passed without explicit lat/lon coordinates, as the grid information
         # is handled separately in the _create_source_grid_from_data method
         try:
-            import cf_xarray
-
             # Use cf-xarray to identify latitude and longitude coordinates in target
             if hasattr(self.target_grid, "cf"):
-                target_lat = self.target_grid.cf["latitude"]
-                target_lon = self.target_grid.cf["longitude"]
+                _ = self.target_grid.cf["latitude"]
+                _ = self.target_grid.cf["longitude"]
             else:
                 # Fallback to manual search
                 lat_coords = [
@@ -714,8 +745,6 @@ class CurvilinearRegridder(BaseRegridder):
             filepath: Path to save the regridder
             **kwargs: Additional arguments for file saving
         """
-        import pickle
-
         # Create a serializable representation
         config = {
             "method": self.method,
@@ -738,8 +767,6 @@ class CurvilinearRegridder(BaseRegridder):
         Returns:
             Instance of CurvilinearRegridder
         """
-        import pickle
-
         with open(filepath, "rb") as f:
             config = pickle.load(f)
 
