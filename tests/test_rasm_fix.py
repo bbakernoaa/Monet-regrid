@@ -1,14 +1,13 @@
+import logging
 #!/usr/bin/env python
 """Test script to verify the RASM dataset coordinate validation fix."""
 
-import logging
-import traceback
 
 import numpy as np
 import xarray as xr
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: import xarray_regrid  # Import to register the accessor
+# Old import: import monet_regrid  # Import to register the accessor
 # New import: import monet_regrid  # Import to register the accessor
 
 
@@ -47,7 +46,7 @@ def test_rasm_coordinate_validation():
     logging.info("\nTesting regridder application...")
     # Use one of the data variables from RASM dataset
     var_names = list(ds.data_vars)  # Get data variable names
-    var_name = var_names[0] # Get first data variable name
+    var_name = var_names[0]  # Get first data variable name
     logging.info("  Using variable: %s", var_name)
 
     # Apply regridding to a single variable
@@ -144,7 +143,7 @@ def test_backward_compatibility():
     regridder = source_data.regrid.build_regridder(target_grid, method="linear")
     # logging.info("  ✓ Success: %s created", type(regridder).__name__)
 
-    result = regridder()
+    regridder()
     # logging.info("  ✓ Success: Regridding completed")
     # logging.info("    Original shape: %s", source_data.shape)
     # logging.info("    Result shape: %s", result.shape)

@@ -9,13 +9,11 @@ This script tests:
 5. Edge cases with very small and very large radius values
 """
 
-import logging
 import os
 import sys
 import time
 
 import numpy as np
-import pytest
 import xarray as xr
 
 try:
@@ -198,7 +196,7 @@ def benchmark_performance():
         interpolator = CurvilinearInterpolator(source_grid, target_grid, method="nearest", radius_of_influence=radius)
 
         times = []
-        for i in range(iterations):
+        for _i in range(iterations):
             start_time = time.time()
             interpolator(test_data)
             end_time = time.time()
@@ -235,7 +233,7 @@ def test_edge_cases():
         radius_of_influence=100,  # Very small radius
     )
     result_small = interpolator_small(test_data)
-    nan_count_small = np.sum(np.isnan(result_small.data))
+    np.sum(np.isnan(result_small.data))
     # logging.info("  Very small radius: %s NaNs", nan_count_small)
 
     # Test very large radius (should result in few NaNs, almost all points filled)
@@ -280,9 +278,9 @@ def test_error_handling():
             source_grid, target_grid, method="nearest", radius_of_influence=-100000
         )
         result_negative = interpolator_negative(test_data)
-        nan_count_negative = np.sum(np.isnan(result_negative.data))
+        np.sum(np.isnan(result_negative.data))
         # logging.info("  Negative radius handled, NaN count: %s", nan_count_negative)
-    except Exception as e:
+    except Exception:
         # logging.info("  Negative radius raised exception: %s", e)
         pass
 
@@ -296,9 +294,9 @@ def test_error_handling():
             radius_of_influence=1e10,  # Extremely large radius
         )
         result_extreme = interpolator_extreme(test_data)
-        nan_count_extreme = np.sum(np.isnan(result_extreme.data))
+        np.sum(np.isnan(result_extreme.data))
         # logging.info(" Extremely large radius, NaN count: %s", nan_count_extreme)
-    except Exception as e:
+    except Exception:
         # logging.info("  Extremely large radius raised exception: %s", e)
         pass
 

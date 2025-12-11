@@ -7,7 +7,7 @@ import numpy as np
 import xarray as xr
 
 try:
-    import sparse  # type: ignore
+    import sparse
 except ImportError:
     sparse = None
 
@@ -121,7 +121,7 @@ def conservative_regrid(
 
     regridded_data = regridded_data.reindex_like(target_ds, copy=False)
 
-    return regridded_data  # type: ignore
+    return regridded_data
 
 
 def conservative_regrid_dataset(
@@ -252,7 +252,7 @@ def apply_spherical_correction(dot_array: xr.DataArray, latitude_coord: Hashable
     latitude_res = float(np.median(np.diff(dot_array[latitude_coord].to_numpy(), 1)))
     lat_weights = lat_weight(dot_array[latitude_coord].to_numpy(), latitude_res)
     da.values = utils.normalize_overlap(dot_array.values * lat_weights[:, np.newaxis])
-    return da  # type: ignore
+    return da
 
 
 def lat_weight(latitude: np.ndarray, latitude_res: float) -> np.ndarray:
@@ -268,7 +268,7 @@ def lat_weight(latitude: np.ndarray, latitude_res: float) -> np.ndarray:
     dlat: float = np.radians(latitude_res)
     lat = np.radians(latitude)
     h = np.sin(lat + dlat / 2) - np.sin(lat - dlat / 2)
-    return h * dlat / (np.pi * 4)  # type: ignore
+    return h * dlat / (np.pi * 4)
 
 
 def format_weights(
@@ -311,10 +311,9 @@ def format_weights(
             # Use a safe sparse conversion that doesn't hang
             # We wrap sparse.COO in a way that dask handles correctly
             new_weights.data = new_weights.data.map_blocks(
-                lambda x: sparse.COO.from_numpy(x) if isinstance(x, np.ndarray) else x,
-                dtype=new_weights.dtype
+                lambda x: sparse.COO.from_numpy(x) if isinstance(x, np.ndarray) else x, dtype=new_weights.dtype
             )
     elif sparse is not None:
         new_weights.data = sparse.COO.from_numpy(weights.data)
 
-    return new_weights  # type: ignore
+    return new_weights

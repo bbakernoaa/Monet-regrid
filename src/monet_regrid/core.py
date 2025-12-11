@@ -28,11 +28,16 @@ from __future__ import annotations
 import abc
 import pickle
 from collections.abc import Hashable
-from typing import Any
 
 import cf_xarray  # noqa: F401
 import numpy as np
 import xarray as xr
+
+
+from monet_regrid.curvilinear import CurvilinearInterpolator
+from monet_regrid.methods import conservative, interp
+from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce
+from monet_regrid.utils import format_for_regrid, validate_input
 
 
 class BaseRegridder(abc.ABC):
@@ -107,10 +112,12 @@ class BaseRegridder(abc.ABC):
             ValueError: If source or target data lack required latitude/longitude coordinates.
         """
         if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
-            raise TypeError("source_data must be an xarray DataArray or Dataset")
+            msg = "source_data must be an xarray DataArray or Dataset"
+            raise TypeError(msg)
 
         if not isinstance(self.target_grid, xr.Dataset):
-            raise TypeError("target_grid must be an xarray Dataset")
+            msg = "target_grid must be an xarray Dataset"
+            raise TypeError(msg)
 
         # Use coordinate identification to check for latitude/longitude coordinates
         # rather than requiring exact coordinate name matches
@@ -141,15 +148,21 @@ class BaseRegridder(abc.ABC):
                     # If dimensions suggest lat/lon, that's sufficient
                     pass
                 else:
-                    raise ValueError(
+                    msg = (
                         f"Source data must have latitude and longitude coordinates.\n"
                         f"Source coordinates: {list(self.source_data.coords) if hasattr(self.source_data, 'coords') else []}\n"
                         f"Source dimensions: {list(self.source_data.dims) if hasattr(self.source_data, 'dims') else []}"
                     )
+                    raise ValueError(
+                        msg
+                    )
             else:
-                raise ValueError(
+                msg = (
                     f"Source data must have latitude and longitude coordinates.\n"
                     f"Source coordinates: {list(self.source_data.coords) if hasattr(self.source_data, 'coords') else []}"
+                )
+                raise ValueError(
+                    msg
                 )
 
         if not target_lat_coords or not target_lon_coords:
@@ -172,10 +185,13 @@ class BaseRegridder(abc.ABC):
                 # If dimensions suggest lat/lon, that's sufficient
                 pass
             else:
-                raise ValueError(
+                msg = (
                     f"Target grid must have latitude and longitude coordinates.\n"
                     f"Target coordinates: {list(self.target_grid.coords)}\n"
                     f"Target dimensions: {list(self.target_grid.dims)}"
+                )
+                raise ValueError(
+                    msg
                 )
 
     def _identify_lat_coords(self, data: xr.DataArray | xr.Dataset) -> list[Hashable]:
@@ -316,9 +332,6 @@ class RectilinearRegridder(BaseRegridder):
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method", "time_dim"]}}
 
         # Import here to avoid circular imports
-        from monet_regrid.methods import conservative, interp
-        from monet_regrid.regrid import validate_input
-        from monet_regrid.utils import format_for_regrid
 
         # Create a cache key based on input data and time_dim
         cache_key = (id(input_data), time_dim)
@@ -361,8 +374,9 @@ class RectilinearRegridder(BaseRegridder):
                 output_chunks,
             )
         else:
+            msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative"
             raise ValueError(
-                f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative"
+                msg
             )
 
     def to_file(self, filepath: str, **kwargs: Any) -> None:
@@ -455,8 +469,6 @@ class RectilinearRegridder(BaseRegridder):
         Returns:
             xarray.dataset with regridded land cover categorical data.
         """
-        from monet_regrid.methods.flox_reduce import statistic_reduce
-        from monet_regrid.utils import format_for_regrid
 
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
 
@@ -502,8 +514,6 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-        from monet_regrid.methods.flox_reduce import compute_mode
-        from monet_regrid.utils import format_for_regrid
 
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
 
@@ -556,8 +566,6 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-        from monet_regrid.methods.flox_reduce import compute_mode
-        from monet_regrid.utils import format_for_regrid
 
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
 
@@ -611,7 +619,6 @@ class CurvilinearRegridder(BaseRegridder):
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method"]}}
 
         # Create the CurvilinearInterpolator
-        from monet_regrid.curvilinear import CurvilinearInterpolator
 
         # Create the interpolator with the source and target grids
         interpolator = CurvilinearInterpolator(
@@ -689,15 +696,18 @@ class CurvilinearRegridder(BaseRegridder):
 
                 return source_grid
             else:
-                raise ValueError("Source data must have at least 2 dimensions for curvilinear regridding")
+                msg = "Source data must have at least 2 dimensions for curvilinear regridding"
+                raise ValueError(msg)
 
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs for curvilinear regridding."""
         if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
-            raise TypeError("source_data must be an xarray DataArray or Dataset")
+            msg = "source_data must be an xarray DataArray or Dataset"
+            raise TypeError(msg)
 
         if not isinstance(self.target_grid, xr.Dataset):
-            raise TypeError("target_grid must be an xarray Dataset")
+            msg = "target_grid must be an xarray Dataset"
+            raise TypeError(msg)
 
         # For curvilinear regridders, we only need to validate that the target grid has latitude/longitude coordinates
         # The source data can be passed without explicit lat/lon coordinates, as the grid information
@@ -705,8 +715,8 @@ class CurvilinearRegridder(BaseRegridder):
         try:
             # Use cf-xarray to identify latitude and longitude coordinates in target
             if hasattr(self.target_grid, "cf"):
-                _ = self.target_grid.cf["latitude"]
-                _ = self.target_grid.cf["longitude"]
+                self.target_grid.cf["latitude"]
+                self.target_grid.cf["longitude"]
             else:
                 # Fallback to manual search
                 lat_coords = [
@@ -721,7 +731,8 @@ class CurvilinearRegridder(BaseRegridder):
                 ]
 
                 if not lat_coords or not lon_coords:
-                    raise ValueError("Target grid must have latitude and longitude coordinates")
+                    msg = "Target grid must have latitude and longitude coordinates"
+                    raise ValueError(msg)
         except (KeyError, AttributeError):
             # Fallback to manual search
             lat_coords = [
@@ -736,7 +747,8 @@ class CurvilinearRegridder(BaseRegridder):
             ]
 
             if not lat_coords or not lon_coords:
-                raise ValueError("Target grid must have latitude and longitude coordinates")
+                msg = "Target grid must have latitude and longitude coordinates"
+                raise ValueError(msg)
 
     def to_file(self, filepath: str, **kwargs: Any) -> None:
         """Save the regridder to a file.

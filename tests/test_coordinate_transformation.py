@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for coordinate transformation in curvilinear regridding.
 
 This module tests the 3D coordinate transformation accuracy, pyproj integration,
@@ -6,14 +7,12 @@ and spherical geometry handling in the CurvilinearInterpolator.
 
 import numpy as np
 import pyproj
-import pytest
 import xarray as xr
-from scipy.spatial.distance import pdist
 
 from monet_regrid.curvilinear import CurvilinearInterpolator
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: from xarray_regrid.curvilinear import CurvilinearInterpolator
+# Old import: from monet_regrid.curvilinear import CurvilinearInterpolator
 # New import: from monet_regrid.curvilinear import CurvilinearInterpolator
 
 
@@ -145,7 +144,7 @@ class TestCoordinateTransformation:
         x, y, z = interpolator.transformer.transform(original_lon, original_lat, np.zeros_like(original_lat))
 
         # Inverse transformation
-        recovered_lon, recovered_lat, recovered_h = interpolator.transformer.transform(x, y, z, direction="INVERSE")
+        recovered_lon, recovered_lat, _recovered_h = interpolator.transformer.transform(x, y, z, direction="INVERSE")
 
         # Check recovery precision - should meet scientific tolerance
         lat_error = np.max(np.abs(original_lat - recovered_lat))
@@ -270,4 +269,3 @@ if __name__ == "__main__":
     barycentric_test.test_barycentric_weight_sum_validation()
     barycentric_test.test_barycentric_coordinate_edge_cases()
 
-    print("All coordinate transformation tests passed!")

@@ -1,11 +1,10 @@
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.curvilinear import CurvilinearInterpolator
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: from xarray_regrid.curvilinear import CurvilinearInterpolator
+# Old import: from monet_regrid.curvilinear import CurvilinearInterpolator
 # New import: from monet_regrid.curvilinear import CurvilinearInterpolator
 
 
@@ -70,10 +69,8 @@ def test_curvilinear_linear_vs_nearest_differentiation():
     # They should be different
     diff = np.abs(result_linear - result_nearest)
     max_diff = diff.max().values
-    mean_diff = diff.mean().values
+    diff.mean().values
 
-    print(f"Max difference: {max_diff}")
-    print(f"Mean difference: {mean_diff}")
 
     # Ideally, max difference should be significant (e.g. > 0.1 for random [0,1] data)
     assert max_diff > 0.01, "Linear and Nearest Neighbor results are too similar (likely identical)"

@@ -1,20 +1,18 @@
+import pytest
 """Boundary condition tests for curvilinear regridding edge cases.
 
 This module tests edge cases, boundary conditions, and robustness scenarios
 including poles, date lines, empty grids, and NaN propagation.
 """
 
-import logging
-from typing import Tuple
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.curvilinear import CurvilinearInterpolator
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: from xarray_regrid.curvilinear import CurvilinearInterpolator
+# Old import: from monet_regrid.curvilinear import CurvilinearInterpolator
 # New import: from monet_regrid.curvilinear import CurvilinearInterpolator
 
 
@@ -320,9 +318,7 @@ class TestEmptyAndDegenerateGrids:
         """Test handling of degenerate triangles in triangulation."""
         # Create nearly collinear points that might cause degenerate triangles
         degenerate_lat = np.array([[0.0, 0.001, 0.002], [0.0, 0.001, 0.002], [0.0, 0.001, 0.002]])
-        degenerate_lon = np.array(
-            [[0.0, 0.0, 0.0], [0.001, 0.001, 0.001], [0.002, 0.002, 0.002]]
-        )
+        degenerate_lon = np.array([[0.0, 0.0, 0.0], [0.001, 0.001, 0.001], [0.002, 0.002, 0.002]])
 
         degenerate_source_grid = xr.Dataset(
             {"latitude": (["y", "x"], degenerate_lat), "longitude": (["y", "x"], degenerate_lon)}

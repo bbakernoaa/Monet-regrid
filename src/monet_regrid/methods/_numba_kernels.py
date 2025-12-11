@@ -132,7 +132,7 @@ def apply_weights_conservative(
     source_indices,  # (n_interactions,)
     target_indices,  # (n_interactions,)
     weights,  # (n_interactions,)
-    n_targets, # int
+    n_targets,  # int
 ):
     """
     Apply conservative regridding weights using sparse COO format.
@@ -188,6 +188,7 @@ def apply_weights_conservative(
 
     return result
 
+
 @jit(nopython=True, nogil=True)
 def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
     """
@@ -222,7 +223,7 @@ def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
         C = v4 - v1
         D = v1 - v2 + v3 - v4
 
-        p_est = A + u*B + v*C + u*v*D
+        p_est = A + u * B + v * C + u * v * D
         resid = p_est - p
 
         if np.dot(resid, resid) < tol**2:
@@ -231,32 +232,33 @@ def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
         # Jacobian
         # dP/du = B + vD
         # dP/dv = C + uD
-        J00 = B[0] + v*D[0]
-        J01 = C[0] + u*D[0]
-        J10 = B[1] + v*D[1]
-        J11 = C[1] + u*D[1]
+        J00 = B[0] + v * D[0]
+        J01 = C[0] + u * D[0]
+        J10 = B[1] + v * D[1]
+        J11 = C[1] + u * D[1]
 
-        det = J00*J11 - J01*J10
+        det = J00 * J11 - J01 * J10
 
         if abs(det) < 1e-12:
-            break # Singular, degenerate quad
+            break  # Singular, degenerate quad
 
         inv_det = 1.0 / det
-        du = (J11*resid[0] - J01*resid[1]) * inv_det
-        dv = (J00*resid[1] - J10*resid[0]) * inv_det
+        du = (J11 * resid[0] - J01 * resid[1]) * inv_det
+        dv = (J00 * resid[1] - J10 * resid[0]) * inv_det
 
         u -= du
         v -= dv
 
     return u, v
 
+
 @jit(nopython=True, nogil=True, parallel=True)
 def compute_structured_weights(
-    target_points, # (n_targets, 3) or (n_targets, 2)
-    source_points, # (n_source, 3) or (n_source, 2) - flattened
-    nearest_indices, # (n_targets,) from KDTree
-    source_shape, # (ny, nx)
-    method_enum, # 0=bilinear, 1=cubic
+    target_points,  # (n_targets, 3) or (n_targets, 2)
+    source_points,  # (n_source, 3) or (n_source, 2) - flattened
+    nearest_indices,  # (n_targets,) from KDTree
+    source_shape,  # (ny, nx)
+    method_enum,  # 0=bilinear, 1=cubic
 ):
     """
     Compute weights for structured interpolation (bilinear/cubic).
@@ -290,7 +292,7 @@ def compute_structured_weights(
         base_j = 0
         base_i = 0
 
-        p = target_points[k, :2] # Assume projected/2D
+        p = target_points[k, :2]  # Assume projected/2D
 
         # Search neighborhood (j_n-1 to j_n, i_n-1 to i_n)
         for dj in range(-1, 1):
@@ -316,7 +318,7 @@ def compute_structured_weights(
 
                 # Check if inside [0, 1] with tolerance
                 tol = 1e-4
-                if -tol <= u <= 1+tol and -tol <= v <= 1+tol:
+                if -tol <= u <= 1 + tol and -tol <= v <= 1 + tol:
                     found = True
                     final_u = min(max(u, 0.0), 1.0)
                     final_v = min(max(v, 0.0), 1.0)
@@ -335,7 +337,7 @@ def compute_structured_weights(
 
         out_valid[k] = True
 
-        if method_enum == 0: # Bilinear
+        if method_enum == 0:  # Bilinear
             # Weights: (1-u)(1-v), u(1-v), uv, (1-u)v
             # Indices: (j,i), (j,i+1), (j+1,i+1), (j+1,i)
             # SW, SE, NE, NW
@@ -356,7 +358,7 @@ def compute_structured_weights(
             out_indices[k, 3] = (base_j + 1) * nx + base_i
             out_weights[k, 3] = (1 - final_u) * final_v
 
-        elif method_enum == 1: # Cubic
+        elif method_enum == 1:  # Cubic
             # Bicubic interpolation on the index space (u, v)
             # We need 4x4 stencil: from base_i-1 to base_i+2
 
@@ -371,15 +373,15 @@ def compute_structured_weights(
             u = final_u
             v = final_v
 
-            wu0 = -0.5*u**3 + u**2 - 0.5*u
-            wu1 = 1.5*u**3 - 2.5*u**2 + 1.0
-            wu2 = -1.5*u**3 + 2.0*u**2 + 0.5*u
-            wu3 = 0.5*u**3 - 0.5*u**2
+            wu0 = -0.5 * u**3 + u**2 - 0.5 * u
+            wu1 = 1.5 * u**3 - 2.5 * u**2 + 1.0
+            wu2 = -1.5 * u**3 + 2.0 * u**2 + 0.5 * u
+            wu3 = 0.5 * u**3 - 0.5 * u**2
 
-            wv0 = -0.5*v**3 + v**2 - 0.5*v
-            wv1 = 1.5*v**3 - 2.5*v**2 + 1.0
-            wv2 = -1.5*v**3 + 2.0*v**2 + 0.5*v
-            wv3 = 0.5*v**3 - 0.5*v**2
+            wv0 = -0.5 * v**3 + v**2 - 0.5 * v
+            wv1 = 1.5 * v**3 - 2.5 * v**2 + 1.0
+            wv2 = -1.5 * v**3 + 2.0 * v**2 + 0.5 * v
+            wv3 = 0.5 * v**3 - 0.5 * v**2
 
             wu = np.array([wu0, wu1, wu2, wu3])
             wv = np.array([wv0, wv1, wv2, wv3])
@@ -395,7 +397,7 @@ def compute_structured_weights(
                     cur_i_clamped = min(max(cur_i, 0), nx - 1)
 
                     idx = cur_j_clamped * nx + cur_i_clamped
-                    weight = wv[dy+1] * wu[dx+1]
+                    weight = wv[dy + 1] * wu[dx + 1]
 
                     out_indices[k, count] = idx
                     out_weights[k, count] = weight
@@ -403,12 +405,13 @@ def compute_structured_weights(
 
     return out_indices, out_weights, out_valid
 
+
 @jit(nopython=True, nogil=True, parallel=True)
 def apply_weights_structured(
     data_flat,  # (n_samples, n_source_points)
-    indices,    # (n_targets, max_weights)
-    weights,    # (n_targets, max_weights)
-    valid_mask, # (n_targets,)
+    indices,  # (n_targets, max_weights)
+    weights,  # (n_targets, max_weights)
+    valid_mask,  # (n_targets,)
 ):
     """
     Apply structured interpolation weights (bilinear/cubic).
@@ -425,7 +428,6 @@ def apply_weights_structured(
 
         for s in range(n_samples):
             val_sum = 0.0
-            weight_sum = 0.0
 
             for k in range(max_weights):
                 idx = indices[i, k]

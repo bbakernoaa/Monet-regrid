@@ -68,7 +68,7 @@ def benchmark_regridding():
 
     # print("\nPerformance improvement:")
     if first_call_time > 0:
-        speedup = first_call_time / second_call_time if second_call_time > 0 else float("inf")
+        first_call_time / second_call_time if second_call_time > 0 else float("inf")
         # print(f"Speedup on subsequent calls: {speedup:.2f}x")
 
     # print(f"\nFirst call: {first_call_time:.4f}s")
@@ -91,13 +91,13 @@ def benchmark_multiple_calls():
     times = []
     for i in range(10):
         start_time = time.time()
-        result = regridder(source_ds["temperature"])
+        regridder(source_ds["temperature"])
         elapsed = time.time() - start_time
         times.append(elapsed)
         # print(f"Call {i+1}: {elapsed:.4f}s")
 
-    avg_time = np.mean(times)
-    std_time = np.std(times)
+    np.mean(times)
+    np.std(times)
 
     # print(f"\nAverage time per call: {avg_time:.4f}s (±{std_time:.4f}s)")
     # print(f"Min time: {np.min(times):.4f}s")

@@ -91,7 +91,7 @@ def restore_properties(
             else:
                 result = result.where(covered, fill_value)
 
-    return result.transpose(*original_data.dims)  # type: ignore
+    return result.transpose(*original_data.dims)
 
 
 @overload

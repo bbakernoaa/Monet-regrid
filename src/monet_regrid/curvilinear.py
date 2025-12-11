@@ -32,16 +32,18 @@ URLs updated, and documentation adapted for new branding.
 
 from __future__ import annotations
 
-import abc
-from typing import Any, Literal, Tuple
+from typing import Any, Literal
 
 import numpy as np
-import pyproj
 import xarray as xr
 from scipy.spatial import Delaunay, cKDTree  # type: ignore
 
-from .coordinate_transformer import CoordinateTransformer
-from .interpolation import InterpolationEngine
+from monet_regrid.coordinate_transformer import CoordinateTransformer
+from monet_regrid.interpolation import InterpolationEngine
+from monet_regrid.interpolation.utils import (
+    _compute_barycentric_weights_3d,
+    _point_in_tetrahedron,
+)
 
 
 def _apply_interpolation_wrapper(data_slice, engine, target_shape):
@@ -126,7 +128,8 @@ class CurvilinearInterpolator:
         if hasattr(self.interpolation_engine, "triangles") and self.interpolation_engine.triangles is not None:
             # For 3D Delaunay, simplices are tetrahedra with 4 vertices
             return self.interpolation_engine.triangles.simplices  # type: ignore
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'triangles'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'triangles'"
+        raise AttributeError(msg)
 
     @property
     def triangle_centroids(self) -> np.ndarray:
@@ -142,7 +145,8 @@ class CurvilinearInterpolator:
                 simplices = self.triangles
                 self._triangle_centroids = np.mean(self.source_points_3d[simplices], axis=1)
             return self._triangle_centroids  # type: ignore
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'triangle_centroids'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'triangle_centroids'"
+        raise AttributeError(msg)
 
     @property
     def triangle_centroid_kdtree(self) -> cKDTree:
@@ -152,21 +156,24 @@ class CurvilinearInterpolator:
             if not hasattr(self, "_triangle_centroid_kdtree"):
                 self._triangle_centroid_kdtree = cKDTree(self.triangle_centroids)
             return self._triangle_centroid_kdtree
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'triangle_centroid_kdtree'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'triangle_centroid_kdtree'"
+        raise AttributeError(msg)
 
     @property
     def kdtree(self) -> cKDTree:
         """Access KDTree from the interpolation engine."""
         if hasattr(self.interpolation_engine, "source_kdtree"):
             return self.interpolation_engine.source_kdtree
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'kdtree'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'kdtree'"
+        raise AttributeError(msg)
 
     @property
     def target_kdtree(self) -> cKDTree:
         """Access target KDTree from the interpolation engine."""
         if hasattr(self.interpolation_engine, "target_kdtree"):
             return self.interpolation_engine.target_kdtree
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'target_kdtree'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'target_kdtree'"
+        raise AttributeError(msg)
 
     @property
     def convex_hull(self) -> Delaunay:
@@ -174,7 +181,8 @@ class CurvilinearInterpolator:
         if hasattr(self.interpolation_engine, "triangles") and self.interpolation_engine.triangles is not None:
             # For linear method, this is the Delaunay object which the test expects
             return self.interpolation_engine.triangles
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'convex_hull'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'convex_hull'"
+        raise AttributeError(msg)
 
     @property
     def distance_threshold(self) -> float:
@@ -194,7 +202,8 @@ class CurvilinearInterpolator:
             and self.interpolation_engine.source_indices is not None
         ):
             return self.interpolation_engine.source_indices
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'source_indices'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'source_indices'"
+        raise AttributeError(msg)
 
     @property
     def transformer(self) -> Any:
@@ -211,7 +220,7 @@ class CurvilinearInterpolator:
 
         # Use the interpolation engine's method to check if point is in triangle
         # For 3D, this checks if a point is in a tetrahedron
-        from .interpolation.utils import _point_in_tetrahedron
+
         return _point_in_tetrahedron(point_3d, simplex_vertices)
 
     @property
@@ -222,7 +231,8 @@ class CurvilinearInterpolator:
             and self.interpolation_engine.precomputed_weights is not None
         ):
             return self.interpolation_engine.precomputed_weights
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'precomputed_weights'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'precomputed_weights'"
+        raise AttributeError(msg)
 
     def _compute_barycentric_weights(self, point_3d: np.ndarray, triangle_idx: int) -> tuple[float, ...]:
         """Compute barycentric weights for a point in the specified triangle."""
@@ -238,7 +248,7 @@ class CurvilinearInterpolator:
         triangle_vertices = self.source_points_3d[self.interpolation_engine.triangles.simplices[triangle_idx]]
 
         # Use the interpolation engine's method to compute barycentric weights
-        from .interpolation.utils import _compute_barycentric_weights_3d
+
         weights = _compute_barycentric_weights_3d(point_3d, triangle_vertices)
         return tuple(weights) if weights is not None else (np.nan, np.nan, np.nan, np.nan)
 
@@ -247,7 +257,8 @@ class CurvilinearInterpolator:
         """Access distances from the interpolation engine."""
         if hasattr(self.interpolation_engine, "distances") and self.interpolation_engine.distances is not None:
             return self.interpolation_engine.distances
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'distances'")
+        msg = f"'{self.__class__.__name__}' object has no attribute 'distances'"
+        raise AttributeError(msg)
 
     def _validate_coordinates(self) -> None:
         """Validate that source and target grids have latitude and longitude coordinates."""
@@ -271,7 +282,8 @@ class CurvilinearInterpolator:
             ]
 
             if not lat_coords or not lon_coords:
-                raise ValueError("Source grid must have latitude and longitude coordinates")
+                msg = "Source grid must have latitude and longitude coordinates"
+                raise ValueError(msg)
 
             # Use the first found coordinate name
             self.source_lat_name = lat_coords[0]
@@ -297,7 +309,8 @@ class CurvilinearInterpolator:
             ]
 
             if not lat_coords or not lon_coords:
-                raise ValueError("Target grid must have latitude and longitude coordinates")
+                msg = "Target grid must have latitude and longitude coordinates"
+                raise ValueError(msg)
 
             # Use the first found coordinate name
             self.target_lat_name = lat_coords[0]
@@ -309,14 +322,18 @@ class CurvilinearInterpolator:
 
         # Allow both 1D (rectilinear) and 2D (curvilinear) coordinates for source
         if source_lat_data.ndim not in [1, 2] or source_lon_data.ndim not in [1, 2]:
+            msg = f"Source coordinates must be 1D or 2D. Got lat={source_lat_data.ndim}D, lon={source_lon_data.ndim}D"
             raise ValueError(
-                f"Source coordinates must be 1D or 2D. Got lat={source_lat_data.ndim}D, lon={source_lon_data.ndim}D"
+                msg
             )
 
         if source_lat_data.ndim != source_lon_data.ndim:
-            raise ValueError(
+            msg = (
                 f"Source latitude and longitude coordinates must have same number of dimensions. "
                 f"Got lat={source_lat_data.ndim}D, lon={source_lon_data.ndim}D"
+            )
+            raise ValueError(
+                msg
             )
 
         target_lat_data = self.target_grid[self.target_lat_name]
@@ -324,14 +341,18 @@ class CurvilinearInterpolator:
 
         # Allow both 1D (rectilinear) and 2D (curvilinear) for target, but they must match
         if target_lat_data.ndim not in [1, 2] or target_lon_data.ndim not in [1, 2]:
+            msg = f"Target coordinates must be 1D or 2D. Got lat={target_lat_data.ndim}D, lon={target_lon_data.ndim}D"
             raise ValueError(
-                f"Target coordinates must be 1D or 2D. Got lat={target_lat_data.ndim}D, lon={target_lon_data.ndim}D"
+                msg
             )
 
         if target_lat_data.ndim != target_lon_data.ndim:
-            raise ValueError(
+            msg = (
                 f"Target latitude and longitude coordinates must have same number of dimensions. "
                 f"Got lat={target_lat_data.ndim}D, lon={target_lon_data.ndim}D"
+            )
+            raise ValueError(
+                msg
             )
 
     def _transform_coordinates(self) -> None:
@@ -354,8 +375,8 @@ class CurvilinearInterpolator:
             source_lon_flat = source_lon.data.flatten()
 
         # Clamp coordinates to valid ranges to handle edge cases gracefully
-        source_lat_flat = np.clip(source_lat_flat, -90.0, 90.0)
-        source_lon_flat = np.clip(source_lon_flat, -180.0, 180.0)
+        source_lat_flat = np.clip(source_lat_flat, -90.0, 90.0)  # type: ignore[assignment]
+        source_lon_flat = np.clip(source_lon_flat, -180.0, 180.0)  # type: ignore[assignment]
 
         # Transform to 3D coordinates (assuming height=0 for surface points)
         source_heights = np.zeros_like(source_lat_flat)
@@ -372,10 +393,13 @@ class CurvilinearInterpolator:
             if np.any(non_finite_mask):
                 problematic_lats = source_lat_flat[non_finite_mask]
                 problematic_lons = source_lon_flat[non_finite_mask]
-                raise ValueError(
+                msg = (
                     f"Non-finite coordinates found during transformation: "
                     f"lat={problematic_lats[:5]}, lon={problematic_lons[:5]} "
                     f"(showing first 5 of {np.sum(non_finite_mask)} non-finite points)"
+                )
+                raise ValueError(
+                    msg
                 )
 
         # Store as 3D points array
@@ -399,8 +423,8 @@ class CurvilinearInterpolator:
             target_lon_flat = target_lon.data.flatten()
 
         # Clamp coordinates to valid ranges to handle edge cases gracefully
-        target_lat_flat = np.clip(target_lat_flat, -90.0, 90.0)
-        target_lon_flat = np.clip(target_lon_flat, -180.0, 180.0)
+        target_lat_flat = np.clip(target_lat_flat, -90.0, 90.0)  # type: ignore[assignment]
+        target_lon_flat = np.clip(target_lon_flat, -180.0, 180.0)  # type: ignore[assignment]
 
         # Transform to 3D coordinates (assuming height=0 for surface points)
         target_heights = np.zeros_like(target_lat_flat)
@@ -417,10 +441,13 @@ class CurvilinearInterpolator:
             if np.any(non_finite_mask):
                 problematic_lats = target_lat_flat[non_finite_mask]
                 problematic_lons = target_lon_flat[non_finite_mask]
-                raise ValueError(
+                msg = (
                     f"Non-finite coordinates found during transformation: "
                     f"lat={problematic_lats[:5]}, lon={problematic_lons[:5]} "
                     f"(showing first 5 of {np.sum(non_finite_mask)} non-finite points)"
+                )
+                raise ValueError(
+                    msg
                 )
 
         # Store as 3D points array
@@ -455,9 +482,12 @@ class CurvilinearInterpolator:
                 except Exception:
                     pass
 
-                raise ValueError(
+                msg = (
                     f"Conservative regridding requires explicit bounds for {lat_name} and {lon_name}. "
                     "Please ensure 'bounds' attribute is set and variables exist with shape (y, x, 4)."
+                )
+                raise ValueError(
+                    msg
                 )
 
             source_vertices = get_bounds(self.source_grid, self.source_lat_name, self.source_lon_name)
@@ -468,7 +498,7 @@ class CurvilinearInterpolator:
                 self.target_points_3d,
                 source_vertices,
                 target_vertices,
-                radius_of_influence=self.radius_of_influence
+                radius_of_influence=self.radius_of_influence,
             )
         elif self.method in ["bilinear", "cubic"]:
             # Structured interpolation requires source shape
@@ -476,7 +506,7 @@ class CurvilinearInterpolator:
                 self.source_points_3d,
                 self.target_points_3d,
                 self.radius_of_influence,
-                source_shape=self.source_shape # Pass the source shape
+                source_shape=self.source_shape,  # type: ignore[arg-type]
             )
         else:
             # Standard interpolation
@@ -503,13 +533,15 @@ class CurvilinearInterpolator:
         elif isinstance(data, xr.Dataset):
             return self._interpolate_dataset(data)
         else:
-            raise TypeError("Input must be xarray DataArray or Dataset")
+            msg = "Input must be xarray DataArray or Dataset"
+            raise TypeError(msg)
 
     def _interpolate_dataarray(self, data: xr.DataArray) -> xr.DataArray:
         """Interpolate a single DataArray."""
         # Validate that data coordinates match source grid
         if not self._validate_data_coordinates(data):
-            raise ValueError("Data coordinates do not match source grid")
+            msg = "Data coordinates do not match source grid"
+            raise ValueError(msg)
 
         # Find spatial dimensions in the data that match the source grid shape
         # The data should have the same spatial dimensions as the source grid
@@ -535,14 +567,14 @@ class CurvilinearInterpolator:
         target_lon_coord = self.target_grid[self.target_lon_name]
 
         if target_lat_coord.ndim == 2:
-             target_dims = list(target_lat_coord.dims)
-             target_shape = target_lat_coord.shape
+            target_dims = list(target_lat_coord.dims)
+            target_shape = target_lat_coord.shape
         else:
-             target_dims = [target_lat_coord.dims[0], target_lon_coord.dims[0]]
-             target_shape = (target_lat_coord.size, target_lon_coord.size)
+            target_dims = [target_lat_coord.dims[0], target_lon_coord.dims[0]]
+            target_shape = (target_lat_coord.size, target_lon_coord.size)
 
         # Create dictionary mapping target dim names to sizes for apply_ufunc
-        output_sizes = {dim: size for dim, size in zip(target_dims, target_shape)}
+        output_sizes = dict(zip(target_dims, target_shape, strict=False))
 
         # Use xr.apply_ufunc to handle Dask arrays lazily
         result = xr.apply_ufunc(
@@ -556,25 +588,38 @@ class CurvilinearInterpolator:
             dask="parallelized",  # Enable Dask parallel execution
             output_dtypes=[data.dtype],
             dask_gufunc_kwargs={"allow_rechunk": True, "output_sizes": output_sizes},
+            keep_attrs=True,
         )
+
+        # Manually ensure attributes are preserved if apply_ufunc didn't do it
+        if not result.attrs and data.attrs:
+            result.attrs = data.attrs.copy()
+
+        # DEBUG
+        if not result.attrs:
+            pass
 
         # Attach coordinates to result
         # Coordinates from data (non-spatial) are preserved by apply_ufunc
         # We need to add target spatial coordinates
 
         if target_lat_coord.ndim == 2:
-             result.coords[self.target_lat_name] = target_lat_coord
-             result.coords[self.target_lon_name] = target_lon_coord
+            result.coords[self.target_lat_name] = target_lat_coord
+            result.coords[self.target_lon_name] = target_lon_coord
         else:
-             result.coords[self.target_lat_name] = target_lat_coord
-             result.coords[self.target_lon_name] = target_lon_coord
+            result.coords[self.target_lat_name] = target_lat_coord
+            result.coords[self.target_lon_name] = target_lon_coord
 
         # Also ensure dimension coordinates exist
         for dim in target_dims:
-             if dim in self.target_grid.coords:
-                 result.coords[dim] = self.target_grid.coords[dim]
+            if dim in self.target_grid.coords:
+                result.coords[dim] = self.target_grid.coords[dim]
 
-        return result
+        # DEBUG
+        if not result.attrs:
+            pass
+
+        return result  # type: ignore[no-any-return]
 
     def _interpolate_dataset(self, dataset: xr.Dataset) -> xr.Dataset:
         """Interpolate an entire Dataset."""

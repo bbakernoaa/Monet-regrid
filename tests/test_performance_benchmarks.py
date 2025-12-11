@@ -4,18 +4,15 @@ This module tests performance targets, scalability, and optimization effectivene
 compared to baseline implementations.
 """
 
-import statistics
 import time
-from typing import Dict, List, Tuple
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.curvilinear import CurvilinearInterpolator
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: from xarray_regrid.curvilinear import CurvilinearInterpolator
+# Old import: from monet_regrid.curvilinear import CurvilinearInterpolator
 # New import: from monet_regrid.curvilinear import CurvilinearInterpolator
 
 
@@ -331,7 +328,7 @@ class TestOptimizationValidation:
             elapsed_time = time.time() - start_time
 
             assert elapsed_time < 15.0, f"Interpolation with {dtype} too slow: {elapsed_time:.2f}s"
-            assert result.dtype == dtype or result.dtype == np.float64  # May promote to float64
+            assert result.dtype in (dtype, np.float64)  # May promote to float64
             assert result.shape == target_grid["latitude"].shape
 
     def _create_test_grids(self, ny: int, nx: int):
@@ -483,4 +480,3 @@ if __name__ == "__main__":
     reg_test = TestPerformanceRegression()
     reg_test.test_baseline_performance_comparison()
 
-    print("All performance benchmark tests passed!")

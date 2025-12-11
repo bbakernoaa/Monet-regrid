@@ -5,17 +5,15 @@ and component interactions in the curvilinear regridding system.
 """
 
 import time
-from typing import Any, Dict
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.core import CurvilinearRegridder
 from monet_regrid.curvilinear import CurvilinearInterpolator
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old imports: from xarray_regrid.curvilinear import ...; from xarray_regrid.core import ...
+# Old imports: from monet_regrid.curvilinear import ...; from monet_regrid.core import ...
 # New imports: from monet_regrid.curvilinear import ...; from monet_regrid.core import ...
 
 
@@ -165,7 +163,7 @@ class TestEndToEndWorkflows:
         result = interpolator(test_data)
 
         # Verify result dimensions
-        expected_shape = (time_dim, level_dim) + self.target_grid["latitude"].shape
+        expected_shape = (time_dim, level_dim, *self.target_grid["latitude"].shape)
         assert result.shape == expected_shape
         assert "time" in result.dims
         assert "level" in result.dims
@@ -421,4 +419,3 @@ if __name__ == "__main__":
     robustness_test.test_workflow_with_nan_values()
     robustness_test.test_workflow_with_different_dtypes()
 
-    print("All integration tests passed!")
