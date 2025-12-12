@@ -28,6 +28,7 @@ from __future__ import annotations
 import abc
 import pickle
 from collections.abc import Hashable
+from typing import Any
 
 import cf_xarray  # noqa: F401
 import numpy as np
@@ -37,7 +38,11 @@ import xarray as xr
 from monet_regrid.curvilinear import CurvilinearInterpolator
 from monet_regrid.methods import conservative, interp
 from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce
-from monet_regrid.utils import format_for_regrid, validate_input
+from monet_regrid.utils import (
+    _create_cache_key,
+    format_for_regrid,
+    validate_input,
+)
 
 
 class BaseRegridder(abc.ABC):
@@ -47,13 +52,12 @@ class BaseRegridder(abc.ABC):
     It provides common functionality and ensures consistent API across different grid types.
     """
 
-    def __init__(self, source_data: xr.DataArray | xr.Dataset, target_grid: xr.Dataset, **kwargs: Any):
+    def __init__(self, source_data: xr.DataArray | xr.Dataset, target_grid: xr.Dataset):
         """Initialize the regridder with source data and target grid.
 
         Args:
             source_data: The source data to be regridded (DataArray or Dataset)
             target_grid: The target grid specification as a Dataset
-            **kwargs: Additional keyword arguments for specific regridder implementations
         """
         self.source_data = source_data
         self.target_grid = target_grid
@@ -72,23 +76,21 @@ class BaseRegridder(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def to_file(self, filepath: str, **kwargs: Any) -> None:
+    def to_file(self, filepath: str) -> None:
         """Save the regridder to a file.
 
         Args:
             filepath: Path to save the regridder
-            **kwargs: Additional arguments for file saving
         """
         pass
 
     @classmethod
     @abc.abstractmethod
-    def from_file(cls, filepath: str, **kwargs: Any) -> BaseRegridder:
+    def from_file(cls, filepath: str) -> BaseRegridder:
         """Load a regridder from a file.
 
         Args:
             filepath: Path to load the regridder from
-            **kwargs: Additional arguments for file loading
 
         Returns:
             Instance of the regridder class
@@ -144,22 +146,21 @@ class BaseRegridder(abc.ABC):
                     source_lat_coords = [lat_dim]
                     source_lon_coords = [lon_dim]
                 else:
+                    source_coords = list(self.source_data.coords) if hasattr(self.source_data, "coords") else []
+                    source_dims = list(self.source_data.dims) if hasattr(self.source_data, "dims") else []
                     msg = (
-                        f"Source data must have latitude and longitude coordinates.\n"
-                        f"Source coordinates: {list(self.source_data.coords) if hasattr(self.source_data, 'coords') else []}\n"
-                        f"Source dimensions: {list(self.source_data.dims) if hasattr(self.source_data, 'dims') else []}"
+                        "Source data must have latitude and longitude coordinates.\n"
+                        f"Source coordinates: {source_coords}\n"
+                        f"Source dimensions: {source_dims}"
                     )
-                    raise ValueError(
-                        msg
-                    )
+                    raise ValueError(msg)
             else:
+                source_coords = list(self.source_data.coords) if hasattr(self.source_data, "coords") else []
                 msg = (
-                    f"Source data must have latitude and longitude coordinates.\n"
-                    f"Source coordinates: {list(self.source_data.coords) if hasattr(self.source_data, 'coords') else []}"
+                    "Source data must have latitude and longitude coordinates.\n"
+                    f"Source coordinates: {source_coords}"
                 )
-                raise ValueError(
-                    msg
-                )
+                raise ValueError(msg)
 
         if not target_lat_coords or not target_lon_coords:
             # Also check if the dimensions themselves might be latitude/longitude
@@ -187,15 +188,12 @@ class BaseRegridder(abc.ABC):
                     f"Target coordinates: {list(self.target_grid.coords)}\n"
                     f"Target dimensions: {list(self.target_grid.dims)}"
                 )
-                raise ValueError(
-                    msg
-                )
+                raise ValueError(msg)
 
     def _identify_lat_coords(self, data: xr.DataArray | xr.Dataset) -> list[Hashable]:
         """Identify latitude coordinates in the data using cf-xarray or name matching."""
         # First, check for cf-xarray coordinates if available
         try:
-
             # Use cf-xarray to identify latitude coordinates if available
             if hasattr(data, "cf") and "latitude" in data.cf:
                 return [data.cf["latitude"].name]
@@ -222,7 +220,6 @@ class BaseRegridder(abc.ABC):
         """Identify longitude coordinates in the data using cf-xarray or name matching."""
         # First, check for cf-xarray coordinates if available
         try:
-
             # Use cf-xarray to identify longitude coordinates if available
             if hasattr(data, "cf") and "longitude" in data.cf:
                 return [data.cf["longitude"].name]
@@ -307,8 +304,8 @@ class RectilinearRegridder(BaseRegridder):
 
         # Import here to avoid circular imports
 
-        # Create a cache key based on input data and time_dim
-        cache_key = (id(input_data), time_dim)
+        # Create a stable cache key based on the grid structure
+        cache_key = _create_cache_key(input_data, time_dim)
 
         # Check if we have cached validated target grid
         if cache_key in self._validation_cache:
@@ -319,8 +316,9 @@ class RectilinearRegridder(BaseRegridder):
             # Cache the validated target grid
             self._validation_cache[cache_key] = validated_target_grid
 
-        # Check if we have cached formatted data
-        format_cache_key = (id(input_data), id(validated_target_grid))
+        # Create a cache key for the formatted data
+        # This key should be based on the validated target grid as well
+        format_cache_key = (cache_key, _create_cache_key(validated_target_grid))
         if format_cache_key in self._formatting_cache:
             formatted_data = self._formatting_cache[format_cache_key]
         else:
@@ -349,16 +347,13 @@ class RectilinearRegridder(BaseRegridder):
             )
         else:
             msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative"
-            raise ValueError(
-                msg
-            )
+            raise ValueError(msg)
 
-    def to_file(self, filepath: str, **kwargs: Any) -> None:
+    def to_file(self, filepath: str) -> None:
         """Save the regridder configuration to a file.
 
         Args:
             filepath: Path to save the regridder configuration
-            **kwargs: Additional arguments for file saving
         """
 
         # Create a serializable representation
@@ -374,12 +369,11 @@ class RectilinearRegridder(BaseRegridder):
             pickle.dump(config, f)
 
     @classmethod
-    def from_file(cls, filepath: str, **kwargs: Any) -> RectilinearRegridder:
+    def from_file(cls, filepath: str) -> RectilinearRegridder:
         """Load a regridder from a file.
 
         Args:
             filepath: Path to load the regridder from
-            **kwargs: Additional arguments for file loading
 
         Returns:
             Instance of RectilinearRegridder
@@ -487,7 +481,6 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
 
         return compute_mode(
@@ -535,7 +528,6 @@ class RectilinearRegridder(BaseRegridder):
                 " and regrid it separately.",
             )
             raise ValueError(msg)
-
 
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
 
@@ -611,7 +603,6 @@ class CurvilinearRegridder(BaseRegridder):
         # Extract coordinate information from source data
         # First, determine the coordinate names using cf-xarray if available
         try:
-
             lat_coord = data.cf["latitude"]
             lon_coord = data.cf["longitude"]
             lat_name = lat_coord.name
@@ -677,7 +668,6 @@ class CurvilinearRegridder(BaseRegridder):
         # The source data can be passed without explicit lat/lon coordinates, as the grid information
         # is handled separately in the _create_source_grid_from_data method
         try:
-
             # Use cf-xarray to identify latitude and longitude coordinates in target
             if hasattr(self.target_grid, "cf"):
                 self.target_grid.cf["latitude"]
@@ -715,12 +705,11 @@ class CurvilinearRegridder(BaseRegridder):
                 msg = "Target grid must have latitude and longitude coordinates"
                 raise ValueError(msg)
 
-    def to_file(self, filepath: str, **kwargs: Any) -> None:
+    def to_file(self, filepath: str) -> None:
         """Save the regridder to a file.
 
         Args:
             filepath: Path to save the regridder
-            **kwargs: Additional arguments for file saving
         """
 
         # Create a serializable representation
@@ -735,12 +724,11 @@ class CurvilinearRegridder(BaseRegridder):
             pickle.dump(config, f)
 
     @classmethod
-    def from_file(cls, filepath: str, **kwargs: Any) -> CurvilinearRegridder:
+    def from_file(cls, filepath: str) -> CurvilinearRegridder:
         """Load a regridder from a file.
 
         Args:
             filepath: Path to load the regridder from
-            **kwargs: Additional arguments for file loading
 
         Returns:
             Instance of CurvilinearRegridder
