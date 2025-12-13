@@ -449,6 +449,7 @@ class RectilinearRegridder(BaseRegridder):
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
+        nan_threshold: float = 1.0,
     ) -> xr.DataArray:
         """Regrid by taking the most common value within the new grid cells.
 
@@ -497,6 +498,7 @@ class RectilinearRegridder(BaseRegridder):
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
+        nan_threshold: float = 1.0,
     ) -> xr.DataArray:
         """Regrid by taking the least common value within the new grid cells.
 
