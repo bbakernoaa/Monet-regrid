@@ -53,60 +53,75 @@ class Regridder:
     def __init__(self, xarray_obj: xr.DataArray | xr.Dataset):
         self._obj = xarray_obj
 
-    def build_regridder(self, ds_target_grid: xr.Dataset, method: str = "linear", **kwargs: Any) -> BaseRegridder:
+    def _get_source_grid_type(self) -> GridType:
+        """Detect the grid type of the source object."""
+        try:
+            if isinstance(self._obj, xr.Dataset):
+                ds = self._obj
+            else:  # DataArray
+                coord_vars = {name: self._obj.coords[name] for name in self._obj.coords}
+                ds = xr.Dataset(coord_vars)
+            return _get_grid_type(ds)
+        except (KeyError, AttributeError, ValueError):
+            return GridType.RECTILINEAR
+
+    def _prepare_regridder(
+        self, ds_target_grid: xr.Dataset, method: str, time_dim: str | None, **kwargs: Any
+    ) -> BaseRegridder:
+        """Prepare and build the appropriate regridder."""
+        source_grid_type = self._get_source_grid_type()
+        try:
+            target_grid_type = _get_grid_type(ds_target_grid)
+        except (KeyError, AttributeError, ValueError):
+            target_grid_type = GridType.RECTILINEAR
+
+        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
+            validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
+        else:
+            validated_target_grid = ds_target_grid
+
+        return self.build_regridder(
+            ds_target_grid=validated_target_grid,
+            method=method,
+            source_grid_type=source_grid_type,
+            target_grid_type=target_grid_type,
+            time_dim=time_dim,
+            **kwargs,
+        )
+
+    def build_regridder(
+        self,
+        ds_target_grid: xr.Dataset,
+        method: str = "linear",
+        source_grid_type: GridType | None = None,
+        target_grid_type: GridType | None = None,
+        **kwargs: Any,
+    ) -> BaseRegridder:
         """Factory method to build the appropriate regridder based on grid type.
 
         Args:
             ds_target_grid: Dataset containing the target coordinates.
-            method: The regridding method to use (e.g., 'linear', 'nearest', 'cubic', 'conservative').
+            method: The regridding method to use.
+            source_grid_type: The grid type of the source data. If not provided, it
+                will be detected automatically.
+            target_grid_type: The grid type of the target data. If not provided, it
+                will be detected automatically.
             **kwargs: Additional keyword arguments to pass to the regridder.
 
         Returns:
             An instance of the appropriate regridder class based on grid type.
         """
-        # Detect grid types for both source and target
-
-        # For grid type detection, we need to pass the dataset that contains the coordinate variables
-        # If self._obj is a Dataset with coordinate variables like RASM (xc, yc), use it directly
-        # If self._obj is a DataArray, convert it to Dataset first to access all coordinates
-        try:
-            # Convert to Dataset if needed to ensure we have access to all coordinate information
-            if isinstance(self._obj, xr.Dataset):
-                source_grid_type = _get_grid_type(self._obj)
-            else:  # DataArray
-                # Convert to dataset to include all coordinates
-                temp_ds = self._obj.to_dataset()
-                source_grid_type = _get_grid_type(temp_ds)
-        except (KeyError, AttributeError, ValueError):
-            # If we can't identify coordinates in the main object, try to create a dataset with just the coordinates
+        if source_grid_type is None:
+            source_grid_type = self._get_source_grid_type()
+        if target_grid_type is None:
             try:
-                coord_vars = {}
-                for coord_name in self._obj.coords:
-                    coord_var = self._obj.coords[coord_name]
-                    # Include coordinate variables that might represent spatial coordinates
-                    if coord_var.ndim >= 1 and any(
-                        keyword in str(coord_name).lower() for keyword in ["lat", "lon", "x", "y", "xc", "yc"]
-                    ):
-                        coord_vars[coord_name] = coord_var
-
-                if coord_vars:
-                    temp_ds = xr.Dataset(coord_vars)
-                    source_grid_type = _get_grid_type(temp_ds)
-                else:
-                    source_grid_type = GridType.RECTILINEAR
+                target_grid_type = _get_grid_type(ds_target_grid)
             except (KeyError, AttributeError, ValueError):
-                # If all attempts fail, default to rectilinear
-                source_grid_type = GridType.RECTILINEAR
+                target_grid_type = GridType.RECTILINEAR
 
-        target_grid_type = _get_grid_type(ds_target_grid)
-
-        # Choose the appropriate regridder based on grid types
         if GridType.CURVILINEAR in (source_grid_type, target_grid_type):
-            # Use CurvilinearRegridder for any curvilinear grid scenario
-
             return CurvilinearRegridder(source_data=self._obj, target_grid=ds_target_grid, method=method, **kwargs)
         else:
-            # Use RectilinearRegridder for rectilinear-to-rectilinear regridding
             return RectilinearRegridder(source_data=self._obj, target_grid=ds_target_grid, method=method, **kwargs)
 
     def linear(
@@ -124,48 +139,7 @@ class Regridder:
         Returns:
             Data regridded to the target dataset coordinates.
         """
-        # Detect grid types to determine if we need special handling for curvilinear grids
-
-        # For curvilinear grids, we might have different dimension names, so skip validation
-        try:
-            # Use the same approach as build_regridder for consistency
-            if isinstance(self._obj, xr.Dataset):
-                source_grid_type = _get_grid_type(self._obj)
-            else:  # DataArray
-                # For DataArray, we need to check its coordinates to detect grid type
-                # Create a temporary dataset with just the coordinate variables
-                coord_vars = {}
-                for coord_name in self._obj.coords:
-                    coord_var = self._obj.coords[coord_name]
-                    # Include coordinate variables that might represent spatial coordinates
-                    if coord_var.ndim >= 1 and any(
-                        keyword in str(coord_name).lower() for keyword in ["lat", "lon", "x", "y", "xc", "yc"]
-                    ):
-                        coord_vars[coord_name] = coord_var
-
-                if coord_vars:
-                    temp_ds = xr.Dataset(coord_vars)
-                    source_grid_type = _get_grid_type(temp_ds)
-                else:
-                    source_grid_type = GridType.RECTILINEAR
-        except (KeyError, AttributeError, ValueError):
-            source_grid_type = GridType.RECTILINEAR
-
-        try:
-            target_grid_type = _get_grid_type(ds_target_grid)
-        except (KeyError, AttributeError, ValueError):
-            target_grid_type = GridType.RECTILINEAR
-
-        # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
-            ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        else:
-            # For curvilinear grids, just ensure both have latitude/longitude coordinates
-            # The actual validation will be handled by the regridder's internal validation
-            # We should still validate that coordinates exist but skip the dimension check
-            ds_target_grid = ds_target_grid
-
-        regridder = self.build_regridder(ds_target_grid=ds_target_grid, method="linear", time_dim=time_dim)
+        regridder = self._prepare_regridder(ds_target_grid, "linear", time_dim)
         return regridder()
 
     def nearest(
@@ -183,47 +157,7 @@ class Regridder:
         Returns:
             Data regridded to the target dataset coordinates.
         """
-        # Detect grid types to determine if we need special handling for curvilinear grids
-
-        # For curvilinear grids, we might have different dimension names, so skip validation
-        try:
-            # Use the same approach as build_regridder for consistency
-            if isinstance(self._obj, xr.Dataset):
-                source_grid_type = _get_grid_type(self._obj)
-            else:  # DataArray
-                # For DataArray, we need to check its coordinates to detect grid type
-                # Create a temporary dataset with just the coordinate variables
-                coord_vars = {}
-                for coord_name in self._obj.coords:
-                    coord_var = self._obj.coords[coord_name]
-                    # Include coordinate variables that might represent spatial coordinates
-                    if coord_var.ndim >= 1 and any(
-                        keyword in str(coord_name).lower() for keyword in ["lat", "lon", "x", "y", "xc", "yc"]
-                    ):
-                        coord_vars[coord_name] = coord_var
-
-                if coord_vars:
-                    temp_ds = xr.Dataset(coord_vars)
-                    source_grid_type = _get_grid_type(temp_ds)
-                else:
-                    source_grid_type = GridType.RECTILINEAR
-        except (KeyError, AttributeError, ValueError):
-            source_grid_type = GridType.RECTILINEAR
-
-        try:
-            target_grid_type = _get_grid_type(ds_target_grid)
-        except (KeyError, AttributeError, ValueError):
-            target_grid_type = GridType.RECTILINEAR
-
-        # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
-            ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        else:
-            # For curvilinear grids, just ensure both have latitude/longitude coordinates
-            # The actual validation will be handled by the regridder's internal validation
-            ds_target_grid = ds_target_grid
-
-        regridder = self.build_regridder(ds_target_grid=ds_target_grid, method="nearest", time_dim=time_dim)
+        regridder = self._prepare_regridder(ds_target_grid, "nearest", time_dim)
         return regridder()
 
     def cubic(
@@ -241,47 +175,7 @@ class Regridder:
         Returns:
             Data regridded to the target dataset coordinates.
         """
-        # Detect grid types to determine if we need special handling for curvilinear grids
-
-        # For curvilinear grids, we might have different dimension names, so skip validation
-        try:
-            # Use the same approach as build_regridder for consistency
-            if isinstance(self._obj, xr.Dataset):
-                source_grid_type = _get_grid_type(self._obj)
-            else:  # DataArray
-                # For DataArray, we need to check its coordinates to detect grid type
-                # Create a temporary dataset with just the coordinate variables
-                coord_vars = {}
-                for coord_name in self._obj.coords:
-                    coord_var = self._obj.coords[coord_name]
-                    # Include coordinate variables that might represent spatial coordinates
-                    if coord_var.ndim >= 1 and any(
-                        keyword in str(coord_name).lower() for keyword in ["lat", "lon", "x", "y", "xc", "yc"]
-                    ):
-                        coord_vars[coord_name] = coord_var
-
-                if coord_vars:
-                    temp_ds = xr.Dataset(coord_vars)
-                    source_grid_type = _get_grid_type(temp_ds)
-                else:
-                    source_grid_type = GridType.RECTILINEAR
-        except (KeyError, AttributeError, ValueError):
-            source_grid_type = GridType.RECTILINEAR
-
-        try:
-            target_grid_type = _get_grid_type(ds_target_grid)
-        except (KeyError, AttributeError, ValueError):
-            target_grid_type = GridType.RECTILINEAR
-
-        # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
-            ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        else:
-            # For curvilinear grids, just ensure both have latitude/longitude coordinates
-            # The actual validation will be handled by the regridder's internal validation
-            ds_target_grid = ds_target_grid
-
-        regridder = self.build_regridder(ds_target_grid=ds_target_grid, method="cubic", time_dim=time_dim)
+        regridder = self._prepare_regridder(ds_target_grid, "cubic", time_dim)
         return regridder()
 
     def conservative(
@@ -321,50 +215,10 @@ class Regridder:
             msg = "nan_threshold must be between [0, 1]]"
             raise ValueError(msg)
 
-        # Detect grid types to determine if we need special handling for curvilinear grids
-
-        # For curvilinear grids, we might have different dimension names, so skip validation
-        try:
-            # Use the same approach as build_regridder for consistency
-            if isinstance(self._obj, xr.Dataset):
-                source_grid_type = _get_grid_type(self._obj)
-            else:  # DataArray
-                # For DataArray, we need to check its coordinates to detect grid type
-                # Create a temporary dataset with just the coordinate variables
-                coord_vars = {}
-                for coord_name in self._obj.coords:
-                    coord_var = self._obj.coords[coord_name]
-                    # Include coordinate variables that might represent spatial coordinates
-                    if coord_var.ndim >= 1 and any(
-                        keyword in str(coord_name).lower() for keyword in ["lat", "lon", "x", "y", "xc", "yc"]
-                    ):
-                        coord_vars[coord_name] = coord_var
-
-                if coord_vars:
-                    temp_ds = xr.Dataset(coord_vars)
-                    source_grid_type = _get_grid_type(temp_ds)
-                else:
-                    source_grid_type = GridType.RECTILINEAR
-        except (KeyError, AttributeError, ValueError):
-            source_grid_type = GridType.RECTILINEAR
-
-        try:
-            target_grid_type = _get_grid_type(ds_target_grid)
-        except (KeyError, AttributeError, ValueError):
-            target_grid_type = GridType.RECTILINEAR
-
-        # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
-            ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        else:
-            # For curvilinear grids, just ensure both have latitude/longitude coordinates
-            # The actual validation will be handled by the regridder's internal validation
-            ds_target_grid = ds_target_grid
-
-        regridder = self.build_regridder(
-            ds_target_grid=ds_target_grid,
-            method="conservative",
-            time_dim=time_dim,
+        regridder = self._prepare_regridder(
+            ds_target_grid,
+            "conservative",
+            time_dim,
             latitude_coord=latitude_coord,
             skipna=skipna,
             nan_threshold=nan_threshold,
@@ -399,42 +253,19 @@ class Regridder:
             fill_value: What value to fill uncovered parts of the target grid.
                 By default this will be NaN, and integer type data will be cast to
                 float to accomodate this.
+            nan_threshold: Threshold for the nan_threshold.
 
         Returns:
             Regridded data.
         """
-        # Detect grid types to determine if we need special handling for curvilinear grids
-
-        # For curvilinear grids, we might have different dimension names, so skip validation
-        try:
-            # Use the same approach as build_regridder for consistency
-            if isinstance(self._obj, xr.Dataset):
-                source_grid_type = _get_grid_type(self._obj)
-            else:  # DataArray
-                # Convert to dataset to include all coordinates
-                temp_ds = self._obj.to_dataset()
-                source_grid_type = _get_grid_type(temp_ds)
-        except (KeyError, AttributeError, ValueError):
-            source_grid_type = GridType.RECTILINEAR
-
-        try:
-            target_grid_type = _get_grid_type(ds_target_grid)
-        except (KeyError, AttributeError, ValueError):
-            target_grid_type = GridType.RECTILINEAR
-
-        # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
-            ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        else:
-            # For curvilinear grids, just ensure both have latitude/longitude coordinates
-            # The actual validation will be handled by the regridder's internal validation
-            ds_target_grid = ds_target_grid
-
-        # For most_common, we need to use the RectilinearRegridder directly since it has special handling
-        rectilinear_regridder = RectilinearRegridder(
-            source_data=self._obj, target_grid=ds_target_grid, method="most_common", time_dim=time_dim
+        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
+        regridder = RectilinearRegridder(
+            source_data=self._obj,
+            target_grid=validated_target_grid,
+            method="most_common",
+            time_dim=time_dim,
         )
-        return rectilinear_regridder.most_common(values, time_dim, fill_value)
+        return regridder.most_common(values, time_dim, fill_value, nan_threshold=nan_threshold)
 
     def least_common(
         self,
@@ -442,6 +273,7 @@ class Regridder:
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
+        nan_threshold: float = 1.0,
     ) -> xr.DataArray:
         """Regrid by taking the least common value within the new grid cells.
 
@@ -462,41 +294,19 @@ class Regridder:
             fill_value: What value to fill uncovered parts of the target grid.
                 By default this will be NaN, and integer type data will be cast to
                 float to accomodate this.
+            nan_threshold: Threshold for the nan_threshold.
 
         Returns:
             Regridded data.
         """
-        # Detect grid types to determine if we need special handling for curvilinear grids
-
-        # For curvilinear grids, we might have different dimension names, so skip validation
-        try:
-            # Use the same approach as build_regridder for consistency
-            if isinstance(self._obj, xr.Dataset):
-                source_grid_type = _get_grid_type(self._obj)
-            else:  # DataArray
-                # Convert to dataset to include all coordinates
-                temp_ds = self._obj.to_dataset()
-                source_grid_type = _get_grid_type(temp_ds)
-        except (KeyError, AttributeError, ValueError):
-            source_grid_type = GridType.RECTILINEAR
-
-        try:
-            target_grid_type = _get_grid_type(ds_target_grid)
-        except (KeyError, AttributeError, ValueError):
-            target_grid_type = GridType.RECTILINEAR
-
-        # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
-            ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        else:
-            # For curvilinear grids, just ensure both have latitude/longitude coordinates
-            # The actual validation will be handled by the regridder's internal validation
-            ds_target_grid = ds_target_grid
-
-        rectilinear_regridder = RectilinearRegridder(
-            source_data=self._obj, target_grid=ds_target_grid, method="least_common", time_dim=time_dim
+        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
+        regridder = RectilinearRegridder(
+            source_data=self._obj,
+            target_grid=validated_target_grid,
+            method="least_common",
+            time_dim=time_dim,
         )
-        return rectilinear_regridder.least_common(values, time_dim, fill_value)
+        return regridder.least_common(values, time_dim, fill_value, nan_threshold=nan_threshold)
 
     def stat(
         self,
@@ -526,36 +336,11 @@ class Regridder:
         Returns:
             xarray.dataset with regridded land cover categorical data.
         """
-        # Detect grid types to determine if we need special handling for curvilinear grids
-
-        # For curvilinear grids, we might have different dimension names, so skip validation
-        try:
-            # Use the same approach as build_regridder for consistency
-            if isinstance(self._obj, xr.Dataset):
-                source_grid_type = _get_grid_type(self._obj)
-            else:  # DataArray
-                # Convert to dataset to include all coordinates
-                temp_ds = self._obj.to_dataset()
-                source_grid_type = _get_grid_type(temp_ds)
-        except (KeyError, AttributeError, ValueError):
-            source_grid_type = GridType.RECTILINEAR
-
-        try:
-            target_grid_type = _get_grid_type(ds_target_grid)
-        except (KeyError, AttributeError, ValueError):
-            target_grid_type = GridType.RECTILINEAR
-
-        # Only validate input if neither grid is curvilinear (to avoid dimension name mismatches)
-        if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
-            ds_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        else:
-            # For curvilinear grids, just ensure both have latitude/longitude coordinates
-            # The actual validation will be handled by the regridder's internal validation
-            ds_target_grid = ds_target_grid
-
-        rectilinear_regridder = RectilinearRegridder(
-            source_data=self._obj, target_grid=ds_target_grid, method="stat", time_dim=time_dim
+        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
+        regridder = RectilinearRegridder(
+            source_data=self._obj,
+            target_grid=validated_target_grid,
+            method="stat",
+            time_dim=time_dim,
         )
-        return rectilinear_regridder.stat(method, time_dim, skipna, fill_value)
-
-
+        return regridder.stat(method, time_dim, skipna, fill_value)
