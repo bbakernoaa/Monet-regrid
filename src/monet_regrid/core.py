@@ -282,7 +282,7 @@ class RectilinearRegridder(BaseRegridder):
         # Add caching for validated target grid and formatted data
         self._validation_cache: dict[tuple[int, str | None], xr.Dataset] = {}
         self._formatting_cache: dict[tuple[int, int], xr.DataArray | xr.Dataset] = {}
-        super().__init__(source_data, target_grid, **kwargs)
+        super().__init__(source_data, target_grid)
 
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation using interpolation methods.
@@ -561,7 +561,7 @@ class CurvilinearRegridder(BaseRegridder):
         """
         self.method = method
         self.method_kwargs = kwargs
-        super().__init__(source_data, target_grid, **kwargs)
+        super().__init__(source_data, target_grid)
 
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation for curvilinear grids.
