@@ -29,10 +29,9 @@ Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
 
-from monet_regrid.constants import GridType
-
-# Import cf_xarray to ensure it's registered with xarray
 import cf_xarray  # noqa: F401
+
+from monet_regrid.constants import GridType
 
 
 class InvalidBoundsError(Exception): ...
@@ -660,6 +659,7 @@ def validate_grid_compatibility(source_ds: xr.Dataset, target_ds: xr.Dataset) ->
 
     return source_type, target_type
 
+
 @overload
 def validate_input(
     data: xr.Dataset,
@@ -734,3 +734,29 @@ def validate_input(
                 raise ValueError(msg)
 
     return ds_target_grid
+
+
+def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = None) -> tuple:
+    """
+    Create a stable cache key from an xarray object's metadata.
+
+    This key is based on the coordinates and dimensions, making it suitable for
+    caching operations that depend on the grid structure rather than the data values.
+
+    Args:
+        data: The xarray DataArray or Dataset.
+        time_dim: The name of the time dimension, if any.
+
+    Returns:
+        A hashable tuple that serves as a cache key.
+    """
+    # Create a hashable representation of the coordinates
+    # Includes name, shape, dtype, and the raw values as bytes
+    coords_key = frozenset(
+        (name, coord.shape, coord.dtype, coord.values.tobytes()) for name, coord in data.coords.items()
+    )
+
+    # The dimensions are also important
+    dims_key = tuple(sorted(data.dims))
+
+    return (coords_key, dims_key, time_dim)
