@@ -44,6 +44,7 @@ from monet_regrid.interpolation.utils import (
     _compute_barycentric_weights_3d,
     _point_in_tetrahedron,
 )
+from monet_regrid.utils import identify_cf_coordinates
 
 
 def _apply_interpolation_wrapper(data_slice, engine, target_shape):
@@ -262,59 +263,29 @@ class CurvilinearInterpolator:
 
     def _validate_coordinates(self) -> None:
         """Validate that source and target grids have latitude and longitude coordinates."""
-        # Use cf-xarray to find latitude and longitude coordinates in source grid
-        try:
-            source_lat = self.source_grid.cf["latitude"]
-            source_lon = self.source_grid.cf["longitude"]
-            self.source_lat_name = source_lat.name
-            self.source_lon_name = source_lon.name
-        except KeyError:
-            # Fallback to manual search if cf-xarray fails
-            lat_coords = [
-                name
-                for name in self.source_grid.coords
-                if "lat" in str(name).lower() or "latitude" in str(name).lower()
-            ]
-            lon_coords = [
-                name
-                for name in self.source_grid.coords
-                if "lon" in str(name).lower() or "longitude" in str(name).lower()
-            ]
+        source_lat_coords = identify_cf_coordinates(self.source_grid, ["lat", "latitude", "yc", "y"], "latitude")
+        source_lon_coords = identify_cf_coordinates(
+            self.source_grid, ["lon", "longitude", "xc", "x"], "longitude"
+        )
 
-            if not lat_coords or not lon_coords:
-                msg = "Source grid must have latitude and longitude coordinates"
-                raise ValueError(msg)
+        if not source_lat_coords or not source_lon_coords:
+            msg = "Source grid must have latitude and longitude coordinates"
+            raise ValueError(msg)
 
-            # Use the first found coordinate name
-            self.source_lat_name = lat_coords[0]
-            self.source_lon_name = lon_coords[0]
+        self.source_lat_name = source_lat_coords[0]
+        self.source_lon_name = source_lon_coords[0]
 
-        # Use cf-xarray to find latitude and longitude coordinates in target grid
-        try:
-            target_lat = self.target_grid.cf["latitude"]
-            target_lon = self.target_grid.cf["longitude"]
-            self.target_lat_name = target_lat.name
-            self.target_lon_name = target_lon.name
-        except KeyError:
-            # Fallback to manual search if cf-xarray fails
-            lat_coords = [
-                name
-                for name in self.target_grid.coords
-                if "lat" in str(name).lower() or "latitude" in str(name).lower()
-            ]
-            lon_coords = [
-                name
-                for name in self.target_grid.coords
-                if "lon" in str(name).lower() or "longitude" in str(name).lower()
-            ]
+        target_lat_coords = identify_cf_coordinates(self.target_grid, ["lat", "latitude", "yc", "y"], "latitude")
+        target_lon_coords = identify_cf_coordinates(
+            self.target_grid, ["lon", "longitude", "xc", "x"], "longitude"
+        )
 
-            if not lat_coords or not lon_coords:
-                msg = "Target grid must have latitude and longitude coordinates"
-                raise ValueError(msg)
+        if not target_lat_coords or not target_lon_coords:
+            msg = "Target grid must have latitude and longitude coordinates"
+            raise ValueError(msg)
 
-            # Use the first found coordinate name
-            self.target_lat_name = lat_coords[0]
-            self.target_lon_name = lon_coords[0]
+        self.target_lat_name = target_lat_coords[0]
+        self.target_lon_name = target_lon_coords[0]
 
         # Validate source coordinates - allow both 1D (rectilinear) and 2D (curvilinear)
         source_lat_data = self.source_grid[self.source_lat_name]

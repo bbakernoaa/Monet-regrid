@@ -760,3 +760,39 @@ def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = No
     dims_key = tuple(sorted(data.dims))
 
     return (coords_key, dims_key, time_dim)
+
+
+def identify_cf_coordinates(
+    data: xr.DataArray | xr.Dataset, keywords: list[str], cf_keyword: str
+) -> list[Hashable]:
+    """Identify coordinates in the data using cf-xarray or name matching.
+
+    Args:
+        data: The data to search for coordinates
+        keywords: A list of keywords to match against coordinate and dimension names
+        cf_keyword: The cf-xarray keyword to use for coordinate identification
+
+    Returns:
+        A list of identified coordinate names
+    """
+    # First, check for cf-xarray coordinates if available
+    try:
+        if hasattr(data, "cf") and cf_keyword in data.cf:
+            return [data.cf[cf_keyword].name]
+    except (KeyError, AttributeError):
+        pass
+
+    # Check coordinates first
+    for name in data.coords:
+        name_lower = str(name).lower()
+        if any(keyword in name_lower for keyword in keywords):
+            return [name]
+
+    # If no coordinates found, check dimensions
+    if hasattr(data, "dims"):
+        for dim in data.dims:
+            dim_lower = str(dim).lower()
+            if any(keyword in dim_lower for keyword in keywords):
+                return [dim]
+
+    return []
