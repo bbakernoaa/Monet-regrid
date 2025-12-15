@@ -1,5 +1,6 @@
 import numpy as np
 import xarray as xr
+import monet_regrid
 
 
 def test_curvilinear_interpolator_nearest_interpolation():
@@ -151,3 +152,37 @@ def test_curvilinear_interpolator_linear_interpolation():
     assert result.shape == target_lat.shape
     # Values should be close to 5.0 (the original constant value)
     np.testing.assert_allclose(result.data, 5.0, rtol=1e-5)
+
+
+def test_curvilinear_regridder_coordinate_identification():
+    """Test that CurvilinearRegridder identifies coordinate names once."""
+    # Create source and target grids
+    source_x, source_y = np.meshgrid(np.arange(5), np.arange(5))
+    source_lat = 30 + 0.1 * source_y
+    source_lon = -100 + 0.1 * source_x
+    source_grid = xr.Dataset(
+        {"lat": (["y", "x"], source_lat), "lon": (["y", "x"], source_lon)},
+        coords={"x": np.arange(5), "y": np.arange(5)},
+    )
+    data = xr.DataArray(
+        np.random.rand(5, 5),
+        dims=["y", "x"],
+        coords={"lat": (["y", "x"], source_lat), "lon": (["y", "x"], source_lon)},
+    )
+
+    target_x, target_y = np.meshgrid(np.arange(3), np.arange(3))
+    target_lat = 30 + 0.1 * target_y
+    target_lon = -100 + 0.1 * target_x
+    target_grid = xr.Dataset(
+        {"latitude": (["y_t", "x_t"], target_lat), "longitude": (["y_t", "x_t"], target_lon)},
+        coords={"x_t": np.arange(3), "y_t": np.arange(3)},
+    )
+
+    # Use the accessor to create the regridder
+    regridder = data.regrid.build_regridder(ds_target_grid=target_grid, method="linear")
+
+    # Check that the regridder has correctly identified the coordinate names
+    assert regridder.source_lat_name == "lat"
+    assert regridder.source_lon_name == "lon"
+    assert regridder.target_lat_name == "latitude"
+    assert regridder.target_lon_name == "longitude"
