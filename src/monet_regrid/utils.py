@@ -681,9 +681,6 @@ def validate_input(
     ds_target_grid: xr.Dataset,
     time_dim: str | None,
 ) -> xr.Dataset:
-    if time_dim is not None and time_dim in ds_target_grid.coords:
-        ds_target_grid = ds_target_grid.isel({time_dim: 0}).reset_coords()
-
     # Check for coordinate compatibility using semantic matching instead of exact name matching
     # This allows latitude/longitude to match with lat/lon, etc.
 
