@@ -4,8 +4,6 @@ import dask.array as da
 import numpy as np
 import xarray as xr
 
-from monet_regrid.curvilinear import CurvilinearInterpolator
-
 
 def test_high_resolution_stress_dask():
     """Test high-resolution interpolation with Dask arrays."""
@@ -42,13 +40,14 @@ def test_high_resolution_stress_dask():
     # Increase chunk size to reduce graph size (chunks=(50,50) creates 40000 chunks for 2000x2000)
     # Using larger chunks is better practice
     data_dask = da.random.random((ny, nx), chunks=(200, 200))
-    test_data = xr.DataArray(data_dask, dims=["y", "x"])
+    test_data = xr.DataArray(
+        data_dask,
+        dims=["y", "x"],
+        coords={"latitude": (("y", "x"), source_lat), "longitude": (("y", "x"), source_lon)},
+    )
 
     # Interpolate using nearest neighbor (efficient for large grids)
-    interpolator = CurvilinearInterpolator(source_grid, target_grid, method="nearest")
-
-    # This should be lazy
-    result = interpolator(test_data)
+    result = test_data.regrid.nearest(target_grid)
 
     assert isinstance(result.data, da.Array)
 

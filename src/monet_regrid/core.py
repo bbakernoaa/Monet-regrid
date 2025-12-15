@@ -193,11 +193,55 @@ class BaseRegridder(abc.ABC):
 
     def _identify_lat_coords(self, data: xr.DataArray | xr.Dataset) -> list[Hashable]:
         """Identify latitude coordinates in the data using cf-xarray or name matching."""
-        return identify_cf_coordinates(data, ["lat", "latitude", "yc", "y"], "latitude")
+        # First, check for cf-xarray coordinates if available
+        try:
+            # Use cf-xarray to identify latitude coordinates if available
+            if hasattr(data, "cf") and "latitude" in data.cf:
+                return [data.cf["latitude"].name]
+        except (KeyError, AttributeError):
+            pass
+
+        # Check coordinates first - include common ocean/land model coordinate names
+        # Use a more efficient approach by checking for the first match
+        for name in data.coords:
+            name_lower = str(name).lower()
+            if any(keyword in name_lower for keyword in ["lat", "latitude", "yc", "y"]):
+                return [name]
+
+        # If no coordinates found, check dimensions - include common ocean/land model dimension names
+        if hasattr(data, "dims"):
+            for dim in data.dims:
+                dim_lower = str(dim).lower()
+                if any(keyword in dim_lower for keyword in ["lat", "latitude", "yc", "y"]):
+                    return [dim]
+
+        return []
 
     def _identify_lon_coords(self, data: xr.DataArray | xr.Dataset) -> list[Hashable]:
         """Identify longitude coordinates in the data using cf-xarray or name matching."""
-        return identify_cf_coordinates(data, ["lon", "longitude", "xc", "x"], "longitude")
+        # First, check for cf-xarray coordinates if available
+        try:
+            # Use cf-xarray to identify longitude coordinates if available
+            if hasattr(data, "cf") and "longitude" in data.cf:
+                return [data.cf["longitude"].name]
+        except (KeyError, AttributeError):
+            pass
+
+        # Check coordinates first - include common ocean/land model coordinate names
+        # Use a more efficient approach by checking for the first match
+        for name in data.coords:
+            name_lower = str(name).lower()
+            if any(keyword in name_lower for keyword in ["lon", "longitude", "xc", "x"]):
+                return [name]
+
+        # If no coordinates found, check dimensions - include common ocean/land model dimension names
+        if hasattr(data, "dims"):
+            for dim in data.dims:
+                dim_lower = str(dim).lower()
+                if any(keyword in dim_lower for keyword in ["lon", "longitude", "xc", "x"]):
+                    return [dim]
+
+        return []
 
     def __getstate__(self) -> dict[str, Any]:
         """Prepare the regridder for serialization (Dask compatibility)."""
@@ -540,11 +584,17 @@ class CurvilinearRegridder(BaseRegridder):
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method"]}}
 
         # Create the CurvilinearInterpolator
-
+        source_grid = self._create_source_grid_from_data(input_data)
+        source_lat_name, source_lon_name = identify_cf_coordinates(source_grid)
+        target_lat_name, target_lon_name = identify_cf_coordinates(self.target_grid)
         # Create the interpolator with the source and target grids
         interpolator = CurvilinearInterpolator(
-            source_grid=self._create_source_grid_from_data(input_data),
+            source_grid=source_grid,
             target_grid=self.target_grid,
+            source_lat_name=source_lat_name,
+            source_lon_name=source_lon_name,
+            target_lat_name=target_lat_name,
+            target_lon_name=target_lon_name,
             method=method,
             **method_kwargs,
         )
@@ -556,24 +606,62 @@ class CurvilinearRegridder(BaseRegridder):
 
     def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
         """Create a grid specification from source data."""
+        # Use provided data or fall back to source data
         data = source_data if source_data is not None else self.source_data
 
-        lat_coords = self._identify_lat_coords(data)
-        lon_coords = self._identify_lon_coords(data)
+        # Extract coordinate information from source data
+        # First, determine the coordinate names using cf-xarray if available
+        try:
+            lat_coord = data.cf["latitude"]
+            lon_coord = data.cf["longitude"]
+            lat_name = lat_coord.name
+            lon_name = lon_coord.name
 
-        if lat_coords and lon_coords:
-            lat_name = lat_coords[0]
-            lon_name = lon_coords[0]
-            return xr.Dataset({lat_name: data[lat_name], lon_name: data[lon_name]})
-        elif len(data.dims) >= 2:
-            y_dim, x_dim = data.dims[-2], data.dims[-1]
-            y_coords = np.arange(data.sizes[y_dim])
-            x_coords = np.arange(data.sizes[x_dim])
-            lon_2d, lat_2d = np.meshgrid(x_coords, y_coords)
-            return xr.Dataset({"latitude": (["y", "x"], lat_2d), "longitude": (["y", "x"], lon_2d)})
-        else:
-            msg = "Source data must have at least 2 dimensions for curvilinear regridding"
-            raise ValueError(msg)
+            # Extract the coordinate variables
+            source_grid = xr.Dataset({lat_name: data[lat_name], lon_name: data[lon_name]})
+
+            return source_grid
+        except (KeyError, AttributeError):
+            # Fallback to manual search
+            lat_coords = [name for name in data.coords if "lat" in str(name).lower() or "latitude" in str(name).lower()]
+            lon_coords = [
+                name for name in data.coords if "lon" in str(name).lower() or "longitude" in str(name).lower()
+            ]
+
+            if lat_coords and lon_coords:
+                # If lat/lon coordinates are found in the data, use them
+                lat_name = lat_coords[0]
+                lon_name = lon_coords[0]
+
+                source_grid = xr.Dataset({lat_name: data[lat_name], lon_name: data[lon_name]})
+
+                return source_grid
+            # If no explicit lat/lon coordinates are found in the data,
+            # we need to infer the spatial dimensions from the data shape
+            # and use the source grid that was provided during initialization
+            # In this case, the CurvilinearInterpolator should be initialized differently
+            # This is a complex scenario - for now, let's assume that the source grid
+            # coordinates were already provided during initialization and we can
+            # extract spatial coordinate information from the data dimensions
+            # by assuming the last two dimensions are spatial
+            elif len(data.dims) >= 2:
+                # Use the last two dimensions as spatial dimensions
+                y_dim, x_dim = data.dims[-2], data.dims[-1]
+
+                # Create simple coordinate arrays based on the spatial dimensions
+                y_coords = np.arange(data.sizes[y_dim])
+                x_coords = np.arange(data.sizes[x_dim])
+
+                # Create 2D coordinate grids
+                lon_2d, lat_2d = np.meshgrid(x_coords, y_coords)
+
+                # Create a simple coordinate dataset
+                source_grid = xr.Dataset({"latitude": (["y", "x"], lat_2d), "longitude": (["y", "x"], lon_2d)})
+
+                return source_grid
+            else:
+                msg = "Source data must have at least 2 dimensions for curvilinear regridding"
+                raise ValueError(msg)
 
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs for curvilinear regridding."""
@@ -585,9 +673,46 @@ class CurvilinearRegridder(BaseRegridder):
             msg = "target_grid must be an xarray Dataset"
             raise TypeError(msg)
 
-        if not self._identify_lat_coords(self.target_grid) or not self._identify_lon_coords(self.target_grid):
-            msg = "Target grid must have latitude and longitude coordinates"
-            raise ValueError(msg)
+        # For curvilinear regridders, we only need to validate that the target grid has latitude/longitude coordinates
+        # The source data can be passed without explicit lat/lon coordinates, as the grid information
+        # is handled separately in the _create_source_grid_from_data method
+        try:
+            # Use cf-xarray to identify latitude and longitude coordinates in target
+            if hasattr(self.target_grid, "cf"):
+                self.target_grid.cf["latitude"]
+                self.target_grid.cf["longitude"]
+            else:
+                # Fallback to manual search
+                lat_coords = [
+                    name
+                    for name in self.target_grid.coords
+                    if "lat" in str(name).lower() or "latitude" in str(name).lower()
+                ]
+                lon_coords = [
+                    name
+                    for name in self.target_grid.coords
+                    if "lon" in str(name).lower() or "longitude" in str(name).lower()
+                ]
+
+                if not lat_coords or not lon_coords:
+                    msg = "Target grid must have latitude and longitude coordinates"
+                    raise ValueError(msg)
+        except (KeyError, AttributeError):
+            # Fallback to manual search
+            lat_coords = [
+                name
+                for name in self.target_grid.coords
+                if "lat" in str(name).lower() or "latitude" in str(name).lower()
+            ]
+            lon_coords = [
+                name
+                for name in self.target_grid.coords
+                if "lon" in str(name).lower() or "longitude" in str(name).lower()
+            ]
+
+            if not lat_coords or not lon_coords:
+                msg = "Target grid must have latitude and longitude coordinates"
+                raise ValueError(msg)
 
     def to_file(self, filepath: str) -> None:
         """Save the regridder to a file.
