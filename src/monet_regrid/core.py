@@ -41,6 +41,7 @@ from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce
 from monet_regrid.utils import (
     _create_cache_key,
     format_for_regrid,
+    identify_cf_coordinates,
     validate_input,
 )
 
@@ -583,11 +584,17 @@ class CurvilinearRegridder(BaseRegridder):
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method"]}}
 
         # Create the CurvilinearInterpolator
-
+        source_grid = self._create_source_grid_from_data(input_data)
+        source_lat_name, source_lon_name = identify_cf_coordinates(source_grid)
+        target_lat_name, target_lon_name = identify_cf_coordinates(self.target_grid)
         # Create the interpolator with the source and target grids
         interpolator = CurvilinearInterpolator(
-            source_grid=self._create_source_grid_from_data(input_data),
+            source_grid=source_grid,
             target_grid=self.target_grid,
+            source_lat_name=source_lat_name,
+            source_lon_name=source_lon_name,
+            target_lat_name=target_lat_name,
+            target_lon_name=target_lon_name,
             method=method,
             **method_kwargs,
         )

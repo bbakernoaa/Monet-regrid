@@ -75,6 +75,10 @@ class CurvilinearInterpolator:
         self,
         source_grid: xr.Dataset,
         target_grid: xr.Dataset,
+        source_lat_name: str,
+        source_lon_name: str,
+        target_lat_name: str,
+        target_lon_name: str,
         method: Literal["nearest", "linear", "conservative", "bilinear", "cubic"] = "linear",
         spherical: bool = True,
         fill_method: Literal["nan", "nearest"] = "nan",
@@ -86,6 +90,10 @@ class CurvilinearInterpolator:
         Args:
             source_grid: Source grid specification with 2D coordinates
             target_grid: Target grid specification with 2D coordinates
+            source_lat_name: Name of the latitude coordinate in the source grid
+            source_lon_name: Name of the longitude coordinate in the source grid
+            target_lat_name: Name of the latitude coordinate in the target grid
+            target_lon_name: Name of the longitude coordinate in the target grid
             method: Interpolation method ('nearest', 'linear', 'conservative', 'bilinear', 'cubic')
             spherical: Whether to use spherical barycentrics (True) or planar (False)
             fill_method: How to handle out-of-domain targets ('nan' or 'nearest')
@@ -94,6 +102,10 @@ class CurvilinearInterpolator:
         """
         self.source_grid = source_grid
         self.target_grid = target_grid
+        self.source_lat_name = source_lat_name
+        self.source_lon_name = source_lon_name
+        self.target_lat_name = target_lat_name
+        self.target_lon_name = target_lon_name
         self.method = method
         self.spherical = spherical
         self.fill_method = fill_method
@@ -103,9 +115,6 @@ class CurvilinearInterpolator:
 
         # Initialize coordinate transformation
         self.coordinate_transformer = CoordinateTransformer("EPSG:4979", "EPSG:4978")
-
-        # Extract and validate coordinates
-        self._validate_coordinates()
 
         if method == "conservative":
             # Conservative regridding requires boundary coordinates
@@ -259,101 +268,6 @@ class CurvilinearInterpolator:
             return self.interpolation_engine.distances
         msg = f"'{self.__class__.__name__}' object has no attribute 'distances'"
         raise AttributeError(msg)
-
-    def _validate_coordinates(self) -> None:
-        """Validate that source and target grids have latitude and longitude coordinates."""
-        # Use cf-xarray to find latitude and longitude coordinates in source grid
-        try:
-            source_lat = self.source_grid.cf["latitude"]
-            source_lon = self.source_grid.cf["longitude"]
-            self.source_lat_name = source_lat.name
-            self.source_lon_name = source_lon.name
-        except KeyError:
-            # Fallback to manual search if cf-xarray fails
-            lat_coords = [
-                name
-                for name in self.source_grid.coords
-                if "lat" in str(name).lower() or "latitude" in str(name).lower()
-            ]
-            lon_coords = [
-                name
-                for name in self.source_grid.coords
-                if "lon" in str(name).lower() or "longitude" in str(name).lower()
-            ]
-
-            if not lat_coords or not lon_coords:
-                msg = "Source grid must have latitude and longitude coordinates"
-                raise ValueError(msg)
-
-            # Use the first found coordinate name
-            self.source_lat_name = lat_coords[0]
-            self.source_lon_name = lon_coords[0]
-
-        # Use cf-xarray to find latitude and longitude coordinates in target grid
-        try:
-            target_lat = self.target_grid.cf["latitude"]
-            target_lon = self.target_grid.cf["longitude"]
-            self.target_lat_name = target_lat.name
-            self.target_lon_name = target_lon.name
-        except KeyError:
-            # Fallback to manual search if cf-xarray fails
-            lat_coords = [
-                name
-                for name in self.target_grid.coords
-                if "lat" in str(name).lower() or "latitude" in str(name).lower()
-            ]
-            lon_coords = [
-                name
-                for name in self.target_grid.coords
-                if "lon" in str(name).lower() or "longitude" in str(name).lower()
-            ]
-
-            if not lat_coords or not lon_coords:
-                msg = "Target grid must have latitude and longitude coordinates"
-                raise ValueError(msg)
-
-            # Use the first found coordinate name
-            self.target_lat_name = lat_coords[0]
-            self.target_lon_name = lon_coords[0]
-
-        # Validate source coordinates - allow both 1D (rectilinear) and 2D (curvilinear)
-        source_lat_data = self.source_grid[self.source_lat_name]
-        source_lon_data = self.source_grid[self.source_lon_name]
-
-        # Allow both 1D (rectilinear) and 2D (curvilinear) coordinates for source
-        if source_lat_data.ndim not in [1, 2] or source_lon_data.ndim not in [1, 2]:
-            msg = f"Source coordinates must be 1D or 2D. Got lat={source_lat_data.ndim}D, lon={source_lon_data.ndim}D"
-            raise ValueError(
-                msg
-            )
-
-        if source_lat_data.ndim != source_lon_data.ndim:
-            msg = (
-                f"Source latitude and longitude coordinates must have same number of dimensions. "
-                f"Got lat={source_lat_data.ndim}D, lon={source_lon_data.ndim}D"
-            )
-            raise ValueError(
-                msg
-            )
-
-        target_lat_data = self.target_grid[self.target_lat_name]
-        target_lon_data = self.target_grid[self.target_lon_name]
-
-        # Allow both 1D (rectilinear) and 2D (curvilinear) for target, but they must match
-        if target_lat_data.ndim not in [1, 2] or target_lon_data.ndim not in [1, 2]:
-            msg = f"Target coordinates must be 1D or 2D. Got lat={target_lat_data.ndim}D, lon={target_lon_data.ndim}D"
-            raise ValueError(
-                msg
-            )
-
-        if target_lat_data.ndim != target_lon_data.ndim:
-            msg = (
-                f"Target latitude and longitude coordinates must have same number of dimensions. "
-                f"Got lat={target_lat_data.ndim}D, lon={target_lon_data.ndim}D"
-            )
-            raise ValueError(
-                msg
-            )
 
     def _transform_coordinates(self) -> None:
         """Transform geographic coordinates to 3D geocentric coordinates."""

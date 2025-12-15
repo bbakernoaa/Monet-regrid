@@ -760,3 +760,36 @@ def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = No
     dims_key = tuple(sorted(data.dims))
 
     return (coords_key, dims_key, time_dim)
+
+
+def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
+    """Identify latitude and longitude coordinates in a dataset using cf-xarray.
+
+    Args:
+        ds: Input xarray dataset
+
+    Returns:
+        Tuple of (latitude_name, longitude_name)
+
+    Raises:
+        ValueError: If latitude or longitude coordinates cannot be identified
+    """
+    try:
+        lat_name = ds.cf["latitude"].name
+    except KeyError:
+        try:
+            lat_name = ds.cf["lat"].name
+        except KeyError as e:
+            msg = f"Could not identify latitude coordinate: {e}"
+            raise ValueError(msg) from e
+
+    try:
+        lon_name = ds.cf["longitude"].name
+    except KeyError:
+        try:
+            lon_name = ds.cf["lon"].name
+        except KeyError as e:
+            msg = f"Could not identify longitude coordinate: {e}"
+            raise ValueError(msg) from e
+
+    return lat_name, lon_name

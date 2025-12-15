@@ -2,8 +2,7 @@
 
 import numpy as np
 import xarray as xr
-
-from monet_regrid.curvilinear import CurvilinearInterpolator
+import monet_regrid  # noqa: F401
 
 
 def create_projected_grid(nx, ny, x_range, y_range):
@@ -44,11 +43,17 @@ def test_bilinear_interpolation():
     # Data = a*X + b*Y
     # Since grid is rectilinear in X,Y, bilinear interpolation should be exact
     data_values = (sx + sy) / 1000.0  # Scale down
-    test_data = xr.DataArray(data_values, dims=["y", "x"])
+    test_data = xr.DataArray(
+        data_values,
+        dims=["y", "x"],
+        coords={
+            "latitude": (("y", "x"), source_grid.latitude.data),
+            "longitude": (("y", "x"), source_grid.longitude.data),
+        },
+    )
 
     # Interpolate
-    interpolator = CurvilinearInterpolator(source_grid, target_grid, method="bilinear")
-    result = interpolator(test_data)
+    result = test_data.regrid.bilinear(target_grid)
 
     # Check result
     expected = (tx + ty) / 1000.0
@@ -68,11 +73,17 @@ def test_cubic_interpolation():
     # Create test data (cubic in X and Y)
     # Data = (X/1000)^3 + (Y/1000)^3
     data_values = (sx / 10000.0) ** 3 + (sy / 10000.0) ** 3
-    test_data = xr.DataArray(data_values, dims=["y", "x"])
+    test_data = xr.DataArray(
+        data_values,
+        dims=["y", "x"],
+        coords={
+            "latitude": (("y", "x"), source_grid.latitude.data),
+            "longitude": (("y", "x"), source_grid.longitude.data),
+        },
+    )
 
     # Interpolate
-    interpolator = CurvilinearInterpolator(source_grid, target_grid, method="cubic")
-    result = interpolator(test_data)
+    result = test_data.regrid.cubic(target_grid)
 
     # Check result
     expected = (tx / 10000.0) ** 3 + (ty / 10000.0) ** 3

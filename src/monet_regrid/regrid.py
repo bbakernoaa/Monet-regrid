@@ -128,6 +128,7 @@ class Regridder:
         self,
         ds_target_grid: xr.Dataset,
         time_dim: str | None = "time",
+        **kwargs: Any,
     ) -> xr.DataArray | xr.Dataset:
         """Regrid to the coords of the target dataset with linear interpolation.
 
@@ -135,17 +136,19 @@ class Regridder:
             ds_target_grid: Dataset containing the target coordinates.
             time_dim: Name of the time dimension. Defaults to "time". Use `None` to
                 force regridding over the time dimension.
+            **kwargs: Additional keyword arguments to pass to the regridder.
 
         Returns:
             Data regridded to the target dataset coordinates.
         """
-        regridder = self._prepare_regridder(ds_target_grid, "linear", time_dim)
+        regridder = self._prepare_regridder(ds_target_grid, "linear", time_dim, **kwargs)
         return regridder()
 
     def nearest(
         self,
         ds_target_grid: xr.Dataset,
         time_dim: str | None = "time",
+        **kwargs: Any,
     ) -> xr.DataArray | xr.Dataset:
         """Regrid to the coords of the target with nearest-neighbor interpolation.
 
@@ -153,17 +156,39 @@ class Regridder:
             ds_target_grid: Dataset containing the target coordinates.
             time_dim: Name of the time dimension. Defaults to "time". Use `None` to
                 force regridding over the time dimension.
+            **kwargs: Additional keyword arguments to pass to the regridder.
 
         Returns:
             Data regridded to the target dataset coordinates.
         """
-        regridder = self._prepare_regridder(ds_target_grid, "nearest", time_dim)
+        regridder = self._prepare_regridder(ds_target_grid, "nearest", time_dim, **kwargs)
+        return regridder()
+
+    def bilinear(
+        self,
+        ds_target_grid: xr.Dataset,
+        time_dim: str | None = "time",
+        **kwargs: Any,
+    ) -> xr.DataArray | xr.Dataset:
+        """Regrid to the coords of the target dataset with bilinear interpolation.
+
+        Args:
+            ds_target_grid: Dataset containing the target coordinates.
+            time_dim: Name of the time dimension. Defaults to "time". Use `None` to
+                force regridding over the time dimension.
+            **kwargs: Additional keyword arguments to pass to the regridder.
+
+        Returns:
+            Data regridded to the target dataset coordinates.
+        """
+        regridder = self._prepare_regridder(ds_target_grid, "bilinear", time_dim, **kwargs)
         return regridder()
 
     def cubic(
         self,
         ds_target_grid: xr.Dataset,
         time_dim: str | None = "time",
+        **kwargs: Any,
     ) -> xr.DataArray | xr.Dataset:
         """Regrid to the coords of the target dataset with cubic interpolation.
 
@@ -171,11 +196,12 @@ class Regridder:
             ds_target_grid: Dataset containing the target coordinates.
             time_dim: Name of the time dimension. Defaults to "time". Use `None` to
                 force regridding over the time dimension.
+            **kwargs: Additional keyword arguments to pass to the regridder.
 
         Returns:
             Data regridded to the target dataset coordinates.
         """
-        regridder = self._prepare_regridder(ds_target_grid, "cubic", time_dim)
+        regridder = self._prepare_regridder(ds_target_grid, "cubic", time_dim, **kwargs)
         return regridder()
 
     def conservative(

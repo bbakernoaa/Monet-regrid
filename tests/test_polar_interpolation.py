@@ -5,11 +5,7 @@ import logging
 import numpy as np
 import xarray as xr
 
-from monet_regrid.curvilinear import CurvilinearInterpolator
-
-# REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: from monet_regrid.curvilinear import CurvilinearInterpolator
-# New import: from monet_regrid.curvilinear import CurvilinearInterpolator
+import monet_regrid
 
 
 def test_polar_interpolation_no_nan():
@@ -37,10 +33,7 @@ def test_polar_interpolation_no_nan():
     target_ds = xr.Dataset(coords={"lon": (("y", "x"), target_lon_2d), "lat": (("y", "x"), target_lat_2d)})
 
     # Perform bilinear interpolation
-    interpolator = CurvilinearInterpolator(source_grid=source_ds, target_grid=target_ds, method="linear")
-
-    # Interpolate the data
-    result = interpolator(source_ds["temperature"])
+    result = source_ds["temperature"].regrid.linear(target_ds)
 
     # Check that there are no NaN values in the polar regions
     # Specifically check the first and last latitude rows (closest to poles)
@@ -79,12 +72,7 @@ def test_polar_interpolation_with_nan_fill_method():
     target_ds = xr.Dataset(coords={"lon": (("y", "x"), target_lon_2d), "lat": (("y", "x"), target_lat_2d)})
 
     # Perform bilinear interpolation with nearest fill method
-    interpolator = CurvilinearInterpolator(
-        source_grid=source_ds, target_grid=target_ds, method="linear", fill_method="nearest"
-    )
-
-    # Interpolate the data
-    result = interpolator(source_ds["temperature"])
+    result = source_ds["temperature"].regrid.linear(target_ds, fill_method="nearest")
 
     # With fill_method='nearest', polar regions should have values (not NaN)
     # even when source has NaN values at the poles
