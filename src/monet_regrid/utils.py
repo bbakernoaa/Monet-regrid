@@ -771,22 +771,39 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
     Raises:
         ValueError: If latitude or longitude coordinates cannot be identified
     """
+    # Try standard CF names first
     try:
         lat_name = ds.cf["latitude"].name
     except KeyError:
         try:
             lat_name = ds.cf["lat"].name
-        except KeyError as e:
-            msg = f"Could not identify latitude coordinate: {e}"
-            raise ValueError(msg) from e
+        except KeyError:
+            # Fallback to common non-CF names
+            lat_candidates = [
+                name
+                for name in ds.coords
+                if any(keyword in str(name).lower() for keyword in ["latitude", "lat", "yc", "y"])
+            ]
+            if not lat_candidates:
+                msg = "Could not identify latitude coordinate"
+                raise ValueError(msg)
+            lat_name = lat_candidates[0]
 
     try:
         lon_name = ds.cf["longitude"].name
     except KeyError:
         try:
             lon_name = ds.cf["lon"].name
-        except KeyError as e:
-            msg = f"Could not identify longitude coordinate: {e}"
-            raise ValueError(msg) from e
+        except KeyError:
+            # Fallback to common non-CF names
+            lon_candidates = [
+                name
+                for name in ds.coords
+                if any(keyword in str(name).lower() for keyword in ["longitude", "lon", "xc", "x"])
+            ]
+            if not lon_candidates:
+                msg = "Could not identify longitude coordinate"
+                raise ValueError(msg)
+            lon_name = lon_candidates[0]
 
-    return lat_name, lon_name
+    return str(lat_name), str(lon_name)
