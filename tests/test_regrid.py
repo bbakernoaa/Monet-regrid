@@ -5,13 +5,38 @@ import numpy as np
 import xarray as xr
 from numpy.testing import assert_array_equal
 
+import monet_regrid  # noqa: F401
+
 
 try:
     import xesmf
 except ImportError:
     xesmf = None
 
+import pandas as pd
+
+
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
+
+
+def test_regrid_rectilinear_to_rectilinear_time_dim():
+    """Test that regridding works when the target grid has a time dimension."""
+    ds = xr.Dataset(
+        {"data": (("y", "x"), np.array([[1, 1], [1, 1]]))},
+        coords={"y": range(2), "x": range(2)},
+    )
+    ds_out = xr.Dataset(
+        coords={
+            "y": range(1),
+            "x": range(1),
+            "time": pd.to_datetime(["2024-07-26", "2024-07-27"]),
+        }
+    )
+
+    ds_regrid = ds.regrid.linear(ds_out)
+    assert "time" in ds_regrid.dims
+    assert len(ds_regrid.time) == 2
+    xr.testing.assert_allclose(ds_regrid["data"], xr.ones_like(ds_regrid["data"]))
 
 
 def test_regrid_rectilinear_to_rectilinear_most_common():

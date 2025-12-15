@@ -65,6 +65,13 @@ def interp_regrid(
     # Identify common coordinates
     coord_names = set(target_ds.coords).intersection(set(data.coords))
 
+    # Handle dimensions present in the target but not the source
+    missing_dims = set(target_ds.dims) - set(data.dims)
+    if missing_dims:
+        for dim in missing_dims:
+            if dim in target_ds.coords:
+                data = data.expand_dims({dim: target_ds[dim]})
+
     # If the input is a DataArray and we have compatible coordinates, try fast path
     if isinstance(data, xr.DataArray) and len(coord_names) > 0:
         # Check if coordinates are monotonic (required for RegularGridInterpolator)
