@@ -186,3 +186,38 @@ def test_curvilinear_regridder_coordinate_identification():
     assert regridder.source_lon_name == "lon"
     assert regridder.target_lat_name == "latitude"
     assert regridder.target_lon_name == "longitude"
+
+
+def test_rectilinear_to_curvilinear_regridding():
+    """Test regridding from a rectilinear source to a curvilinear target."""
+    # 1. Source Grid (Rectilinear)
+    source_ds = xr.Dataset(
+        {
+            "foo": (("lat", "lon"), np.random.rand(5, 10)),
+        },
+        coords={
+            "lat": np.linspace(30, 40, 5),
+            "lon": np.linspace(-120, -110, 10),
+        },
+    )
+
+    # 2. Target Grid (Curvilinear)
+    target_x, target_y = np.meshgrid(np.arange(3), np.arange(4))
+    target_lat = 32 + 0.5 * target_y
+    target_lon = -118 + 0.5 * target_x
+    target_grid = xr.Dataset(
+        {"latitude": (("y", "x"), target_lat), "longitude": (("y", "x"), target_lon)},
+    )
+
+    # 3. Perform regridding
+    result = source_ds["foo"].regrid.linear(target_grid)
+
+    # 4. Verification
+    # Check that the result has the expected shape of the target grid
+    assert result.shape == target_lat.shape
+
+    # Check that the coordinates of the result match the target grid
+    assert "latitude" in result.coords
+    assert "longitude" in result.coords
+    np.testing.assert_allclose(result.coords["latitude"], target_lat)
+    np.testing.assert_allclose(result.coords["longitude"], target_lon)
