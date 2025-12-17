@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import abc
 import pickle
-from collections.abc import Hashable
 from typing import Any
 
 import cf_xarray  # noqa: F401
@@ -120,12 +119,14 @@ class BaseRegridder(abc.ABC):
         try:
             self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
         except ValueError as e:
-            raise ValueError(f"Source data validation failed: {e}") from e
+            msg = f"Source data validation failed: {e}"
+            raise ValueError(msg) from e
 
         try:
             self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
         except ValueError as e:
-            raise ValueError(f"Target grid validation failed: {e}") from e
+            msg = f"Target grid validation failed: {e}"
+            raise ValueError(msg) from e
 
     def __getstate__(self) -> dict[str, Any]:
         """Prepare the regridder for serialization (Dask compatibility)."""

@@ -2,11 +2,11 @@ from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from typing import Any, TypedDict, overload
 
+import cf_xarray  # noqa: F401
 import numpy as np
 import pandas as pd
 import xarray as xr
 
-import cf_xarray  # noqa: F401
 from monet_regrid.constants import GridType
 
 """

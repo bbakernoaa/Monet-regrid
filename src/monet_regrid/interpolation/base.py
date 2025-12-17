@@ -87,6 +87,7 @@ except ImportError:
     compute_conservative_weights = None
 
 __all__ = [
+    "CKDTree",
     "HAS_NUMBA",
     "HAS_POLYGON_CLIPPING",
     "HAS_PYKDTREE",
@@ -94,7 +95,6 @@ __all__ = [
     "apply_weights_linear",
     "apply_weights_nearest",
     "apply_weights_structured",
-    "CKDTree",
     "compute_conservative_weights",
     "compute_structured_weights",
 ]

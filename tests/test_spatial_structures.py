@@ -1,6 +1,5 @@
-import pytest
-
 import numpy as np
+import pytest
 import xarray as xr
 
 """Unit tests for KDTree and ConvexHull spatial structures in curvilinear regridding.

@@ -11,13 +11,13 @@ import numpy as np
 from scipy.spatial import Delaunay  # type: ignore
 
 from monet_regrid.interpolation.base import (
+    CKDTree,
     HAS_NUMBA,
     HAS_POLYGON_CLIPPING,
     apply_weights_conservative,
     apply_weights_linear,
     apply_weights_nearest,
     apply_weights_structured,
-    CKDTree,
     compute_conservative_weights,
     compute_structured_weights,
 )

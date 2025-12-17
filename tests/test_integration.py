@@ -1,7 +1,5 @@
 """Integration tests for the complete monet-regrid rebranding pipeline."""
 
-import logging
-
 import numpy as np
 import xarray as xr
 
