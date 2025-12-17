@@ -143,7 +143,7 @@ class RectilinearRegridder(BaseRegridder):
         Args:
             source_data: The source data to be regridded (DataArray or Dataset)
             target_grid: The target grid specification as a Dataset
-            method: Interpolation method ('linear', 'nearest', 'cubic', 'conservative')
+            method: Interpolation method ('linear', 'nearest', 'cubic', 'conservative', 'neighbor-budget')
             time_dim: Name of the time dimension, or None to force regridding over time
             **kwargs: Additional method-specific arguments
         """
@@ -218,8 +218,15 @@ class RectilinearRegridder(BaseRegridder):
                 nan_threshold,
                 output_chunks,
             )
+        elif method == "neighbor-budget":
+            n_points = method_kwargs.get("n_points", 5)
+            return conservative.neighbor_budget_regrid(
+                formatted_data,
+                validated_target_grid,
+                n_points=n_points,
+            )
         else:
-            msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative"
+            msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative, neighbor-budget"
             raise ValueError(msg)
 
     def to_file(self, filepath: str) -> None:
