@@ -60,9 +60,15 @@ class BaseRegridder(abc.ABC):
             source_data: The source data to be regridded (DataArray or Dataset)
             target_grid: The target grid specification as a Dataset
         """
+        if not isinstance(source_data, (xr.DataArray, xr.Dataset)):
+            msg = "source_data must be an xarray DataArray or Dataset"
+            raise TypeError(msg)
+
+        if not isinstance(target_grid, xr.Dataset):
+            msg = "target_grid must be an xarray Dataset"
+            raise TypeError(msg)
         self.source_data = source_data
         self.target_grid = target_grid
-        self._validate_inputs()
 
     @abc.abstractmethod
     def __call__(self, **kwargs: Any) -> xr.DataArray | xr.Dataset:
@@ -106,27 +112,6 @@ class BaseRegridder(abc.ABC):
             Dictionary containing regridder metadata and configuration
         """
         pass
-
-    def _validate_inputs(self) -> None:
-        """Validate the source data and target grid inputs."""
-        if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
-            msg = "source_data must be an xarray DataArray or Dataset"
-            raise TypeError(msg)
-
-        if not isinstance(self.target_grid, xr.Dataset):
-            msg = "target_grid must be an xarray Dataset"
-            raise TypeError(msg)
-
-        # Use a centralized coordinate identification function
-        try:
-            self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
-        except ValueError as e:
-            raise ValueError(f"Source data validation failed: {e}") from e
-
-        try:
-            self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
-        except ValueError as e:
-            raise ValueError(f"Target grid validation failed: {e}") from e
 
     def __getstate__(self) -> dict[str, Any]:
         """Prepare the regridder for serialization (Dask compatibility)."""
@@ -217,7 +202,10 @@ class RectilinearRegridder(BaseRegridder):
             return interp.interp_regrid(formatted_data, validated_target_grid, method)
         elif method == "conservative":
             # Handle conservative regridding with its specific parameters
-            latitude_coord = method_kwargs.get("latitude_coord", None)
+            latitude_coord = method_kwargs.get("latitude_coord")
+            if latitude_coord is None:
+                latitude_coord, _ = identify_cf_coordinates(input_data)
+
             skipna = method_kwargs.get("skipna", True)
             nan_threshold = method_kwargs.get("nan_threshold", 1.0)
             output_chunks = method_kwargs.get("output_chunks", None)
@@ -467,16 +455,18 @@ class CurvilinearRegridder(BaseRegridder):
         method = kwargs.get("method", self.method)
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method"]}}
 
+        # Identify coordinate names once and pass them to the interpolator
+        source_lat_name, source_lon_name = identify_cf_coordinates(input_data)
+        target_lat_name, target_lon_name = identify_cf_coordinates(self.target_grid)
+
         # Create the interpolator with the source and target grids.
-        # The `input_data` contains the source grid coordinates. The names of these
-        # coordinates were identified in the `BaseRegridder`.
         interpolator = CurvilinearInterpolator(
             source_grid=input_data,
             target_grid=self.target_grid,
-            source_lat_name=self.source_lat_name,
-            source_lon_name=self.source_lon_name,
-            target_lat_name=self.target_lat_name,
-            target_lon_name=self.target_lon_name,
+            source_lat_name=source_lat_name,
+            source_lon_name=source_lon_name,
+            target_lat_name=target_lat_name,
+            target_lon_name=target_lon_name,
             method=method,
             **method_kwargs,
         )

@@ -1,6 +1,7 @@
 import numpy as np
 import xarray as xr
 import monet_regrid
+from unittest.mock import patch
 
 
 def test_curvilinear_interpolator_nearest_interpolation():
@@ -154,16 +155,13 @@ def test_curvilinear_interpolator_linear_interpolation():
     np.testing.assert_allclose(result.data, 5.0, rtol=1e-5)
 
 
-def test_curvilinear_regridder_coordinate_identification():
-    """Test that CurvilinearRegridder identifies coordinate names once."""
+@patch("monet_regrid.core.CurvilinearInterpolator")
+def test_curvilinear_regridder_coordinate_identification(mock_interpolator):
+    """Test that CurvilinearRegridder identifies and passes coordinate names correctly."""
     # Create source and target grids
     source_x, source_y = np.meshgrid(np.arange(5), np.arange(5))
     source_lat = 30 + 0.1 * source_y
     source_lon = -100 + 0.1 * source_x
-    source_grid = xr.Dataset(
-        {"lat": (["y", "x"], source_lat), "lon": (["y", "x"], source_lon)},
-        coords={"x": np.arange(5), "y": np.arange(5)},
-    )
     data = xr.DataArray(
         np.random.rand(5, 5),
         dims=["y", "x"],
@@ -178,14 +176,16 @@ def test_curvilinear_regridder_coordinate_identification():
         coords={"x_t": np.arange(3), "y_t": np.arange(3)},
     )
 
-    # Use the accessor to create the regridder
-    regridder = data.regrid.build_regridder(ds_target_grid=target_grid, method="linear")
+    # Use the accessor to perform regridding
+    data.regrid.linear(target_grid)
 
-    # Check that the regridder has correctly identified the coordinate names
-    assert regridder.source_lat_name == "lat"
-    assert regridder.source_lon_name == "lon"
-    assert regridder.target_lat_name == "latitude"
-    assert regridder.target_lon_name == "longitude"
+    # Check that the interpolator was called with the correct coordinate names
+    mock_interpolator.assert_called_once()
+    call_args, call_kwargs = mock_interpolator.call_args
+    assert call_kwargs.get("source_lat_name") == "lat"
+    assert call_kwargs.get("source_lon_name") == "lon"
+    assert call_kwargs.get("target_lat_name") == "latitude"
+    assert call_kwargs.get("target_lon_name") == "longitude"
 
 
 def test_rectilinear_to_curvilinear_regridding():
