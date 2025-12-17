@@ -1,6 +1,8 @@
 import numpy as np
 import xarray as xr
 
+import monet_regrid  # noqa: F401
+
 
 def test_curvilinear_interpolator_nearest_interpolation():
     """Test nearest neighbor interpolation."""

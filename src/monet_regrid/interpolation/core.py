@@ -17,7 +17,7 @@ from monet_regrid.interpolation.base import (
     apply_weights_linear,
     apply_weights_nearest,
     apply_weights_structured,
-    cKDTree,
+    CKDTree,
     compute_conservative_weights,
     compute_structured_weights,
 )
@@ -48,8 +48,8 @@ class InterpolationEngine:
         self.extrapolate = extrapolate
 
         # Interpolation structures
-        self.source_kdtree: cKDTree | None = None
-        self.target_kdtree: cKDTree | None = None
+        self.source_kdtree: CKDTree | None = None
+        self.target_kdtree: CKDTree | None = None
         self.triangles: Delaunay | None = None
         self.barycentric_weights: np.ndarray | None = None
         self.source_indices: np.ndarray | None = None
@@ -122,7 +122,7 @@ class InterpolationEngine:
             raise ImportError(msg)
 
         # 1. Build KDTree on source centers to find candidates
-        self.source_kdtree = cKDTree(source_centers_3d)
+        self.source_kdtree = CKDTree(source_centers_3d)
 
         # 2. Query KDTree to find potential source cells for each target cell
         if radius_of_influence is None:
@@ -178,7 +178,7 @@ class InterpolationEngine:
             raise ImportError(msg)
 
         # 1. Build KDTree on source points (centers/nodes)
-        self.source_kdtree = cKDTree(source_points_3d)
+        self.source_kdtree = CKDTree(source_points_3d)
 
         # 2. Find nearest neighbor for each target point
         _, nearest_indices = self.source_kdtree.query(target_points_3d, k=1)
@@ -207,7 +207,7 @@ class InterpolationEngine:
     ) -> None:
         """Build KDTree for nearest neighbor interpolation."""
         # Create KDTree from source points in 3D space
-        self.source_kdtree = cKDTree(source_points_3d)
+        self.source_kdtree = CKDTree(source_points_3d)
 
         # For nearest neighbor, we just need to query the tree
         # Find nearest source point for each target point
@@ -243,21 +243,25 @@ class InterpolationEngine:
         except Exception as e:
             if len(source_points_3d) > 4:
                 warnings.warn(
-                    f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor.", stacklevel=2
+                    (
+                        "Could not build Delaunay triangulation for"
+                        f" linear interpolation: {e}. Falling back to nearest neighbor."
+                    ),
+                    stacklevel=2,
                 )
             self.method = "nearest"
             self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)
             return
 
         # Build KDTree for source points to enable nearest neighbor fallback
-        self.source_kdtree = cKDTree(source_points_3d)
+        self.source_kdtree = CKDTree(source_points_3d)
 
         # Set distance_threshold
         if radius_of_influence is not None:
             self.distance_threshold = float(radius_of_influence)
 
         # Build KDTree for target points to find closest triangles
-        self.target_kdtree = cKDTree(target_points_3d)
+        self.target_kdtree = CKDTree(target_points_3d)
 
         # Precompute barycentric coordinates for target points
         self._precompute_barycentric_weights(target_points_3d, source_points_3d)
@@ -398,7 +402,8 @@ class InterpolationEngine:
 
         # Determine number of targets - this info is not explicitly in the sparse arrays
         # We need to know it from context or store it.
-        # We can infer it from the target_indices max, but that might be smaller than actual targets if last ones are empty.
+        # We can infer it from the target_indices max, but that might be smaller than actual
+        # targets if last ones are empty.
         # We should store n_targets in precomputed_weights or pass it.
         # For now, let's look at self.target_points_3d if available.
         if self.target_points_3d is not None:

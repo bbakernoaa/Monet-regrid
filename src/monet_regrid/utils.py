@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+import cf_xarray  # noqa: F401
+from monet_regrid.constants import GridType
+
 """
 This file is part of monet-regrid.
 
@@ -28,10 +31,6 @@ limitations under the License.
 Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
-
-import cf_xarray  # noqa: F401
-
-from monet_regrid.constants import GridType
 
 
 class InvalidBoundsError(Exception): ...

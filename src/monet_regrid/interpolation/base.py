@@ -18,7 +18,7 @@ except ImportError:
 
 if HAS_PYKDTREE:
 
-    class cKDTree:
+    class CKDTree:
         """Adapter for pykdtree to mimic scipy.spatial.cKDTree."""
 
         def __init__(self, data, leafsize=10):
@@ -41,7 +41,7 @@ if HAS_PYKDTREE:
         def data(self):
             return self._data
 
-        def query(self, x, k=1, distance_upper_bound=np.inf, workers=1):
+        def query(self, x, k=1, distance_upper_bound=np.inf, workers=1):  # noqa: ARG002
             x = np.asarray(x)
             is_1d = x.ndim == 1
             if is_1d:
@@ -57,7 +57,7 @@ if HAS_PYKDTREE:
                     return d[0], i[0]
             return d, i
 else:
-    from scipy.spatial import cKDTree  # type: ignore
+    from scipy.spatial import cKDTree as CKDTree  # type: ignore
 
 try:
     from monet_regrid.methods._numba_kernels import (
@@ -94,7 +94,7 @@ __all__ = [
     "apply_weights_linear",
     "apply_weights_nearest",
     "apply_weights_structured",
-    "cKDTree",
+    "CKDTree",
     "compute_conservative_weights",
     "compute_structured_weights",
 ]

@@ -264,7 +264,7 @@ class RectilinearRegridder(BaseRegridder):
         """
 
         with open(filepath, "rb") as f:
-            config = pickle.load(f)
+            config = pickle.load(f)  # noqa: S301
 
         return cls(
             source_data=config["source_data"],
@@ -516,7 +516,7 @@ class CurvilinearRegridder(BaseRegridder):
         """
 
         with open(filepath, "rb") as f:
-            config = pickle.load(f)
+            config = pickle.load(f)  # noqa: S301
 
         return cls(
             source_data=config["source_data"],

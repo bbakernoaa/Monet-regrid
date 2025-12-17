@@ -1,12 +1,13 @@
 import pytest
 
+import numpy as np
+import xarray as xr
+
 """Unit tests for KDTree and ConvexHull spatial structures in curvilinear regridding.
 
 This module tests the spatial indexing, nearest neighbor queries, and triangulation
 structures used for efficient interpolation in 3D space.
 """
-import numpy as np
-import xarray as xr
 
 
 @pytest.mark.filterwarnings("ignore:Conversion of an array with ndim > 0 to a scalar is deprecated:DeprecationWarning")

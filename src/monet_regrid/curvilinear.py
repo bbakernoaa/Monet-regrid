@@ -393,7 +393,7 @@ class CurvilinearInterpolator:
                             lat_b_flat = lat_b.reshape(n_cells, 4)
                             lon_b_flat = lon_b.reshape(n_cells, 4)
                             return np.stack([lon_b_flat, lat_b_flat], axis=2)
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
 
                 msg = (

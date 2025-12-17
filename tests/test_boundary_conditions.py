@@ -1,6 +1,5 @@
-import pytest
-
 import numpy as np
+import pytest
 import xarray as xr
 
 """Boundary condition tests for curvilinear regridding edge cases.
