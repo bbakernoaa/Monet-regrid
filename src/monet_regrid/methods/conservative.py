@@ -124,6 +124,69 @@ def conservative_regrid(
     return regridded_data
 
 
+def neighbor_budget_regrid(
+    data: xr.DataArray | xr.Dataset,
+    target_ds: xr.Dataset,
+    n_points: int = 5,
+) -> xr.DataArray | xr.Dataset:
+    """Regrid data using the neighbor-budget method.
+
+    This method provides a conservative-style regridding suitable for continuous
+    data. It operates by sampling a grid of `n_points` x `n_points` within each
+    target grid cell, performing a nearest-neighbor lookup for each sample
+    point on the source grid, and then averaging the results. This approach can
+    better preserve sharp gradients in the source data compared to bilinear
+    interpolation, but it is not suitable for categorical fields, as the
+    final step is a mean operation.
+
+    Args:
+        data: Input dataset with continuous data.
+        target_ds: Dataset with coordinates to regrid to.
+        n_points: The number of sample points to use in each dimension for each
+            target grid cell. The total number of sample points per cell is
+            `n_points` * `n_points`.
+
+    Returns:
+        Regridded input dataset.
+    """
+    coord_names = [coord for coord in target_ds.coords if coord in data.coords]
+
+    fine_coords = {}
+    coarsen_dims = {}
+
+    for coord_name in coord_names:
+        target_coords = target_ds[coord_name].values
+        target_bounds = utils.to_intervalindex(target_coords)
+
+        lefts = target_bounds.left
+        rights = target_bounds.right
+        widths = rights - lefts
+        step = widths / n_points
+
+        fine_coord_list = []
+        for i in range(len(lefts)):
+            # Generate n_points within each interval
+            fine_coord_list.append(lefts[i] + (np.arange(n_points) + 0.5) * step[i])
+
+        fine_coords[coord_name] = np.concatenate(fine_coord_list)
+        coarsen_dims[coord_name] = n_points
+
+    # Interpolate to the fine grid using nearest neighbor
+    data_fine = data.interp(coords=fine_coords, method="nearest")
+
+    # Coarsen the result back to the target grid
+    # The coarsen operation will average the n_points x n_points samples
+    regridded_data = data_fine.coarsen(**coarsen_dims, boundary="pad").mean()
+
+    # The coordinates of the coarsened data should match the target grid centers,
+    # but we'll assign them explicitly to be safe.
+    regridded_data = regridded_data.assign_coords(
+        {name: target_ds[name] for name in coord_names}
+    )
+
+    return regridded_data
+
+
 def conservative_regrid_dataset(
     data: xr.Dataset,
     coords: dict[Hashable, xr.DataArray],
