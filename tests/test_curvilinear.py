@@ -1,6 +1,5 @@
 import numpy as np
 import xarray as xr
-import monet_regrid
 
 
 def test_curvilinear_interpolator_nearest_interpolation():
@@ -13,8 +12,6 @@ def test_curvilinear_interpolator_nearest_interpolation():
     target_x, target_y = np.meshgrid(np.linspace(0, 4, 3), np.linspace(0, 5, 4))
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
-
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -47,8 +44,6 @@ def test_curvilinear_interpolator_nearest_interpolation_with_time():
     target_x, target_y = np.meshgrid(np.linspace(0, 2, 2), np.linspace(0, 3, 3))
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
-
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -88,8 +83,6 @@ def test_curvilinear_interpolator_dataset_interpolation():
     target_x, target_y = np.meshgrid(np.linspace(0, 2, 2), np.linspace(0, 2, 2))
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
-
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -131,8 +124,6 @@ def test_curvilinear_interpolator_linear_interpolation():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
-
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
     )
@@ -160,10 +151,6 @@ def test_curvilinear_regridder_coordinate_identification():
     source_x, source_y = np.meshgrid(np.arange(5), np.arange(5))
     source_lat = 30 + 0.1 * source_y
     source_lon = -100 + 0.1 * source_x
-    source_grid = xr.Dataset(
-        {"lat": (["y", "x"], source_lat), "lon": (["y", "x"], source_lon)},
-        coords={"x": np.arange(5), "y": np.arange(5)},
-    )
     data = xr.DataArray(
         np.random.rand(5, 5),
         dims=["y", "x"],

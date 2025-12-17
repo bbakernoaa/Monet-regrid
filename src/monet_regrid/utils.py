@@ -511,7 +511,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                 msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
                 raise ValueError(msg)
 
-        except KeyError:
+        except KeyError as e:
             # Fallback to manual search for coordinate names and check their dimensions
             # Look for coordinates that represent latitude/longitude regardless of name
             lat_coord_names = [
@@ -535,7 +535,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                     msg = (
                         f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
                     )
-                    raise ValueError(msg)
+                    raise ValueError(msg) from e
 
                 # Determine grid type based on dimensionality
                 if lat_ndim == 1:
@@ -544,7 +544,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                     return GridType.CURVILINEAR
                 else:
                     msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
-                    raise ValueError(msg)
+                    raise ValueError(msg) from e
             else:
                 # If we don't have lat/lon or x/y named coordinates, try to identify coordinates by their dimensions
                 # Look for coordinates that have 2 dimensions (which would indicate curvilinear)
@@ -592,7 +592,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                         return GridType.CURVILINEAR
                     else:
                         msg = f"Coordinates found but not both 2D: lat={lat_coord.ndim}D, lon={lon_coord.ndim}D"
-                        raise ValueError(msg)
+                        raise ValueError(msg) from e
                 else:
                     # If we still can't find them, try to find any 1D coordinates that look like lat/lon
                     for coord_name in ds.coords:
@@ -621,15 +621,15 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                                     return GridType.RECTILINEAR
 
                     msg = "No latitude or longitude coordinates found"
-                    raise ValueError(msg)
+                    raise ValueError(msg) from e
 
     except (KeyError, ValueError) as e:
         msg = f"Could not identify coordinate: {e}"
         raise ValueError(msg) from e
-    except AttributeError:
+    except AttributeError as e:
         # cf-xarray might not be available or coordinates not properly defined
         msg = "cf-xarray coordinate detection failed - coordinates not properly defined"
-        raise ValueError(msg)
+        raise ValueError(msg) from e
 
 
 def validate_grid_compatibility(source_ds: xr.Dataset, target_ds: xr.Dataset) -> tuple[GridType, GridType]:
@@ -679,7 +679,7 @@ def validate_input(
 def validate_input(
     data: xr.DataArray | xr.Dataset,
     ds_target_grid: xr.Dataset,
-    time_dim: str | None,
+    time_dim: str | None,  # noqa: ARG001
 ) -> xr.Dataset:
     # Check for coordinate compatibility using semantic matching instead of exact name matching
     # This allows latitude/longitude to match with lat/lon, etc.
@@ -774,7 +774,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
     # Try standard CF names first
     try:
         lat_name = ds.cf["latitude"].name
-    except KeyError:
+    except KeyError as e:
         try:
             lat_name = ds.cf["lat"].name
         except KeyError:
@@ -786,12 +786,12 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
             ]
             if not lat_candidates:
                 msg = "Could not identify latitude coordinate"
-                raise ValueError(msg)
+                raise ValueError(msg) from e
             lat_name = lat_candidates[0]
 
     try:
         lon_name = ds.cf["longitude"].name
-    except KeyError:
+    except KeyError as e:
         try:
             lon_name = ds.cf["lon"].name
         except KeyError:
@@ -803,7 +803,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
             ]
             if not lon_candidates:
                 msg = "Could not identify longitude coordinate"
-                raise ValueError(msg)
+                raise ValueError(msg) from e
             lon_name = lon_candidates[0]
 
     return str(lat_name), str(lon_name)

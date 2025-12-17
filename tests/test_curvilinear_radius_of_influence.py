@@ -3,6 +3,7 @@
 
 import numpy as np
 import xarray as xr
+
 import monet_regrid  # noqa: F401
 
 
@@ -11,8 +12,6 @@ def test_curvilinear_nearest_with_radius_of_influence():
     # Create a source grid
     source_lat = np.array([[0.0, 1.0], [0.0, 1.0]])
     source_lon = np.array([[-1.0, 0.0], [-1.0, 0.0]])
-
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     # Create a target grid
     target_lat = np.array([[0.5, 1.5], [0.5, 1.5]])

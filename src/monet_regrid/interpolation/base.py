@@ -57,7 +57,7 @@ if HAS_PYKDTREE:
                     return d[0], i[0]
             return d, i
 else:
-    from scipy.spatial import cKDTree  # type: ignore # noqa: F401
+    from scipy.spatial import cKDTree  # type: ignore
 
 try:
     from monet_regrid.methods._numba_kernels import (

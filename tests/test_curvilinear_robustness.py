@@ -1,5 +1,6 @@
 import numpy as np
 import xarray as xr
+
 import monet_regrid  # noqa: F401
 
 
@@ -61,8 +62,6 @@ def test_curvilinear_scaling_recovery():
     lon = np.linspace(0, 360, nx, endpoint=False)
     lat = np.linspace(-90, 90, ny)
     lon_2d, lat_2d = np.meshgrid(lon, lat)
-
-    source_ds = xr.Dataset(coords={"lon": (("y", "x"), lon_2d), "lat": (("y", "x"), lat_2d)})
 
     # Target points exactly in between source points on the sphere surface
     # These will definitely be "outside" the planar facets of the source convex hull
