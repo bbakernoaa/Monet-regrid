@@ -1,7 +1,9 @@
+from unittest.mock import patch
+
 import numpy as np
 import xarray as xr
+
 import monet_regrid
-from unittest.mock import patch
 
 
 def test_curvilinear_interpolator_nearest_interpolation():
@@ -15,7 +17,7 @@ def test_curvilinear_interpolator_nearest_interpolation():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -49,7 +51,7 @@ def test_curvilinear_interpolator_nearest_interpolation_with_time():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -90,7 +92,7 @@ def test_curvilinear_interpolator_dataset_interpolation():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -132,7 +134,7 @@ def test_curvilinear_interpolator_linear_interpolation():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -181,7 +183,7 @@ def test_curvilinear_regridder_coordinate_identification(mock_interpolator):
 
     # Check that the interpolator was called with the correct coordinate names
     mock_interpolator.assert_called_once()
-    call_args, call_kwargs = mock_interpolator.call_args
+    _, call_kwargs = mock_interpolator.call_args
     assert call_kwargs.get("source_lat_name") == "lat"
     assert call_kwargs.get("source_lon_name") == "lon"
     assert call_kwargs.get("target_lat_name") == "latitude"

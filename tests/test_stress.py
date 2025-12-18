@@ -24,7 +24,7 @@ def test_high_resolution_stress_dask():
     source_lat = 30 + 0.05 * source_x
     source_lon = -100 + 0.05 * source_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     # Create target grid
     target_ny, target_nx = 2000, 2000

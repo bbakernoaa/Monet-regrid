@@ -8,6 +8,7 @@ grid types, and challenging scenarios for comprehensive testing.
 # All imports have been updated from monet_regrid to monet_regrid.
 
 
+import logging
 import numpy as np
 import xarray as xr
 from scipy.ndimage import gaussian_filter
