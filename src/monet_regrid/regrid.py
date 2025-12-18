@@ -76,7 +76,7 @@ class Regridder:
             target_grid_type = GridType.RECTILINEAR
 
         if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
-            validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
+            validated_target_grid = validate_input(self._obj, ds_target_grid)
         else:
             validated_target_grid = ds_target_grid
 
@@ -283,7 +283,7 @@ class Regridder:
         Returns:
             Regridded data.
         """
-        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
+        validated_target_grid = validate_input(self._obj, ds_target_grid)
         regridder = RectilinearRegridder(
             source_data=self._obj,
             target_grid=validated_target_grid,
@@ -324,7 +324,7 @@ class Regridder:
         Returns:
             Regridded data.
         """
-        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
+        validated_target_grid = validate_input(self._obj, ds_target_grid)
         regridder = RectilinearRegridder(
             source_data=self._obj,
             target_grid=validated_target_grid,
@@ -361,7 +361,7 @@ class Regridder:
         Returns:
             xarray.dataset with regridded land cover categorical data.
         """
-        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
+        validated_target_grid = validate_input(self._obj, ds_target_grid)
         regridder = RectilinearRegridder(
             source_data=self._obj,
             target_grid=validated_target_grid,

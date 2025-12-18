@@ -664,7 +664,6 @@ def validate_grid_compatibility(source_ds: xr.Dataset, target_ds: xr.Dataset) ->
 def validate_input(
     data: xr.Dataset,
     ds_target_grid: xr.Dataset,
-    time_dim: str | None,
 ) -> xr.Dataset: ...
 
 
@@ -672,14 +671,12 @@ def validate_input(
 def validate_input(
     data: xr.DataArray,
     ds_target_grid: xr.Dataset,
-    time_dim: str | None,
 ) -> xr.Dataset: ...
 
 
 def validate_input(
     data: xr.DataArray | xr.Dataset,
     ds_target_grid: xr.Dataset,
-    time_dim: str | None,
 ) -> xr.Dataset:
     # Check for coordinate compatibility using semantic matching instead of exact name matching
     # This allows latitude/longitude to match with lat/lon, etc.
