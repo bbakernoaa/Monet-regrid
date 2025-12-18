@@ -184,7 +184,7 @@ class RectilinearRegridder(BaseRegridder):
             validated_target_grid = self._validation_cache[cache_key]
         else:
             # Validate inputs
-            validated_target_grid = validate_input(input_data, self.target_grid, time_dim)
+            validated_target_grid = validate_input(input_data, self.target_grid)
             # Cache the validated target grid
             self._validation_cache[cache_key] = validated_target_grid
 
