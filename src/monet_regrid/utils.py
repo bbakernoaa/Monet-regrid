@@ -28,9 +28,7 @@ limitations under the License.
 Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
-
 import cf_xarray  # noqa: F401
-
 from monet_regrid.constants import GridType
 
 
@@ -511,7 +509,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                 msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
                 raise ValueError(msg)
 
-        except KeyError:
+        except KeyError as e:
             # Fallback to manual search for coordinate names and check their dimensions
             # Look for coordinates that represent latitude/longitude regardless of name
             lat_coord_names = [
@@ -626,10 +624,10 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
     except (KeyError, ValueError) as e:
         msg = f"Could not identify coordinate: {e}"
         raise ValueError(msg) from e
-    except AttributeError:
+    except AttributeError as e:
         # cf-xarray might not be available or coordinates not properly defined
         msg = "cf-xarray coordinate detection failed - coordinates not properly defined"
-        raise ValueError(msg)
+        raise ValueError(msg) from e
 
 
 def validate_grid_compatibility(source_ds: xr.Dataset, target_ds: xr.Dataset) -> tuple[GridType, GridType]:
@@ -771,10 +769,10 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
     # Try standard CF names first
     try:
         lat_name = ds.cf["latitude"].name
-    except KeyError:
+    except KeyError as e:
         try:
             lat_name = ds.cf["lat"].name
-        except KeyError:
+        except KeyError as e:
             # Fallback to common non-CF names
             lat_candidates = [
                 name
@@ -783,15 +781,15 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
             ]
             if not lat_candidates:
                 msg = "Could not identify latitude coordinate"
-                raise ValueError(msg)
+                raise ValueError(msg) from e
             lat_name = lat_candidates[0]
 
     try:
         lon_name = ds.cf["longitude"].name
-    except KeyError:
+    except KeyError as e:
         try:
             lon_name = ds.cf["lon"].name
-        except KeyError:
+        except KeyError as e:
             # Fallback to common non-CF names
             lon_candidates = [
                 name
@@ -800,7 +798,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
             ]
             if not lon_candidates:
                 msg = "Could not identify longitude coordinate"
-                raise ValueError(msg)
+                raise ValueError(msg) from e
             lon_name = lon_candidates[0]
 
     return str(lat_name), str(lon_name)

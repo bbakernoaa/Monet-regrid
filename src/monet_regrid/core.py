@@ -34,7 +34,6 @@ import cf_xarray  # noqa: F401
 import numpy as np
 import xarray as xr
 
-
 from monet_regrid.curvilinear import CurvilinearInterpolator
 from monet_regrid.methods import conservative, interp
 from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce

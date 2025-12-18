@@ -31,10 +31,10 @@ def _point_in_tetrahedron(point: np.ndarray, tetra_vertices: np.ndarray) -> bool
 def _compute_barycentric_weights_3d(point: np.ndarray, tetra_vertices: np.ndarray) -> np.ndarray | None:
     """Compute barycentric weights for a point in a 3D tetrahedron."""
     # Using the matrix inversion method
-    T = np.vstack((tetra_vertices.T, np.ones(4)))
+    t = np.vstack((tetra_vertices.T, np.ones(4)))
     p = np.append(point, 1)
     try:
-        weights = np.linalg.solve(T, p)
+        weights = np.linalg.solve(t, p)
         return weights
     except np.linalg.LinAlgError:
         # Singular matrix, likely degenerate tetrahedron

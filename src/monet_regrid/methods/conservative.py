@@ -33,7 +33,6 @@ limitations under the License.
 Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
-
 from monet_regrid import utils
 
 
