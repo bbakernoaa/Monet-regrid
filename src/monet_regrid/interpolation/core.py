@@ -398,7 +398,8 @@ class InterpolationEngine:
 
         # Determine number of targets - this info is not explicitly in the sparse arrays
         # We need to know it from context or store it.
-        # We can infer it from the target_indices max, but that might be smaller than actual targets if last ones are empty.
+        # We can infer it from the target_indices max, but that might be smaller
+        # than actual targets if last ones are empty.
         # We should store n_targets in precomputed_weights or pass it.
         # For now, let's look at self.target_points_3d if available.
         if self.target_points_3d is not None:

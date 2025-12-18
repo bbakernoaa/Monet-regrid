@@ -68,8 +68,8 @@ def apply_weights_linear(
                 # Check for NaNs in source data
                 if np.isnan(val0) or np.isnan(val1) or np.isnan(val2) or np.isnan(val3):
                     # If any vertex is NaN, result is NaN (unless we want to implement fallback here)
-                    # The original implementation had a complex fallback here which is hard to replicate exactly in Numba
-                    # efficiently without passing more data (KDTree etc).
+                    # The original implementation had a complex fallback here which is hard to
+                    # replicate exactly in Numba efficiently without passing more data (KDTree etc).
                     # For now, we leave as NaN to be consistent with standard linear interp behavior,
                     # or users can fillna() before regridding.
 
@@ -218,33 +218,33 @@ def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
         # p_est = (1-u)(1-v)v1 + u(1-v)v2 + uvv3 + (1-u)v v4
         #       = v1 + u(v2-v1) + v(v4-v1) + uv(v1-v2+v3-v4)
 
-        A = v1
-        B = v2 - v1
-        C = v4 - v1
-        D = v1 - v2 + v3 - v4
+        a = v1
+        b = v2 - v1
+        c = v4 - v1
+        d = v1 - v2 + v3 - v4
 
-        p_est = A + u * B + v * C + u * v * D
+        p_est = a + u * b + v * c + u * v * d
         resid = p_est - p
 
         if np.dot(resid, resid) < tol**2:
             break
 
         # Jacobian
-        # dP/du = B + vD
-        # dP/dv = C + uD
-        J00 = B[0] + v * D[0]
-        J01 = C[0] + u * D[0]
-        J10 = B[1] + v * D[1]
-        J11 = C[1] + u * D[1]
+        # dP/du = b + vd
+        # dP/dv = c + ud
+        j00 = b[0] + v * d[0]
+        j01 = c[0] + u * d[0]
+        j10 = b[1] + v * d[1]
+        j11 = c[1] + u * d[1]
 
-        det = J00 * J11 - J01 * J10
+        det = j00 * j11 - j01 * j10
 
         if abs(det) < 1e-12:
             break  # Singular, degenerate quad
 
         inv_det = 1.0 / det
-        du = (J11 * resid[0] - J01 * resid[1]) * inv_det
-        dv = (J00 * resid[1] - J10 * resid[0]) * inv_det
+        du = (j11 * resid[0] - j01 * resid[1]) * inv_det
+        dv = (j00 * resid[1] - j10 * resid[0]) * inv_det
 
         u -= du
         v -= dv
