@@ -28,7 +28,7 @@ dependencies = [
   "scipy",
   "pyproj",
   "cf-xarray",
-  "pooch",
+  "pooch>=1.8.2",
   "cftime",
 ]
 
@@ -55,7 +55,7 @@ benchmarking = [
   "h5netcdf",
   "requests",
   "aiohttp",
-  "pooch",
+  "pooch>=1.8.2",
   "cftime",  # required for decode time of test netCDF files
 ]
 dev = [
