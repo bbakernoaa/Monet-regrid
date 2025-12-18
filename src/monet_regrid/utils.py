@@ -29,6 +29,7 @@ Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
 import cf_xarray  # noqa: F401
+
 from monet_regrid.constants import GridType
 
 
@@ -509,7 +510,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                 msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
                 raise ValueError(msg)
 
-        except KeyError as e:
+        except KeyError:
             # Fallback to manual search for coordinate names and check their dimensions
             # Look for coordinates that represent latitude/longitude regardless of name
             lat_coord_names = [
@@ -769,7 +770,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
     # Try standard CF names first
     try:
         lat_name = ds.cf["latitude"].name
-    except KeyError as e:
+    except KeyError:
         try:
             lat_name = ds.cf["lat"].name
         except KeyError as e:
@@ -786,7 +787,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
 
     try:
         lon_name = ds.cf["longitude"].name
-    except KeyError as e:
+    except KeyError:
         try:
             lon_name = ds.cf["lon"].name
         except KeyError as e:
