@@ -2,6 +2,7 @@
 
 import numpy as np
 import xarray as xr
+
 import monet_regrid  # noqa: F401
 
 
@@ -16,7 +17,7 @@ def test_nan_handling_in_source_data_nearest():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -54,7 +55,7 @@ def test_nan_handling_in_source_data_linear():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}

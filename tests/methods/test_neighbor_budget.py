@@ -1,6 +1,6 @@
 import numpy as np
-import xarray as xr
 import pytest
+import xarray as xr
 
 from monet_regrid.methods.conservative import neighbor_budget_regrid
 
