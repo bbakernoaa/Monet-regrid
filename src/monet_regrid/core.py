@@ -34,6 +34,7 @@ import cf_xarray  # noqa: F401
 import numpy as np
 import xarray as xr
 
+from monet_regrid import io
 from monet_regrid.curvilinear import CurvilinearInterpolator
 from monet_regrid.methods import conservative, interp
 from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce
@@ -84,6 +85,15 @@ class BaseRegridder(abc.ABC):
     @abc.abstractmethod
     def to_file(self, filepath: str) -> None:
         """Save the regridder to a file.
+
+        Args:
+            filepath: Path to save the regridder
+        """
+        pass
+
+    @abc.abstractmethod
+    def to_netcdf(self, filepath: str) -> None:
+        """Save the regridder to a netCDF file.
 
         Args:
             filepath: Path to save the regridder
@@ -246,6 +256,25 @@ class RectilinearRegridder(BaseRegridder):
 
         with open(filepath, "wb") as f:
             pickle.dump(config, f)
+
+    def to_netcdf(self, filepath: str) -> None:
+        """Save the regridder to a netCDF file.
+
+        Args:
+            filepath: Path to save the regridder
+        """
+        io._regridder_to_netcdf(self, filepath)
+
+    @classmethod
+    def from_netcdf(cls, filepath: str) -> RectilinearRegridder:
+        """Load a regridder from a file.
+        Args:
+            filepath: Path to load the regridder from
+        Returns:
+            Instance of RectilinearRegridder
+        """
+        regridder_config = io._regridder_from_netcdf(filepath)
+        return cls(**regridder_config)
 
     @classmethod
     def from_file(cls, filepath: str) -> RectilinearRegridder:
@@ -500,6 +529,27 @@ class CurvilinearRegridder(BaseRegridder):
 
         with open(filepath, "wb") as f:
             pickle.dump(config, f)
+
+    def to_netcdf(self, filepath: str) -> None:
+        """Save the regridder to a netCDF file.
+
+        Args:
+            filepath: Path to save the regridder
+        """
+        io._regridder_to_netcdf(self, filepath)
+
+    @classmethod
+    def from_netcdf(cls, filepath: str) -> CurvilinearRegridder:
+        """Load a regridder from a file.
+
+        Args:
+            filepath: Path to load the regridder from
+
+        Returns:
+            Instance of CurvilinearRegridder
+        """
+        regridder_config = io._regridder_from_netcdf(filepath)
+        return cls(**regridder_config)
 
     @classmethod
     def from_file(cls, filepath: str) -> CurvilinearRegridder:
