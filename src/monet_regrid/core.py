@@ -5,7 +5,7 @@ This file is part of monet-regrid.
 
 monet-regrid is a derivative work of xarray-regrid.
 Original work Copyright (c) 2023-2025 Bart Schilperoort, Yang Liu.
-This derivative work Copyright (c) 2025 [Your Organization].
+This derivative work Copyright (c) 2025 monet-regrid Developers.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ URLs updated, and documentation adapted for new branding.
 from __future__ import annotations
 
 import abc
-import pickle
+import json
 from collections.abc import Hashable
 from typing import Any
 
@@ -82,7 +82,7 @@ class BaseRegridder(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def to_file(self, filepath: str) -> None:
+    def to_netcdf(self, filepath: str) -> None:
         """Save the regridder to a file.
 
         Args:
@@ -92,7 +92,7 @@ class BaseRegridder(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def from_file(cls, filepath: str) -> BaseRegridder:
+    def from_netcdf(cls, filepath: str) -> BaseRegridder:
         """Load a regridder from a file.
 
         Args:
@@ -228,45 +228,58 @@ class RectilinearRegridder(BaseRegridder):
             msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative, neighbor-budget"
             raise ValueError(msg)
 
-    def to_file(self, filepath: str) -> None:
-        """Save the regridder configuration to a file.
+    def to_netcdf(self, filepath: str) -> None:
+        """Save the regridder configuration to a NetCDF file.
 
         Args:
-            filepath: Path to save the regridder configuration
+            filepath: Path to save the regridder configuration.
         """
+        # Use a temporary dataset to store attributes
+        temp_ds = xr.Dataset()
+        temp_ds.attrs["method"] = self.method
+        temp_ds.attrs["time_dim"] = self.time_dim if self.time_dim is not None else "None"
+        temp_ds.attrs["method_kwargs"] = json.dumps(self.method_kwargs)
+        temp_ds.attrs["regridder_type"] = self.__class__.__name__
 
-        # Create a serializable representation
-        config = {
-            "method": self.method,
-            "time_dim": self.time_dim,
-            "method_kwargs": self.method_kwargs,
-            "source_data": self.source_data,  # This may need special handling for Dask
-            "target_grid": self.target_grid,
-        }
+        # Save everything to a single NetCDF file with groups
+        temp_ds.to_netcdf(filepath, mode="w", engine="h5netcdf")
+        if isinstance(self.source_data, xr.Dataset):
+            self.source_data.to_netcdf(filepath, mode="a", group="source_data", engine="h5netcdf")
+        else:  # DataArray
+            self.source_data.to_dataset(name="data").to_netcdf(
+                filepath, mode="a", group="source_data", engine="h5netcdf"
+            )
 
-        with open(filepath, "wb") as f:
-            pickle.dump(config, f)
+        self.target_grid.to_netcdf(filepath, mode="a", group="target_grid", engine="h5netcdf")
 
     @classmethod
-    def from_file(cls, filepath: str) -> RectilinearRegridder:
-        """Load a regridder from a file.
+    def from_netcdf(cls, filepath: str) -> RectilinearRegridder:
+        """Load a regridder from a NetCDF file.
 
         Args:
-            filepath: Path to load the regridder from
+            filepath: Path to load the regridder from.
 
         Returns:
-            Instance of RectilinearRegridder
+            An instance of the regridder class.
         """
+        with xr.open_dataset(filepath, engine="h5netcdf") as ds:
+            method = ds.attrs["method"]
+            time_dim = ds.attrs["time_dim"]
+            if time_dim == "None":
+                time_dim = None
+            method_kwargs = json.loads(ds.attrs["method_kwargs"])
 
-        with open(filepath, "rb") as f:
-            config = pickle.load(f)
+        source_data = xr.open_dataset(filepath, group="source_data", engine="h5netcdf")
+        if list(source_data.data_vars) == ["data"]:
+            source_data = source_data["data"]
+        target_grid = xr.open_dataset(filepath, group="target_grid", engine="h5netcdf")
 
         return cls(
-            source_data=config["source_data"],
-            target_grid=config["target_grid"],
-            method=config["method"],
-            time_dim=config["time_dim"],
-            **config["method_kwargs"],
+            source_data=source_data,
+            target_grid=target_grid,
+            method=method,
+            time_dim=time_dim,
+            **method_kwargs,
         )
 
     def info(self) -> dict[str, Any]:
@@ -483,43 +496,53 @@ class CurvilinearRegridder(BaseRegridder):
         return result
 
 
-    def to_file(self, filepath: str) -> None:
-        """Save the regridder to a file.
+    def to_netcdf(self, filepath: str) -> None:
+        """Save the regridder configuration to a NetCDF file.
 
         Args:
-            filepath: Path to save the regridder
+            filepath: Path to save the regridder configuration.
         """
+        # Use a temporary dataset to store attributes
+        temp_ds = xr.Dataset()
+        temp_ds.attrs["method"] = self.method
+        temp_ds.attrs["method_kwargs"] = json.dumps(self.method_kwargs)
+        temp_ds.attrs["regridder_type"] = self.__class__.__name__
 
-        # Create a serializable representation
-        config = {
-            "method": self.method,
-            "method_kwargs": self.method_kwargs,
-            "source_data": self.source_data,  # This may need special handling for Dask
-            "target_grid": self.target_grid,
-        }
+        # Save everything to a single NetCDF file with groups
+        temp_ds.to_netcdf(filepath, mode="w", engine="h5netcdf")
+        if isinstance(self.source_data, xr.Dataset):
+            self.source_data.to_netcdf(filepath, mode="a", group="source_data", engine="h5netcdf")
+        else:  # DataArray
+            self.source_data.to_dataset(name="data").to_netcdf(
+                filepath, mode="a", group="source_data", engine="h5netcdf"
+            )
 
-        with open(filepath, "wb") as f:
-            pickle.dump(config, f)
+        self.target_grid.to_netcdf(filepath, mode="a", group="target_grid", engine="h5netcdf")
 
     @classmethod
-    def from_file(cls, filepath: str) -> CurvilinearRegridder:
-        """Load a regridder from a file.
+    def from_netcdf(cls, filepath: str) -> CurvilinearRegridder:
+        """Load a regridder from a NetCDF file.
 
         Args:
-            filepath: Path to load the regridder from
+            filepath: Path to load the regridder from.
 
         Returns:
-            Instance of CurvilinearRegridder
+            An instance of the regridder class.
         """
+        with xr.open_dataset(filepath, engine="h5netcdf") as ds:
+            method = ds.attrs["method"]
+            method_kwargs = json.loads(ds.attrs["method_kwargs"])
 
-        with open(filepath, "rb") as f:
-            config = pickle.load(f)
+        source_data = xr.open_dataset(filepath, group="source_data", engine="h5netcdf")
+        if list(source_data.data_vars) == ["data"]:
+            source_data = source_data["data"]
+        target_grid = xr.open_dataset(filepath, group="target_grid", engine="h5netcdf")
 
         return cls(
-            source_data=config["source_data"],
-            target_grid=config["target_grid"],
-            method=config["method"],
-            **config["method_kwargs"],
+            source_data=source_data,
+            target_grid=target_grid,
+            method=method,
+            **method_kwargs,
         )
 
     def info(self) -> dict[str, Any]:

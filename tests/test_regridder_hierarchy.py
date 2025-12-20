@@ -70,60 +70,73 @@ def test_rectilinear_regridder_call():
     assert len(result["lon"]) == 8
 
 
-def test_curvilinear_regridder_implementation():
-    """Test that CurvilinearRegridder is properly implemented."""
-    # Create curvilinear sample data (2D coordinates)
+def test_rectilinear_regridder_to_netcdf(tmp_path):
+    """Test saving and loading RectilinearRegridder to/from NetCDF."""
+    source_data = xr.DataArray(
+        np.random.rand(10, 20),
+        dims=["y", "x"],
+        coords={"y": np.arange(10), "x": np.arange(20)},
+    )
+    target_grid = xr.Dataset(
+        coords={"y": np.linspace(0, 9, 5), "x": np.linspace(0, 19, 10)}
+    )
+    regridder = RectilinearRegridder(
+        source_data, target_grid, method="linear", time_dim=None
+    )
+
+    filepath = tmp_path / "test_regridder.nc"
+    regridder.to_netcdf(filepath)
+    loaded_regridder = RectilinearRegridder.from_netcdf(filepath)
+
+    xr.testing.assert_allclose(regridder.source_data, loaded_regridder.source_data)
+    xr.testing.assert_allclose(regridder.target_grid, loaded_regridder.target_grid)
+    assert regridder.method == loaded_regridder.method
+    assert regridder.time_dim == loaded_regridder.time_dim
+
+    # Test that the loaded regridder produces the same result
+    expected_result = regridder()
+    loaded_result = loaded_regridder()
+    xr.testing.assert_allclose(expected_result, loaded_result)
+
+
+def test_curvilinear_regridder_to_netcdf(tmp_path):
+    """Test saving and loading CurvilinearRegridder to/from NetCDF."""
     source_x, source_y = np.meshgrid(np.arange(10), np.arange(10))
     source_lat = 30 + 0.5 * source_x + 0.1 * source_y
     source_lon = -100 + 0.3 * source_x + 0.2 * source_y
-
     source_data = xr.DataArray(
-        np.random.random((10, 10)),
+        np.random.rand(10, 10),
         dims=["y", "x"],
-        coords={"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)},
+        coords={
+            "latitude": (("y", "x"), source_lat),
+            "longitude": (("y", "x"), source_lon),
+        },
     )
 
-    # Create curvilinear target grid
-    target_x, target_y = np.meshgrid(np.linspace(0, 9, 8), np.linspace(0, 9, 8))
+    target_x, target_y = np.meshgrid(np.arange(8), np.arange(8))
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
-
     target_grid = xr.Dataset(
-        {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
+        coords={
+            "latitude": (("y_out", "x_out"), target_lat),
+            "longitude": (("y_out", "x_out"), target_lon),
+        }
     )
 
-    # Test initialization
     regridder = CurvilinearRegridder(source_data, target_grid, method="linear")
 
-    # Test that call works (though may fail due to coordinate validation)
-    # The important thing is that it doesn't raise NotImplementedError
-    try:
-        result = regridder()
-        # If it succeeds, check that result has proper dimensions
-        assert "latitude" in result.coords
-        assert "longitude" in result.coords
-    except ValueError as e:
-        # If it fails, it should be due to coordinate validation, not NotImplementedError
-        assert "Source coordinates must be 2D" not in str(e)
+    filepath = tmp_path / "test_regridder.nc"
+    regridder.to_netcdf(filepath)
+    loaded_regridder = CurvilinearRegridder.from_netcdf(filepath)
 
-    # Test that to_file and from_file work
-    try:
-        regridder.to_file("test_curvilinear.nc")
-        loaded_regridder = CurvilinearRegridder.from_file("test_curvilinear.nc")
-        assert loaded_regridder.method == "linear"
-    except NotImplementedError:
-        # If file operations are not implemented, that's OK for now
-        pass
-    finally:
-        # Clean up test file if it was created
-        if os.path.exists("test_curvilinear.nc"):
-            os.remove("test_curvilinear.nc")
+    xr.testing.assert_allclose(regridder.source_data, loaded_regridder.source_data)
+    xr.testing.assert_allclose(regridder.target_grid, loaded_regridder.target_grid)
+    assert regridder.method == loaded_regridder.method
 
-    # Test info method works
-    info = regridder.info()
-    assert info["type"] == "CurvilinearRegridder"
-    assert info["method"] == "linear"
-    assert info["grid_type"] == "curvilinear"
+    # Test that the loaded regridder produces the same result
+    expected_result = regridder()
+    loaded_result = loaded_regridder()
+    xr.testing.assert_allclose(expected_result, loaded_result)
 
 
 def test_rectilinear_regridder_methods():
