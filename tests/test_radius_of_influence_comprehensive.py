@@ -12,8 +12,6 @@ This script tests:
 import numpy as np
 import xarray as xr
 
-import monet_regrid
-
 
 def create_curvilinear_grids():
     """Create sample curvilinear grids for testing."""

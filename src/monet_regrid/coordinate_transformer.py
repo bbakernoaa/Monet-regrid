@@ -52,6 +52,18 @@ class CoordinateTransformer:
         self._cache: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
         self._max_cache_size = 100  # Maximum number of cached transformations
 
+    def geodetic_to_ecef(
+        self, lon: np.ndarray, lat: np.ndarray, height: np.ndarray | None = None, use_cache: bool = True
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Transform coordinates from geographic to 3D geocentric."""
+        return self.transform_coordinates(lon, lat, height, use_cache)
+
+    def ecef_to_geodetic(
+        self, x: np.ndarray, y: np.ndarray, z: np.ndarray, use_cache: bool = True
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Transform coordinates from 3D geocentric back to geographic."""
+        return self.inverse_transform_coordinates(x, y, z, use_cache)
+
     def transform_coordinates(
         self, lon: np.ndarray, lat: np.ndarray, height: np.ndarray | None = None, use_cache: bool = True
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -66,9 +78,13 @@ class CoordinateTransformer:
         Returns:
             Tuple of (x, y, z) coordinates in target CRS
         """
-        # Flatten arrays for consistent processing
-        lon_flat = np.asarray(lon).flatten()
-        lat_flat = np.asarray(lat).flatten()
+        # Ensure inputs are numpy arrays for consistent processing
+        lon = np.asarray(lon)
+        lat = np.asarray(lat)
+        original_shape = lon.shape
+
+        lon_flat = lon.flatten()
+        lat_flat = lat.flatten()
 
         if height is None:
             height_flat = np.zeros_like(lon_flat)
@@ -80,7 +96,7 @@ class CoordinateTransformer:
         if use_cache:
             # Use hash of coordinate values as cache key (for approximate matches)
             coords_tuple = (lon_flat.tobytes(), lat_flat.tobytes(), height_flat.tobytes())
-            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()
+            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()  # noqa: S324
 
             if cache_key in self._cache:
                 return self._cache[cache_key]
@@ -89,9 +105,9 @@ class CoordinateTransformer:
         x, y, z = self.transformer.transform(lon_flat, lat_flat, height_flat)
 
         # Reshape to match original input shape
-        x = x.reshape(lon.shape)
-        y = y.reshape(lon.shape)
-        z = z.reshape(lon.shape)
+        x = x.reshape(original_shape)
+        y = y.reshape(original_shape)
+        z = z.reshape(original_shape)
 
         # Cache result if caching is enabled
         if use_cache and cache_key is not None:
@@ -119,16 +135,22 @@ class CoordinateTransformer:
         Returns:
             Tuple of (lon, lat, height) coordinates in source CRS
         """
+        # Ensure inputs are numpy arrays for consistent processing
+        x = np.asarray(x)
+        y = np.asarray(y)
+        z = np.asarray(z)
+        original_shape = x.shape
+
         # Flatten arrays for consistent processing
-        x_flat = np.asarray(x).flatten()
-        y_flat = np.asarray(y).flatten()
-        z_flat = np.asarray(z).flatten()
+        x_flat = x.flatten()
+        y_flat = y.flatten()
+        z_flat = z.flatten()
 
         # Create cache key based on input coordinates
         cache_key = None
         if use_cache:
             coords_tuple = (x_flat.tobytes(), y_flat.tobytes(), z_flat.tobytes())
-            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()
+            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()  # noqa: S324
 
             if cache_key in self._cache:
                 return self._cache[cache_key]
@@ -137,9 +159,9 @@ class CoordinateTransformer:
         lon, lat, height = self.transformer.transform(x_flat, y_flat, z_flat, direction="INVERSE")
 
         # Reshape to match original input shape
-        lon = lon.reshape(x.shape)
-        lat = lat.reshape(x.shape)
-        height = height.reshape(z.shape)
+        lon = lon.reshape(original_shape)
+        lat = lat.reshape(original_shape)
+        height = height.reshape(original_shape)
 
         # Cache result if caching is enabled
         if use_cache and cache_key is not None:

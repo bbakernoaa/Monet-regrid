@@ -1,10 +1,17 @@
 """Conservative regridding implementation."""
+from __future__ import annotations
 
 from collections.abc import Hashable
-from typing import overload
+from typing import TYPE_CHECKING, overload
 
 import numpy as np
 import xarray as xr
+
+from monet_regrid import utils
+
+if TYPE_CHECKING:
+    pass
+
 
 try:
     import sparse
@@ -33,7 +40,6 @@ limitations under the License.
 Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
-from monet_regrid import utils
 
 
 @overload

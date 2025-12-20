@@ -3,7 +3,8 @@ import pytest
 import xarray as xr
 from numpy.testing import assert_array_equal
 
-from monet_regrid import Grid, create_regridding_dataset
+from .helpers import Grid
+from monet_regrid.utils import create_regridding_dataset
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 # Old import: from monet_regrid import Grid, create_regridding_dataset

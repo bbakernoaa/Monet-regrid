@@ -4,8 +4,6 @@ This module tests complete interpolation workflows, performance comparisons,
 and component interactions in the curvilinear regridding system.
 """
 
-import time
-
 import numpy as np
 import xarray as xr
 

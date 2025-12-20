@@ -1,14 +1,12 @@
-import pytest
-
-"""Tests for the new regridder class hierarchy."""
-
-import os
-
 import numpy as np
+import pytest
 import xarray as xr
 
 from monet_regrid import CurvilinearRegridder, RectilinearRegridder
 from monet_regrid.core import BaseRegridder
+
+"""Tests for the new regridder class hierarchy."""
+
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 # Old import: from monet_regrid import RectilinearRegridder, CurvilinearRegridder

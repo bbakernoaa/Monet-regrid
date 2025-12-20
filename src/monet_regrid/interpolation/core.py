@@ -243,7 +243,9 @@ class InterpolationEngine:
         except Exception as e:
             if len(source_points_3d) > 4:
                 warnings.warn(
-                    f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor.", stacklevel=2
+                    f"Could not build Delaunay triangulation for linear interpolation: {e}. "
+                    "Falling back to nearest neighbor.",
+                    stacklevel=2,
                 )
             self.method = "nearest"
             self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)

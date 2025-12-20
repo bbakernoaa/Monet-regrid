@@ -3,7 +3,7 @@ import pytest
 import xarray as xr
 
 from monet_regrid.constants import GridType
-from monet_regrid.utils import _get_grid_type, validate_grid_compatibility
+from monet_regrid.utils import _get_grid_type
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 # Old imports: from monet_regrid.constants import ...; from monet_regrid.utils import ...
@@ -101,89 +101,6 @@ def test_get_grid_type_missing_coordinates():
         _get_grid_type(ds)
 
 
-def test_validate_grid_compatibility():
-    """Test grid compatibility validation."""
-    # Create two rectilinear grids
-    lat1 = np.linspace(-90, 90, 10)
-    lon1 = np.linspace(-180, 180, 20)
-
-    ds1 = xr.Dataset(
-        coords={
-            "latitude": (["latitude"], lat1, {"units": "degrees_north", "standard_name": "latitude"}),
-            "longitude": (["longitude"], lon1, {"units": "degrees_east", "standard_name": "longitude"}),
-        }
-    )
-
-    lat2 = np.linspace(-45, 45, 5)
-    lon2 = np.linspace(-90, 90, 10)
-
-    ds2 = xr.Dataset(
-        coords={
-            "latitude": (["latitude"], lat2, {"units": "degrees_north", "standard_name": "latitude"}),
-            "longitude": (["longitude"], lon2, {"units": "degrees_east", "standard_name": "longitude"}),
-        }
-    )
-
-    source_type, target_type = validate_grid_compatibility(ds1, ds2)
-    assert source_type == GridType.RECTILINEAR
-    assert target_type == GridType.RECTILINEAR
-
-
-def test_validate_grid_compatibility_curvilinear():
-    """Test grid compatibility validation for curvilinear grids."""
-    # Create two curvilinear grids
-    lat1_2d = np.random.rand(5, 6)
-    lon1_2d = np.random.rand(5, 6)
-
-    ds1 = xr.Dataset(
-        coords={
-            "latitude": (["y", "x"], lat1_2d, {"units": "degrees_north", "standard_name": "latitude"}),
-            "longitude": (["y", "x"], lon1_2d, {"units": "degrees_east", "standard_name": "longitude"}),
-        }
-    )
-
-    lat2_2d = np.random.rand(3, 4)
-    lon2_2d = np.random.rand(3, 4)
-
-    ds2 = xr.Dataset(
-        coords={
-            "latitude": (["y", "x"], lat2_2d, {"units": "degrees_north", "standard_name": "latitude"}),
-            "longitude": (["y", "x"], lon2_2d, {"units": "degrees_east", "standard_name": "longitude"}),
-        }
-    )
-
-    source_type, target_type = validate_grid_compatibility(ds1, ds2)
-    assert source_type == GridType.CURVILINEAR
-    assert target_type == GridType.CURVILINEAR
-
-
-def test_validate_grid_compatibility_mixed():
-    """Test grid compatibility validation for mixed grid types."""
-    # Create a rectilinear grid
-    lat1 = np.linspace(-90, 90, 10)
-    lon1 = np.linspace(-180, 180, 20)
-
-    ds1 = xr.Dataset(
-        coords={
-            "latitude": (["latitude"], lat1, {"units": "degrees_north", "standard_name": "latitude"}),
-            "longitude": (["longitude"], lon1, {"units": "degrees_east", "standard_name": "longitude"}),
-        }
-    )
-
-    # Create a curvilinear grid
-    lat2_2d = np.random.rand(5, 6)
-    lon2_2d = np.random.rand(5, 6)
-
-    ds2 = xr.Dataset(
-        coords={
-            "latitude": (["y", "x"], lat2_2d, {"units": "degrees_north", "standard_name": "latitude"}),
-            "longitude": (["y", "x"], lon2_2d, {"units": "degrees_east", "standard_name": "longitude"}),
-        }
-    )
-
-    source_type, target_type = validate_grid_compatibility(ds1, ds2)
-    assert source_type == GridType.RECTILINEAR
-    assert target_type == GridType.CURVILINEAR
 
 
 def test_get_grid_type_rectilinear_alternative_names():

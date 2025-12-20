@@ -1,92 +1,56 @@
-import logging
-
-"""Test for polar interpolation fix in curvilinear interpolation."""
-
+"""Test interpolation at and around the poles."""
 
 import numpy as np
 import xarray as xr
 
-import monet_regrid
 
-
-def test_polar_interpolation_no_nan():
-    """Test that bilinear interpolation at poles doesn't produce NaN values."""
-    # Create a source grid that includes polar regions
-    ny, nx = 20, 40
-    lon_1d = np.linspace(-180, 180, nx)
-    lat_1d = np.linspace(-90, 90, ny)  # Include the poles
-    source_lon_2d, source_lat_2d = np.meshgrid(lon_1d, lat_1d)
-
-    # Create source dataset
-    source_ds = xr.Dataset(
-        {"temperature": (("y", "x"), np.random.random((ny, nx)).astype(np.float32), {"units": "K"})},
-        coords={"lon": (("y", "x"), source_lon_2d), "lat": (("y", "x"), source_lat_2d)},
+def test_arctic_pole_interpolation_nearest():
+    """Test nearest neighbor interpolation over the Arctic pole."""
+    # Source grid covering the North Pole
+    source_lat = np.array([[89.8, 89.9], [89.8, 89.9]])
+    source_lon = np.array([[-180.0, 0.0], [90.0, -90.0]])
+    source_data = xr.DataArray(
+        np.array([[1, 2], [3, 4]]),
+        dims=["y", "x"],
+        coords={"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)},
     )
 
-    # Create a target grid that includes points very close to the poles
-    ny_target, nx_target = 10, 20
-    lon_target_1d = np.linspace(-180, 180, nx_target)
-    # Use latitudes very close to the poles to trigger the issue
-    lat_target_1d = np.linspace(-89.9, 89.9, ny_target)
-    target_lon_2d, target_lat_2d = np.meshgrid(lon_target_1d, lat_target_1d)
-
-    # Create target dataset
-    target_ds = xr.Dataset(coords={"lon": (("y", "x"), target_lon_2d), "lat": (("y", "x"), target_lat_2d)})
-
-    # Perform bilinear interpolation
-    result = source_ds["temperature"].regrid.linear(target_ds)
-
-    # Check that there are no NaN values in the polar regions
-    # Specifically check the first and last latitude rows (closest to poles)
-    assert not np.any(np.isnan(result.values)), "Found NaN values in polar interpolation"
-
-    # Additional check: ensure result has the expected shape
-    assert result.shape == (ny_target, nx_target), f"Expected shape {(ny_target, nx_target)}, got {result.shape}"
-
-
-def test_polar_interpolation_with_nan_fill_method():
-    """Test that polar interpolation works with fill_method='nearest'."""
-    # Create a source grid that includes polar regions
-    ny, nx = 20, 40
-    lon_1d = np.linspace(-180, 180, nx)
-    lat_1d = np.linspace(-90, 90, ny)  # Include the poles
-    source_lon_2d, source_lat_2d = np.meshgrid(lon_1d, lat_1d)
-
-    # Create source dataset with some NaN values to test fill behavior
-    source_data = np.random.random((ny, nx)).astype(np.float32)
-    source_data[0, :] = np.nan  # NaN values near one pole
-    source_data[-1, :] = np.nan  # NaN values near other pole
-
-    source_ds = xr.Dataset(
-        {"temperature": (("y", "x"), source_data, {"units": "K"})},
-        coords={"lon": (("y", "x"), source_lon_2d), "lat": (("y", "x"), source_lat_2d)},
+    # Target grid directly at the pole
+    target_lat = np.array([[90.0]])
+    target_lon = np.array([[0.0]])
+    target_grid = xr.Dataset(
+        coords={"latitude": (["y_out", "x_out"], target_lat), "longitude": (["y_out", "x_out"], target_lon)}
     )
 
-    # Create a target grid that includes points very close to the poles
-    ny_target, nx_target = 10, 20
-    lon_target_1d = np.linspace(-180, 180, nx_target)
-    # Use latitudes very close to the poles to trigger the issue
-    lat_target_1d = np.linspace(-89.9, 89.9, ny_target)
-    target_lon_2d, target_lat_2d = np.meshgrid(lon_target_1d, lat_target_1d)
+    result = source_data.regrid.nearest(target_grid)
 
-    # Create target dataset
-    target_ds = xr.Dataset(coords={"lon": (("y", "x"), target_lon_2d), "lat": (("y", "x"), target_lat_2d)})
-
-    # Perform bilinear interpolation with nearest fill method
-    result = source_ds["temperature"].regrid.linear(target_ds, fill_method="nearest")
-
-    # With fill_method='nearest', polar regions should have values (not NaN)
-    # even when source has NaN values at the poles
-    nan_count = np.sum(np.isnan(result.values))
-    logging.info("NaN count in result: %s", nan_count)
-    logging.info("Result shape: %s", result.shape)
-
-    # The result should have fewer NaN values than a strict linear interpolation would have
-    # due to the fallback to nearest neighbor in polar regions
-    # The important thing is that the interpolation doesn't crash or produce all NaNs
+    # The point at (89.9, 0.0) is the closest. Its value is 2.
+    assert result.item() == 2
 
 
-if __name__ == "__main__":
-    test_polar_interpolation_no_nan()
-    test_polar_interpolation_with_nan_fill_method()
-    logging.info("All polar interpolation tests passed!")
+def test_antarctic_pole_interpolation_linear():
+    """Test linear interpolation over the Antarctic pole."""
+    # Source grid surrounding the South Pole
+    source_lat = np.array([[-89.8, -89.8], [-89.9, -89.9]])
+    source_lon = np.array([[-90.0, 90.0], [-90.0, 90.0]])
+    source_data = xr.DataArray(
+        np.array([[10, 20], [15, 25]]),
+        dims=["y", "x"],
+        coords={"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)},
+    )
+
+    # Target grid directly at the pole
+    target_lat = np.array([[-90.0]])
+    target_lon = np.array([[0.0]])
+    target_grid = xr.Dataset(
+        coords={"latitude": (["y_out", "x_out"], target_lat), "longitude": (["y_out", "x_out"], target_lon)}
+    )
+
+    result = source_data.regrid.linear(target_grid)
+
+    # With the pole as the target, the result should be the average
+    # of the equidistant points at the highest latitude.
+    # In 3D space, the pole is equidistant from all points on a circle of latitude.
+    # So, the interpolation should be the average of the values at -89.9 lat.
+    expected_value = 15
+    assert np.isclose(result.item(), expected_value)

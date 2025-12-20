@@ -4,6 +4,8 @@ import dask.array as da
 import numpy as np
 import xarray as xr
 
+import monet_regrid  # noqa: F401
+
 
 def test_high_resolution_stress_dask():
     """Test high-resolution interpolation with Dask arrays."""
@@ -40,10 +42,13 @@ def test_high_resolution_stress_dask():
     # Increase chunk size to reduce graph size (chunks=(50,50) creates 40000 chunks for 2000x2000)
     # Using larger chunks is better practice
     data_dask = da.random.random((ny, nx), chunks=(200, 200))
+    source_grid = xr.Dataset(
+        coords={"latitude": (("y", "x"), source_lat), "longitude": (("y", "x"), source_lon)}
+    )
     test_data = xr.DataArray(
         data_dask,
         dims=["y", "x"],
-        coords={"latitude": (("y", "x"), source_lat), "longitude": (("y", "x"), source_lon)},
+        coords=source_grid.coords,
     )
 
     # Interpolate using nearest neighbor (efficient for large grids)

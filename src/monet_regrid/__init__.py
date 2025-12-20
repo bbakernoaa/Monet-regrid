@@ -25,16 +25,13 @@ from monet_regrid import methods
 from monet_regrid.constants import GridType
 from monet_regrid.core import BaseRegridder, CurvilinearRegridder, RectilinearRegridder
 from monet_regrid.regrid import Regridder
-from monet_regrid.utils import Grid, create_regridding_dataset
 
 __all__ = [
     "BaseRegridder",
     "CurvilinearRegridder",
-    "Grid",
     "GridType",
     "RectilinearRegridder",
     "Regridder",
-    "create_regridding_dataset",
     "methods",
 ]
 

@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import abc
 import json
-from collections.abc import Hashable
 from typing import Any
 
 import cf_xarray  # noqa: F401
@@ -81,27 +80,60 @@ class BaseRegridder(abc.ABC):
         """
         pass
 
-    @abc.abstractmethod
     def to_netcdf(self, filepath: str) -> None:
-        """Save the regridder to a file.
+        """Save the regridder configuration to a NetCDF file.
 
         Args:
-            filepath: Path to save the regridder
+            filepath: Path to save the regridder configuration.
         """
-        pass
+        # Use a temporary dataset to store attributes
+        temp_ds = xr.Dataset()
+        temp_ds.attrs["method"] = self.method
+        if hasattr(self, "time_dim"):
+            temp_ds.attrs["time_dim"] = self.time_dim if self.time_dim is not None else "None"
+        temp_ds.attrs["method_kwargs"] = json.dumps(self.method_kwargs)
+        temp_ds.attrs["regridder_type"] = self.__class__.__name__
+
+        # Save everything to a single NetCDF file with groups
+        temp_ds.to_netcdf(filepath, mode="w", engine="h5netcdf")
+        if isinstance(self.source_data, xr.Dataset):
+            self.source_data.to_netcdf(filepath, mode="a", group="source_data", engine="h5netcdf")
+        else:  # DataArray
+            self.source_data.to_dataset(name="data").to_netcdf(
+                filepath, mode="a", group="source_data", engine="h5netcdf"
+            )
+
+        self.target_grid.to_netcdf(filepath, mode="a", group="target_grid", engine="h5netcdf")
 
     @classmethod
-    @abc.abstractmethod
     def from_netcdf(cls, filepath: str) -> BaseRegridder:
-        """Load a regridder from a file.
+        """Load a regridder from a NetCDF file.
 
         Args:
-            filepath: Path to load the regridder from
+            filepath: Path to load the regridder from.
 
         Returns:
-            Instance of the regridder class
+            An instance of the regridder class.
         """
-        pass
+        with xr.open_dataset(filepath, engine="h5netcdf") as ds:
+            method = ds.attrs["method"]
+            time_dim = ds.attrs.get("time_dim")
+            if time_dim == "None":
+                time_dim = None
+            method_kwargs = json.loads(ds.attrs["method_kwargs"])
+
+        source_data = xr.open_dataset(filepath, group="source_data", engine="h5netcdf")
+        if list(source_data.data_vars) == ["data"]:
+            source_data = source_data["data"]
+        target_grid = xr.open_dataset(filepath, group="target_grid", engine="h5netcdf")
+
+        return cls(
+            source_data=source_data,
+            target_grid=target_grid,
+            method=method,
+            time_dim=time_dim,
+            **method_kwargs,
+        )
 
     @abc.abstractmethod
     def info(self) -> dict[str, Any]:
@@ -225,62 +257,11 @@ class RectilinearRegridder(BaseRegridder):
                 n_points=n_points,
             )
         else:
-            msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative, neighbor-budget"
-            raise ValueError(msg)
-
-    def to_netcdf(self, filepath: str) -> None:
-        """Save the regridder configuration to a NetCDF file.
-
-        Args:
-            filepath: Path to save the regridder configuration.
-        """
-        # Use a temporary dataset to store attributes
-        temp_ds = xr.Dataset()
-        temp_ds.attrs["method"] = self.method
-        temp_ds.attrs["time_dim"] = self.time_dim if self.time_dim is not None else "None"
-        temp_ds.attrs["method_kwargs"] = json.dumps(self.method_kwargs)
-        temp_ds.attrs["regridder_type"] = self.__class__.__name__
-
-        # Save everything to a single NetCDF file with groups
-        temp_ds.to_netcdf(filepath, mode="w", engine="h5netcdf")
-        if isinstance(self.source_data, xr.Dataset):
-            self.source_data.to_netcdf(filepath, mode="a", group="source_data", engine="h5netcdf")
-        else:  # DataArray
-            self.source_data.to_dataset(name="data").to_netcdf(
-                filepath, mode="a", group="source_data", engine="h5netcdf"
+            msg = (
+                f"Unsupported method: {method}. Supported methods are: linear, "
+                "nearest, cubic, conservative, neighbor-budget"
             )
-
-        self.target_grid.to_netcdf(filepath, mode="a", group="target_grid", engine="h5netcdf")
-
-    @classmethod
-    def from_netcdf(cls, filepath: str) -> RectilinearRegridder:
-        """Load a regridder from a NetCDF file.
-
-        Args:
-            filepath: Path to load the regridder from.
-
-        Returns:
-            An instance of the regridder class.
-        """
-        with xr.open_dataset(filepath, engine="h5netcdf") as ds:
-            method = ds.attrs["method"]
-            time_dim = ds.attrs["time_dim"]
-            if time_dim == "None":
-                time_dim = None
-            method_kwargs = json.loads(ds.attrs["method_kwargs"])
-
-        source_data = xr.open_dataset(filepath, group="source_data", engine="h5netcdf")
-        if list(source_data.data_vars) == ["data"]:
-            source_data = source_data["data"]
-        target_grid = xr.open_dataset(filepath, group="target_grid", engine="h5netcdf")
-
-        return cls(
-            source_data=source_data,
-            target_grid=target_grid,
-            method=method,
-            time_dim=time_dim,
-            **method_kwargs,
-        )
+            raise ValueError(msg)
 
     def info(self) -> dict[str, Any]:
         """Get information about the rectilinear regridder instance.
@@ -341,7 +322,7 @@ class RectilinearRegridder(BaseRegridder):
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
-        nan_threshold: float = 1.0,
+        nan_threshold: float = 1.0,  # noqa: ARG002 # Kept for API compatibility
     ) -> xr.DataArray:
         """Regrid by taking the most common value within the new grid cells.
 
@@ -390,7 +371,7 @@ class RectilinearRegridder(BaseRegridder):
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
-        nan_threshold: float = 1.0,
+        nan_threshold: float = 1.0,  # noqa: ARG002 # Kept for API compatibility
     ) -> xr.DataArray:
         """Regrid by taking the least common value within the new grid cells.
 
@@ -494,56 +475,6 @@ class CurvilinearRegridder(BaseRegridder):
         result = interpolator(input_data)
 
         return result
-
-
-    def to_netcdf(self, filepath: str) -> None:
-        """Save the regridder configuration to a NetCDF file.
-
-        Args:
-            filepath: Path to save the regridder configuration.
-        """
-        # Use a temporary dataset to store attributes
-        temp_ds = xr.Dataset()
-        temp_ds.attrs["method"] = self.method
-        temp_ds.attrs["method_kwargs"] = json.dumps(self.method_kwargs)
-        temp_ds.attrs["regridder_type"] = self.__class__.__name__
-
-        # Save everything to a single NetCDF file with groups
-        temp_ds.to_netcdf(filepath, mode="w", engine="h5netcdf")
-        if isinstance(self.source_data, xr.Dataset):
-            self.source_data.to_netcdf(filepath, mode="a", group="source_data", engine="h5netcdf")
-        else:  # DataArray
-            self.source_data.to_dataset(name="data").to_netcdf(
-                filepath, mode="a", group="source_data", engine="h5netcdf"
-            )
-
-        self.target_grid.to_netcdf(filepath, mode="a", group="target_grid", engine="h5netcdf")
-
-    @classmethod
-    def from_netcdf(cls, filepath: str) -> CurvilinearRegridder:
-        """Load a regridder from a NetCDF file.
-
-        Args:
-            filepath: Path to load the regridder from.
-
-        Returns:
-            An instance of the regridder class.
-        """
-        with xr.open_dataset(filepath, engine="h5netcdf") as ds:
-            method = ds.attrs["method"]
-            method_kwargs = json.loads(ds.attrs["method_kwargs"])
-
-        source_data = xr.open_dataset(filepath, group="source_data", engine="h5netcdf")
-        if list(source_data.data_vars) == ["data"]:
-            source_data = source_data["data"]
-        target_grid = xr.open_dataset(filepath, group="target_grid", engine="h5netcdf")
-
-        return cls(
-            source_data=source_data,
-            target_grid=target_grid,
-            method=method,
-            **method_kwargs,
-        )
 
     def info(self) -> dict[str, Any]:
         """Get information about the curvilinear regridder instance.

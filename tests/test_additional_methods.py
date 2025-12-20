@@ -8,7 +8,7 @@ import monet_regrid  # noqa: F401
 
 def create_projected_grid(nx, ny, x_range, y_range):
     """Create a grid that is rectilinear in Geocentric X,Y space (near North Pole)."""
-    R = 6371000.0  # Approx Earth radius in meters
+    r = 6371000.0  # Approx Earth radius in meters
 
     x = np.linspace(x_range[0], x_range[1], nx)
     y = np.linspace(y_range[0], y_range[1], ny)
@@ -16,12 +16,12 @@ def create_projected_grid(nx, ny, x_range, y_range):
 
     # Calculate Z to be on sphere
     r2 = xx**2 + yy**2
-    z = np.sqrt(R**2 - r2)
+    z = np.sqrt(r**2 - r2)
 
     # Convert to Lat/Lon
     # lat = asin(z/R)
     # lon = atan2(y, x)
-    lat_rad = np.arcsin(z / R)
+    lat_rad = np.arcsin(z / r)
     lon_rad = np.arctan2(yy, xx)
 
     lat_deg = np.degrees(lat_rad)

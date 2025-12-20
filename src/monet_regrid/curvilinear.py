@@ -32,11 +32,12 @@ URLs updated, and documentation adapted for new branding.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 import numpy as np
 import xarray as xr
-from scipy.spatial import Delaunay, cKDTree  # type: ignore
+from scipy.spatial import Delaunay, cKDTree, qhull
 
 from monet_regrid.coordinate_transformer import CoordinateTransformer
 from monet_regrid.interpolation import InterpolationEngine
@@ -393,8 +394,8 @@ class CurvilinearInterpolator:
                             lat_b_flat = lat_b.reshape(n_cells, 4)
                             lon_b_flat = lon_b.reshape(n_cells, 4)
                             return np.stack([lon_b_flat, lat_b_flat], axis=2)
-                except Exception:
-                    pass
+                except qhull.QhullError as e:
+                    logging.warning(f"Could not create triangulation, falling back to nearest neighbor: {e}")
 
                 msg = (
                     f"Conservative regridding requires explicit bounds for {lat_name} and {lon_name}. "
