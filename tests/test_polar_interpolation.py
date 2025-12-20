@@ -1,12 +1,8 @@
-import logging
-
 """Test for polar interpolation fix in curvilinear interpolation."""
-
+import logging
 
 import numpy as np
 import xarray as xr
-
-import monet_regrid
 
 
 def test_polar_interpolation_no_nan():
