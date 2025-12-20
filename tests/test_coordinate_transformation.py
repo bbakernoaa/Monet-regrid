@@ -1,11 +1,8 @@
-import pytest
-
 """Unit tests for coordinate transformation in curvilinear regridding.
 
 This module tests the 3D coordinate transformation accuracy, pyproj integration,
 and spherical geometry handling in the CurvilinearInterpolator.
 """
-
 import numpy as np
 import xarray as xr
 
