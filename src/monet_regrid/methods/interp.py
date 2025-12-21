@@ -35,7 +35,7 @@ from scipy.interpolate import RegularGridInterpolator
 def interp_regrid(
     data: xr.DataArray,
     target_ds: xr.Dataset,
-    method: Literal["linear", "nearest", "cubic"],
+    method: Literal["linear", "nearest", "cubic", "bilinear"],
 ) -> xr.DataArray: ...
 
 
@@ -43,14 +43,14 @@ def interp_regrid(
 def interp_regrid(
     data: xr.Dataset,
     target_ds: xr.Dataset,
-    method: Literal["linear", "nearest", "cubic"],
+    method: Literal["linear", "nearest", "cubic", "bilinear"],
 ) -> xr.Dataset: ...
 
 
 def interp_regrid(
     data: xr.DataArray | xr.Dataset,
     target_ds: xr.Dataset,
-    method: Literal["linear", "nearest", "cubic"],
+    method: Literal["linear", "nearest", "cubic", "bilinear"],
 ) -> xr.DataArray | xr.Dataset:
     """Refine a dataset using xarray's interp method or scipy's RegularGridInterpolator.
 
@@ -101,7 +101,7 @@ def interp_regrid(
 def _interp_regrid_fast(
     data: xr.DataArray,
     target_ds: xr.Dataset,
-    method: Literal["linear", "nearest", "cubic"],
+    method: Literal["linear", "nearest", "cubic", "bilinear"],
     coord_names: Sequence[Hashable],
 ) -> xr.DataArray:
     """Fast interpolation using scipy.interpolate.RegularGridInterpolator directly.
@@ -144,6 +144,8 @@ def _interp_regrid_fast(
     scipy_method = method
     if method == "cubic":
         scipy_method = "cubic"
+    elif method == "bilinear":
+        scipy_method = "linear"  # scipy uses 'linear' for bilinear in 2D
 
     # Create interpolator
     # Note: fill_value=np.nan is safer but might be slower; xarray default is usually nan

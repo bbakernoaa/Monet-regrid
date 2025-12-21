@@ -142,7 +142,7 @@ class RectilinearRegridder(BaseRegridder):
     """Regridder implementation for rectilinear grids using interpolation methods.
 
     This class handles regridding between rectilinear grids using various interpolation
-    methods like linear, nearest-neighbor, cubic, and conservative approaches.
+    methods like linear, nearest-neighbor, bilinear, cubic, and conservative approaches.
     """
 
     def __init__(
@@ -158,7 +158,7 @@ class RectilinearRegridder(BaseRegridder):
         Args:
             source_data: The source data to be regridded (DataArray or Dataset)
             target_grid: The target grid specification as a Dataset
-            method: Interpolation method ('linear', 'nearest', 'cubic', 'conservative')
+            method: Interpolation method ('linear', 'nearest', 'cubic', 'bilinear', 'conservative')
             time_dim: Name of the time dimension, or None to force regridding over time
             **kwargs: Additional method-specific arguments
         """
@@ -213,7 +213,7 @@ class RectilinearRegridder(BaseRegridder):
             self._formatting_cache[cache_key] = formatted_data
 
         # Apply the appropriate method
-        if method in ["linear", "nearest", "cubic"]:
+        if method in ["linear", "nearest", "cubic", "bilinear"]:
             return interp.interp_regrid(formatted_data, validated_target_grid, method)
         elif method == "conservative":
             # Handle conservative regridding with its specific parameters
@@ -231,7 +231,7 @@ class RectilinearRegridder(BaseRegridder):
                 output_chunks,
             )
         else:
-            msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, conservative"
+            msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, bilinear, conservative"
             raise ValueError(msg)
 
     def to_file(self, filepath: str) -> None:

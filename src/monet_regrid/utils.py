@@ -330,9 +330,19 @@ def format_lat(
     from -88 to 88 would not be padded because coverage does not extend all the way
     to the poles. A grid ranging from -90 to 90 would also not be padded because the
     poles will already be covered in the regridding weights.
+
+    Note: Pole padding is only applied to 1D latitude coordinates (rectilinear grids).
+    For 2D coordinates (curvilinear grids), no padding is performed since the grid
+    structure is irregular and pole padding doesn't apply.
     """
     lat_coord = formatted_coords["lat"]
     lon_coord = formatted_coords.get("lon")
+
+    # Check if this is a 2D coordinate (curvilinear grid)
+    lat_vals = obj.coords[lat_coord].values
+    if lat_vals.ndim == 2:
+        # For curvilinear grids, skip pole padding
+        return obj
 
     # Concat a padded value representing the mean of the first/last lat bands
     # This should match the Pole="all" option of ESMF
@@ -344,13 +354,13 @@ def format_lat(
     # Only pad if global but don't have edge values directly at poles
     # NOTE: could use xr.pad here instead of xr.concat, but none of the
     # modes are an exact fit for this scheme
-    lat_vals = obj.coords[lat_coord].values
+
     # South pole
     if dy - polar_lat >= obj.coords[lat_coord].values[0] > -polar_lat:
         south_pole = obj.isel({lat_coord: 0})
         if lon_coord is not None:
             south_pole = south_pole.mean(lon_coord, keep_attrs=True)
-        obj = xr.concat([south_pole, obj], dim=lat_coord)
+        obj = xr.concat([south_pole, obj], dim=lat_coord)  # type: ignore
         lat_vals = np.concatenate([[-polar_lat], lat_vals])
 
     # North pole
@@ -358,7 +368,7 @@ def format_lat(
         north_pole = obj.isel({lat_coord: -1})
         if lon_coord is not None:
             north_pole = north_pole.mean(lon_coord, keep_attrs=True)
-        obj = xr.concat([obj, north_pole], dim=lat_coord)
+        obj = xr.concat([obj, north_pole], dim=lat_coord)  # type: ignore
         lat_vals = np.concatenate([lat_vals, [polar_lat]])
 
     obj = update_coord(obj, lat_coord, lat_vals)
@@ -378,8 +388,18 @@ def format_lon(
     from -180 to 180, the source grid would be shifted to -179.5 to 179.5 and then
     padded on both the left and right with wraparound values at -180.5 and 180.5 to
     provide full coverage for the target edge cells at -180 and 180.
+
+    Note: Longitude formatting is only applied to 1D longitude coordinates (rectilinear grids).
+    For 2D coordinates (curvilinear grids), no formatting is performed since the grid
+    structure is irregular and wraparound logic doesn't apply.
     """
     lon_coord = formatted_coords["lon"]
+
+    # Check if this is a 2D coordinate (curvilinear grid)
+    lon_vals = obj.coords[lon_coord].values
+    if lon_vals.ndim == 2:
+        # For curvilinear grids, skip longitude formatting
+        return obj
 
     # Find the corresponding longitude coordinate in the target dataset
     target_lon_coord = None
@@ -447,10 +467,12 @@ def ensure_monotonic(obj: xr.DataArray | xr.Dataset, coord: Hashable) -> xr.Data
     """Ensure that an object has monotonically increasing indexes for a
     given coordinate. Only sort and drop duplicates if needed because this
     requires reindexing which can be expensive."""
-    if not obj.indexes[coord].is_monotonic_increasing:
-        obj = obj.sortby(coord)
-    if not obj.indexes[coord].is_unique:
-        obj = obj.drop_duplicates(coord)
+    # Check if the coordinate is actually an indexed dimension coordinate
+    if coord in obj.indexes and coord in obj.dims:
+        if not obj.indexes[coord].is_monotonic_increasing:
+            obj = obj.sortby(coord)
+        if not obj.indexes[coord].is_unique:
+            obj = obj.drop_duplicates(coord)
     return obj
 
 
@@ -506,6 +528,8 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
             if lat_ndim == 1:
                 return GridType.RECTILINEAR
             elif lat_ndim == 2:
+                # Any 2D coordinates are treated as curvilinear since
+                # rectilinear interpolation expects 1D dimension coordinates
                 return GridType.CURVILINEAR
             else:
                 msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
@@ -541,7 +565,25 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                 if lat_ndim == 1:
                     return GridType.RECTILINEAR
                 elif lat_ndim == 2:
-                    return GridType.CURVILINEAR
+                    # Check if 2D coordinates are actually just meshgrid of 1D coordinates
+                    # In such cases, we should still treat them as rectilinear
+                    try:
+                        # For true rectilinear grids with 2D coordinates,
+                        # lat varies only along one dimension and lon varies only along another
+                        lat_data = lat_coord.values
+                        lon_data = lon_coord.values
+
+                        # Check if latitude is constant along the second axis (x-direction)
+                        lat_varies_in_x = np.any(np.diff(lat_data, axis=1) != 0)
+                        # Check if longitude is constant along the first axis (y-direction)
+                        lon_varies_in_y = np.any(np.diff(lon_data, axis=0) != 0)
+
+                        # If lat only varies in y and lon only varies in x, it's still
+                        # treated as curvilinear since rectilinear interpolation expects 1D coordinates
+                        return GridType.CURVILINEAR
+                    except (IndexError, AttributeError):
+                        # If we can't determine, default to curvilinear for safety
+                        return GridType.CURVILINEAR
                 else:
                     msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
                     raise ValueError(msg)

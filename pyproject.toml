@@ -30,6 +30,7 @@ dependencies = [
   "cf-xarray",
   "pooch",
   "cftime",
+  "numba",
 ]
 
 [tool.hatch.build]
@@ -48,6 +49,7 @@ accel = [
   "opt-einsum",
   "dask[distributed]",
   "pykdtree",
+  "dask[distributed]",
 ]
 benchmarking = [
   "matplotlib",
@@ -73,6 +75,12 @@ docs = [  # Required for ReadTheDocs
   "sphinx_rtd_theme",
   "sphinx-autoapi",
   "coverage[toml]",
+]
+all = [
+  "monet-regrid[accel]",
+  "monet-regrid[benchmarking]",
+  "monet-regrid[dev]",
+  "monet-regrid[docs]",
 ]
 
 [tool.hatch.version]
