@@ -1,3 +1,4 @@
+import logging
 """Integration tests for the complete monet-regrid rebranding pipeline."""
 
 

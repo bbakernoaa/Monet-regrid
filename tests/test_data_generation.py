@@ -1,3 +1,4 @@
+import logging
 """Test data generation utilities for curvilinear regridding tests.
 
 This module provides utilities for generating test data with various characteristics,
