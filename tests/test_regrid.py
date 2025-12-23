@@ -6,6 +6,7 @@ import xarray as xr
 from numpy.testing import assert_array_equal
 
 import monet_regrid  # noqa: F401
+from monet_regrid.core import CurvilinearRegridder, RectilinearRegridder
 
 
 try:
@@ -211,3 +212,55 @@ def test_regrid_rectilinear_to_rectilinear_conservative_xesmf_equivalence():
             # Not sure why there is a difference here.
             # xr.testing.assert_equal(data_regrid.isnull(), data_esmf.isnull())
             pass
+
+
+def test_regridder_serialization_deserialization(tmp_path):
+    """Test saving and loading a regridder instance."""
+    # Create sample data and target grid
+    source_ds = xr.Dataset(
+        {"data": (("y", "x"), np.random.rand(10, 10))},
+        coords={"y": np.arange(10), "x": np.arange(10)},
+    )
+    target_ds = xr.Dataset(
+        coords={"y": np.arange(0, 10, 0.5), "x": np.arange(0, 10, 0.5)}
+    )
+
+    # 1. Test RectilinearRegridder
+    regridder = RectilinearRegridder(source_data=source_ds, target_grid=target_ds, method="linear")
+
+    # Save and load the regridder
+    filepath_rectilinear = tmp_path / "regridder_rectilinear.nc"
+    regridder.to_file(filepath_rectilinear)
+    loaded_regridder = RectilinearRegridder.from_file(filepath_rectilinear)
+
+    # Compare results
+    expected_rectilinear = regridder(source_ds)
+    result_rectilinear = loaded_regridder(source_ds)
+    xr.testing.assert_allclose(expected_rectilinear, result_rectilinear)
+
+    # 2. Test CurvilinearRegridder
+    # Create a dummy source dataset with 2D coordinates
+    lon = np.arange(-180, 180, 45)
+    lat = np.arange(-90, 91, 30)
+    lon2d, lat2d = np.meshgrid(lon, lat)
+    source_ds_curv = xr.Dataset(
+        {"data": (("y", "x"), np.random.rand(lon2d.shape[0], lon2d.shape[1]))},
+        coords={"lat": (("y", "x"), lat2d), "lon": (("y", "x"), lon2d)},
+    )
+    target_ds_curv = xr.Dataset(
+        coords={"y": np.arange(-80, 81, 40), "x": np.arange(-160, 161, 40)}
+    )
+
+    regridder_curv = CurvilinearRegridder(
+        source_data=source_ds_curv, target_grid=target_ds_curv, method="linear"
+    )
+
+    # Save and load the regridder
+    filepath_curvilinear = tmp_path / "regridder_curvilinear.nc"
+    regridder_curv.to_file(filepath_curvilinear)
+    loaded_regridder_curv = CurvilinearRegridder.from_file(filepath_curvilinear)
+
+    # Compare results
+    expected_curvilinear = regridder_curv(source_ds_curv)
+    result_curvilinear = loaded_regridder_curv(source_ds_curv)
+    xr.testing.assert_allclose(expected_curvilinear, result_curvilinear)
