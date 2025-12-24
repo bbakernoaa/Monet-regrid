@@ -355,20 +355,23 @@ def format_lat(
     # NOTE: could use xr.pad here instead of xr.concat, but none of the
     # modes are an exact fit for this scheme
 
+    lat_dim = obj[lat_coord].dims[0]
+    lon_dim = obj[lon_coord].dims[0] if lon_coord else None
+
     # South pole
     if dy - polar_lat >= obj.coords[lat_coord].values[0] > -polar_lat:
-        south_pole = obj.isel({lat_coord: 0})
-        if lon_coord is not None:
-            south_pole = south_pole.mean(lon_coord, keep_attrs=True)
-        obj = xr.concat([south_pole, obj], dim=lat_coord)  # type: ignore
+        south_pole = obj.isel({lat_dim: 0})
+        if lon_dim is not None:
+            south_pole = south_pole.mean(lon_dim, keep_attrs=True)
+        obj = xr.concat([south_pole, obj], dim=lat_dim)  # type: ignore
         lat_vals = np.concatenate([[-polar_lat], lat_vals])
 
     # North pole
     if polar_lat - dy <= obj.coords[lat_coord].values[-1] < polar_lat:
-        north_pole = obj.isel({lat_coord: -1})
-        if lon_coord is not None:
-            north_pole = north_pole.mean(lon_coord, keep_attrs=True)
-        obj = xr.concat([obj, north_pole], dim=lat_coord)  # type: ignore
+        north_pole = obj.isel({lat_dim: -1})
+        if lon_dim is not None:
+            north_pole = north_pole.mean(lon_dim, keep_attrs=True)
+        obj = xr.concat([obj, north_pole], dim=lat_dim)  # type: ignore
         lat_vals = np.concatenate([lat_vals, [polar_lat]])
 
     obj = update_coord(obj, lat_coord, lat_vals)
