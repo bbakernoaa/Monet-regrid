@@ -26,6 +26,7 @@ URLs updated, and documentation adapted for new branding.
 from __future__ import annotations
 
 import abc
+import json
 import pickle
 from collections.abc import Hashable
 from typing import Any
@@ -53,11 +54,16 @@ class BaseRegridder(abc.ABC):
     It provides common functionality and ensures consistent API across different grid types.
     """
 
-    def __init__(self, source_data: xr.DataArray | xr.Dataset, target_grid: xr.Dataset):
+    def __init__(
+        self,
+        source_data: xr.DataArray | xr.Dataset | None,
+        target_grid: xr.Dataset,
+    ):
         """Initialize the regridder with source data and target grid.
 
         Args:
-            source_data: The source data to be regridded (DataArray or Dataset)
+            source_data: The source data to be regridded (DataArray or Dataset), or None
+                to create a data-agnostic regridder.
             target_grid: The target grid specification as a Dataset
         """
         self.source_data = source_data
@@ -109,19 +115,23 @@ class BaseRegridder(abc.ABC):
 
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs."""
-        if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
-            msg = "source_data must be an xarray DataArray or Dataset"
-            raise TypeError(msg)
+        # When source_data is None, we skip validation related to it.
+        # This allows for the creation of a data-agnostic regridder.
+        if self.source_data is not None:
+            if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
+                msg = "source_data must be an xarray DataArray or Dataset"
+                raise TypeError(msg)
 
         if not isinstance(self.target_grid, xr.Dataset):
             msg = "target_grid must be an xarray Dataset"
             raise TypeError(msg)
 
         # Use a centralized coordinate identification function
-        try:
-            self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
-        except ValueError as e:
-            raise ValueError(f"Source data validation failed: {e}") from e
+        if self.source_data is not None:
+            try:
+                self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
+            except ValueError as e:
+                raise ValueError(f"Source data validation failed: {e}") from e
 
         try:
             self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
@@ -235,41 +245,57 @@ class RectilinearRegridder(BaseRegridder):
             raise ValueError(msg)
 
     def to_file(self, filepath: str) -> None:
-        """Save the regridder configuration to a file.
+        """Save the regridder configuration to a NetCDF file.
+
+        This method saves the regridder's configuration (method, time dimension,
+        and method-specific keyword arguments) and the target grid to a NetCDF file.
+        The source data is intentionally not saved, allowing the regridder to be
+        reused with different source datasets.
 
         Args:
-            filepath: Path to save the regridder configuration
+            filepath: Path to save the regridder configuration.
         """
-
-        # Create a serializable representation
+        # Create a serializable dictionary of the regridder's configuration.
+        # The source data is excluded to create a data-agnostic regridder.
         config = {
+            "regridder_type": "RectilinearRegridder",
             "method": self.method,
             "time_dim": self.time_dim,
             "method_kwargs": self.method_kwargs,
-            "source_data": self.source_data,  # This may need special handling for Dask
-            "target_grid": self.target_grid,
         }
 
-        with open(filepath, "wb") as f:
-            pickle.dump(config, f)
+        # The target grid is saved as the dataset.
+        # The configuration is stored as a JSON string in a global attribute.
+        self.target_grid.attrs["regridder_config"] = json.dumps(config)
+        self.target_grid.to_netcdf(filepath)
 
     @classmethod
-    def from_file(cls, filepath: str) -> RectilinearRegridder:
-        """Load a regridder from a file.
+    def from_file(cls, filepath: str) -> "RectilinearRegridder":
+        """Load a regridder from a NetCDF file.
+
+        This class method reconstructs a RectilinearRegridder from a NetCDF file
+        that was created with the `to_file` method. It loads the target grid
+        and the regridding configuration, creating a "data-agnostic" regridder
+        that can be applied to new xarray DataArrays or Datasets.
 
         Args:
-            filepath: Path to load the regridder from
+            filepath: Path to the NetCDF file.
 
         Returns:
-            Instance of RectilinearRegridder
+            An instance of RectilinearRegridder, initialized with `source_data=None`.
         """
+        # Open the NetCDF file and load the target grid and configuration.
+        with xr.open_dataset(filepath) as ds:
+            target_grid = ds
+            config_str = ds.attrs.get("regridder_config")
+            if not config_str:
+                raise ValueError("regridder_config attribute not found in the file.")
+            config = json.loads(config_str)
 
-        with open(filepath, "rb") as f:
-            config = pickle.load(f)
-
+        # The source_data is set to None to create a reusable, data-agnostic regridder.
         return cls(
-            source_data=config["source_data"],
-            target_grid=config["target_grid"],
+            source_data=None,
+            target_grid=target_grid,
             method=config["method"],
             time_dim=config["time_dim"],
             **config["method_kwargs"],
@@ -467,14 +493,17 @@ class CurvilinearRegridder(BaseRegridder):
         method = kwargs.get("method", self.method)
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method"]}}
 
+        # Identify source coordinates just-in-time from the input data
+        source_lat_name, source_lon_name = identify_cf_coordinates(input_data)
+
         # Create the CurvilinearInterpolator
         source_grid = self._create_source_grid_from_data(input_data)
         # Create the interpolator with the source and target grids
         interpolator = CurvilinearInterpolator(
             source_grid=source_grid,
             target_grid=self.target_grid,
-            source_lat_name=self.source_lat_name,
-            source_lon_name=self.source_lon_name,
+            source_lat_name=source_lat_name,
+            source_lon_name=source_lon_name,
             target_lat_name=self.target_lat_name,
             target_lon_name=self.target_lon_name,
             method=method,
@@ -547,40 +576,56 @@ class CurvilinearRegridder(BaseRegridder):
 
 
     def to_file(self, filepath: str) -> None:
-        """Save the regridder to a file.
+        """Save the regridder configuration to a NetCDF file.
+
+        This method saves the regridder's configuration (method and method-specific
+        keyword arguments) and the target grid to a NetCDF file. The source data is
+        intentionally not saved, allowing the regridder to be reused with different
+        source datasets.
 
         Args:
-            filepath: Path to save the regridder
+            filepath: Path to save the regridder configuration.
         """
-
-        # Create a serializable representation
+        # Create a serializable dictionary of the regridder's configuration.
         config = {
+            "regridder_type": "CurvilinearRegridder",
             "method": self.method,
             "method_kwargs": self.method_kwargs,
-            "source_data": self.source_data,  # This may need special handling for Dask
-            "target_grid": self.target_grid,
         }
 
-        with open(filepath, "wb") as f:
-            pickle.dump(config, f)
+        # The target grid is saved as the dataset, and the configuration is stored
+        # as a JSON string in a global attribute.
+        self.target_grid.attrs["regridder_config"] = json.dumps(config)
+        self.target_grid.to_netcdf(filepath)
+
 
     @classmethod
-    def from_file(cls, filepath: str) -> CurvilinearRegridder:
-        """Load a regridder from a file.
+    def from_file(cls, filepath: str) -> "CurvilinearRegridder":
+        """Load a regridder from a NetCDF file.
+
+        This class method reconstructs a CurvilinearRegridder from a NetCDF file
+        that was created with the `to_file` method. It loads the target grid
+        and the regridding configuration, creating a "data-agnostic" regridder
+        that can be applied to new xarray DataArrays or Datasets.
 
         Args:
-            filepath: Path to load the regridder from
+            filepath: Path to the NetCDF file.
 
         Returns:
-            Instance of CurvilinearRegridder
+            An instance of CurvilinearRegridder, initialized with `source_data=None`.
         """
+        # Open the NetCDF file and load the target grid and configuration.
+        with xr.open_dataset(filepath) as ds:
+            target_grid = ds
+            config_str = ds.attrs.get("regridder_config")
+            if not config_str:
+                raise ValueError("regridder_config attribute not found in the file.")
+            config = json.loads(config_str)
 
-        with open(filepath, "rb") as f:
-            config = pickle.load(f)
-
+        # The source_data is set to None to create a reusable, data-agnostic regridder.
         return cls(
-            source_data=config["source_data"],
-            target_grid=config["target_grid"],
+            source_data=None,
+            target_grid=target_grid,
             method=config["method"],
             **config["method_kwargs"],
         )
