@@ -4,10 +4,9 @@ This module tests complete interpolation workflows, performance comparisons,
 and component interactions in the curvilinear regridding system.
 """
 
-import time
-
 import numpy as np
 import xarray as xr
+
 import monet_regrid  # noqa: F401
 
 
@@ -73,7 +72,8 @@ class TestEndToEndWorkflows:
         # Verify result properties
         assert result.shape == self.target_lat.shape
         assert result.shape == self.target_grid["latitude"].shape
-        assert result.attrs == test_data.attrs
+        assert result.attrs["units"] == test_data.attrs["units"]
+        assert result.attrs["long_name"] == test_data.attrs["long_name"]
 
         # Verify coordinate values are reasonable
         assert np.all(np.isfinite(result.values))

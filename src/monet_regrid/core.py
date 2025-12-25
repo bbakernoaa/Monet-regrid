@@ -35,7 +35,6 @@ import cf_xarray  # noqa: F401
 import numpy as np
 import xarray as xr
 
-
 from monet_regrid.curvilinear import CurvilinearInterpolator
 from monet_regrid.methods import conservative, interp
 from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce
@@ -157,7 +156,7 @@ class RectilinearRegridder(BaseRegridder):
 
     def __init__(
         self,
-        source_data: xr.DataArray | xr.Dataset,
+        source_data: xr.DataArray | xr.Dataset | None,
         target_grid: xr.Dataset,
         method: str = "linear",
         time_dim: str | None = "time",
@@ -224,7 +223,7 @@ class RectilinearRegridder(BaseRegridder):
 
         # Apply the appropriate method
         if method in ["linear", "nearest", "cubic", "bilinear"]:
-            return interp.interp_regrid(formatted_data, validated_target_grid, method)
+            regridded_data = interp.interp_regrid(formatted_data, validated_target_grid, method)
         elif method == "conservative":
             # Handle conservative regridding with its specific parameters
             latitude_coord = method_kwargs.get("latitude_coord", None)
@@ -232,7 +231,7 @@ class RectilinearRegridder(BaseRegridder):
             nan_threshold = method_kwargs.get("nan_threshold", 1.0)
             output_chunks = method_kwargs.get("output_chunks", None)
 
-            return conservative.conservative_regrid(
+            regridded_data = conservative.conservative_regrid(
                 formatted_data,
                 validated_target_grid,
                 latitude_coord,
@@ -243,6 +242,15 @@ class RectilinearRegridder(BaseRegridder):
         else:
             msg = f"Unsupported method: {method}. Supported methods are: linear, nearest, cubic, bilinear, conservative"
             raise ValueError(msg)
+
+        # Update history attribute for provenance
+        history_message = f"Regridded using RectilinearRegridder with method='{method}'"
+        existing_history = regridded_data.attrs.get("history", "")
+        regridded_data.attrs["history"] = (
+            f"{existing_history}\n{history_message}" if existing_history else history_message
+        )
+
+        return regridded_data
 
     def to_file(self, filepath: str) -> None:
         """Save the regridder configuration to a NetCDF file.
@@ -270,7 +278,7 @@ class RectilinearRegridder(BaseRegridder):
         self.target_grid.to_netcdf(filepath)
 
     @classmethod
-    def from_file(cls, filepath: str) -> "RectilinearRegridder":
+    def from_file(cls, filepath: str) -> RectilinearRegridder:
         """Load a regridder from a NetCDF file.
 
         This class method reconstructs a RectilinearRegridder from a NetCDF file
@@ -462,7 +470,11 @@ class CurvilinearRegridder(BaseRegridder):
     """
 
     def __init__(
-        self, source_data: xr.DataArray | xr.Dataset, target_grid: xr.Dataset, method: str = "linear", **kwargs: Any
+        self,
+        source_data: xr.DataArray | xr.Dataset | None,
+        target_grid: xr.Dataset,
+        method: str = "linear",
+        **kwargs: Any,
     ):
         """Initialize the curvilinear regridder.
 
@@ -512,6 +524,11 @@ class CurvilinearRegridder(BaseRegridder):
 
         # Apply the interpolation to the actual data
         result = interpolator(input_data)
+
+        # Update history attribute for provenance
+        history_message = f"Regridded using CurvilinearRegridder with method='{method}'"
+        existing_history = result.attrs.get("history", "")
+        result.attrs["history"] = f"{existing_history}\n{history_message}" if existing_history else history_message
 
         return result
 
@@ -600,7 +617,7 @@ class CurvilinearRegridder(BaseRegridder):
 
 
     @classmethod
-    def from_file(cls, filepath: str) -> "CurvilinearRegridder":
+    def from_file(cls, filepath: str) -> CurvilinearRegridder:
         """Load a regridder from a NetCDF file.
 
         This class method reconstructs a CurvilinearRegridder from a NetCDF file

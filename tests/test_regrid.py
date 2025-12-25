@@ -1,12 +1,11 @@
-import pytest
 import warnings
 
 import numpy as np
+import pytest
 import xarray as xr
 from numpy.testing import assert_array_equal
 
 import monet_regrid  # noqa: F401
-
 
 try:
     import xesmf
@@ -14,7 +13,6 @@ except ImportError:
     xesmf = None
 
 import pandas as pd
-
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 
