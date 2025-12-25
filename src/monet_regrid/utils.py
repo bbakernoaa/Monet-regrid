@@ -490,7 +490,8 @@ def update_coord(obj: xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr
 def update_coord(obj: xr.DataArray | xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray | xr.Dataset:
     """Update the values of a coordinate, ensuring indexes stay in sync."""
     attrs = obj.coords[coord].attrs
-    obj = obj.assign_coords({coord: coord_vals})
+    dims = obj.coords[coord].dims
+    obj = obj.assign_coords({coord: (dims, coord_vals)})
     obj.coords[coord].attrs = attrs
     return obj
 

@@ -83,9 +83,11 @@ def interp_regrid(
             # e.g. if coordinates are not monotonic or other edge cases
             pass
 
-    coords = {name: target_ds[name] for name in coord_names}
-    coord_attrs = {coord: data[coord].attrs for coord in coord_names}
+    # Map coordinate names to dimension names for the interpolation
+    coords = {data[name].dims[0]: target_ds[name] for name in coord_names if name in data.coords}
+    coord_attrs = {coord: data[coord].attrs for coord in coord_names if coord in data.coords}
 
+    # Perform the interpolation using dimension names
     interped = data.interp(
         coords=coords,
         method=method,
