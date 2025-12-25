@@ -2,9 +2,12 @@ from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from typing import Any, TypedDict, overload
 
+import cf_xarray  # noqa: F401
 import numpy as np
 import pandas as pd
 import xarray as xr
+
+from monet_regrid.constants import GridType
 
 """
 This file is part of monet-regrid.
@@ -28,10 +31,6 @@ limitations under the License.
 Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
-
-import cf_xarray  # noqa: F401
-
-from monet_regrid.constants import GridType
 
 
 class InvalidBoundsError(Exception): ...
@@ -526,7 +525,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
             # Both coordinates should have the same number of dimensions
             if lat_ndim != lon_ndim:
                 msg = f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
-                raise ValueError(msg)
+                raise ValueError(msg) from None
 
             # Determine grid type based on dimensionality
             if lat_ndim == 1:
@@ -537,7 +536,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                 return GridType.CURVILINEAR
             else:
                 msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
-                raise ValueError(msg)
+                raise ValueError(msg) from None
 
         except KeyError:
             # Fallback to manual search for coordinate names and check their dimensions
@@ -563,7 +562,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                     msg = (
                         f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
                     )
-                    raise ValueError(msg)
+                    raise ValueError(msg) from None
 
                 # Determine grid type based on dimensionality
                 if lat_ndim == 1:
@@ -574,13 +573,10 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                     try:
                         # For true rectilinear grids with 2D coordinates,
                         # lat varies only along one dimension and lon varies only along another
-                        lat_data = lat_coord.values
-                        lon_data = lon_coord.values
-
                         # Check if latitude is constant along the second axis (x-direction)
-                        lat_varies_in_x = np.any(np.diff(lat_data, axis=1) != 0)
+                        np.any(np.diff(lat_coord.values, axis=1) != 0)
                         # Check if longitude is constant along the first axis (y-direction)
-                        lon_varies_in_y = np.any(np.diff(lon_data, axis=0) != 0)
+                        np.any(np.diff(lon_coord.values, axis=0) != 0)
 
                         # If lat only varies in y and lon only varies in x, it's still
                         # treated as curvilinear since rectilinear interpolation expects 1D coordinates
@@ -590,7 +586,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                         return GridType.CURVILINEAR
                 else:
                     msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
-                    raise ValueError(msg)
+                    raise ValueError(msg) from None
             else:
                 # If we don't have lat/lon or x/y named coordinates, try to identify coordinates by their dimensions
                 # Look for coordinates that have 2 dimensions (which would indicate curvilinear)
@@ -638,7 +634,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                         return GridType.CURVILINEAR
                     else:
                         msg = f"Coordinates found but not both 2D: lat={lat_coord.ndim}D, lon={lon_coord.ndim}D"
-                        raise ValueError(msg)
+                        raise ValueError(msg) from None
                 else:
                     # If we still can't find them, try to find any 1D coordinates that look like lat/lon
                     for coord_name in ds.coords:
@@ -667,15 +663,15 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                                     return GridType.RECTILINEAR
 
                     msg = "No latitude or longitude coordinates found"
-                    raise ValueError(msg)
+                    raise ValueError(msg) from None
 
     except (KeyError, ValueError) as e:
         msg = f"Could not identify coordinate: {e}"
         raise ValueError(msg) from e
-    except AttributeError:
+    except AttributeError as e:
         # cf-xarray might not be available or coordinates not properly defined
         msg = "cf-xarray coordinate detection failed - coordinates not properly defined"
-        raise ValueError(msg)
+        raise ValueError(msg) from e
 
 
 def validate_grid_compatibility(source_ds: xr.Dataset, target_ds: xr.Dataset) -> tuple[GridType, GridType]:
@@ -725,7 +721,7 @@ def validate_input(
 def validate_input(
     data: xr.DataArray | xr.Dataset,
     ds_target_grid: xr.Dataset,
-    time_dim: str | None,
+    time_dim: str | None,  # noqa: ARG001
 ) -> xr.Dataset:
     # Check for coordinate compatibility using semantic matching instead of exact name matching
     # This allows latitude/longitude to match with lat/lon, etc.
@@ -832,7 +828,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
             ]
             if not lat_candidates:
                 msg = "Could not identify latitude coordinate"
-                raise ValueError(msg)
+                raise ValueError(msg) from None
             lat_name = lat_candidates[0]
 
     try:
@@ -849,7 +845,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
             ]
             if not lon_candidates:
                 msg = "Could not identify longitude coordinate"
-                raise ValueError(msg)
+                raise ValueError(msg) from None
             lon_name = lon_candidates[0]
 
     return str(lat_name), str(lon_name)

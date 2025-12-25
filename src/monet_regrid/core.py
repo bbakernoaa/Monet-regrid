@@ -35,7 +35,6 @@ import cf_xarray  # noqa: F401
 import numpy as np
 import xarray as xr
 
-
 from monet_regrid.curvilinear import CurvilinearInterpolator
 from monet_regrid.methods import conservative, interp
 from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce
@@ -279,7 +278,7 @@ class RectilinearRegridder(BaseRegridder):
         self.target_grid.to_netcdf(filepath)
 
     @classmethod
-    def from_file(cls, filepath: str) -> "RectilinearRegridder":
+    def from_file(cls, filepath: str) -> RectilinearRegridder:
         """Load a regridder from a NetCDF file.
 
         This class method reconstructs a RectilinearRegridder from a NetCDF file
@@ -618,7 +617,7 @@ class CurvilinearRegridder(BaseRegridder):
 
 
     @classmethod
-    def from_file(cls, filepath: str) -> "CurvilinearRegridder":
+    def from_file(cls, filepath: str) -> CurvilinearRegridder:
         """Load a regridder from a NetCDF file.
 
         This class method reconstructs a CurvilinearRegridder from a NetCDF file
