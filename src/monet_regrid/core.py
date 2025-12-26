@@ -82,26 +82,61 @@ class BaseRegridder(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def to_file(self, filepath: str) -> None:
-        """Save the regridder to a file.
-
-        Args:
-            filepath: Path to save the regridder
-        """
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def from_file(cls, filepath: str) -> BaseRegridder:
-        """Load a regridder from a file.
-
-        Args:
-            filepath: Path to load the regridder from
+    def _get_config(self) -> dict[str, Any]:
+        """Get the configuration of the regridder.
 
         Returns:
-            Instance of the regridder class
+            Dictionary containing the regridder's configuration.
         """
         pass
+
+    def to_file(self, filepath: str) -> None:
+        """Save the regridder configuration to a NetCDF file.
+
+        This method saves the regridder's configuration and the target grid to a
+        NetCDF file. The source data is intentionally not saved, allowing the
+        regridder to be reused with different source datasets.
+
+        Args:
+            filepath: Path to save the regridder configuration.
+        """
+        config = self._get_config()
+        self.target_grid.attrs["regridder_config"] = json.dumps(config)
+        self.target_grid.to_netcdf(filepath)
+
+    @classmethod
+    def from_file(cls, filepath: str) -> BaseRegridder:
+        """Load a regridder from a NetCDF file.
+
+        This class method reconstructs a regridder from a NetCDF file that was
+        created with the `to_file` method. It loads the target grid and the
+        regridding configuration, creating a "data-agnostic" regridder that
+        can be applied to new xarray DataArrays or Datasets.
+
+        Args:
+            filepath: Path to the NetCDF file.
+
+        Returns:
+            An instance of a regridder class, initialized with `source_data=None`.
+        """
+        with xr.open_dataset(filepath) as ds:
+            target_grid = ds
+            config_str = ds.attrs.get("regridder_config")
+            if not config_str:
+                msg = "regridder_config attribute not found in the file."
+                raise ValueError(msg)
+            config = json.loads(config_str)
+
+        regridder_type = config.pop("regridder_type")
+        if regridder_type == "RectilinearRegridder":
+            regridder_class = RectilinearRegridder
+        elif regridder_type == "CurvilinearRegridder":
+            regridder_class = CurvilinearRegridder
+        else:
+            msg = f"Unknown regridder type: {regridder_type}"
+            raise ValueError(msg)
+
+        return regridder_class(source_data=None, target_grid=target_grid, **config)
 
     @abc.abstractmethod
     def info(self) -> dict[str, Any]:
@@ -145,6 +180,10 @@ class BaseRegridder(abc.ABC):
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Restore the regridder from serialized state (Dask compatibility)."""
         self.__dict__.update(state)
+
+    def __repr__(self) -> str:
+        """Return a string representation of the regridder."""
+        return f"<{self.__class__.__name__}>\n{self.info()}"
 
 
 class RectilinearRegridder(BaseRegridder):
@@ -252,62 +291,20 @@ class RectilinearRegridder(BaseRegridder):
 
         return regridded_data
 
-    def to_file(self, filepath: str) -> None:
-        """Save the regridder configuration to a NetCDF file.
 
-        This method saves the regridder's configuration (method, time dimension,
-        and method-specific keyword arguments) and the target grid to a NetCDF file.
-        The source data is intentionally not saved, allowing the regridder to be
-        reused with different source datasets.
 
-        Args:
-            filepath: Path to save the regridder configuration.
+    def _get_config(self) -> dict[str, Any]:
+        """Get the configuration of the regridder.
+
+        Returns:
+            Dictionary containing the regridder's configuration.
         """
-        # Create a serializable dictionary of the regridder's configuration.
-        # The source data is excluded to create a data-agnostic regridder.
-        config = {
+        return {
             "regridder_type": "RectilinearRegridder",
             "method": self.method,
             "time_dim": self.time_dim,
             "method_kwargs": self.method_kwargs,
         }
-
-        # The target grid is saved as the dataset.
-        # The configuration is stored as a JSON string in a global attribute.
-        self.target_grid.attrs["regridder_config"] = json.dumps(config)
-        self.target_grid.to_netcdf(filepath)
-
-    @classmethod
-    def from_file(cls, filepath: str) -> RectilinearRegridder:
-        """Load a regridder from a NetCDF file.
-
-        This class method reconstructs a RectilinearRegridder from a NetCDF file
-        that was created with the `to_file` method. It loads the target grid
-        and the regridding configuration, creating a "data-agnostic" regridder
-        that can be applied to new xarray DataArrays or Datasets.
-
-        Args:
-            filepath: Path to the NetCDF file.
-
-        Returns:
-            An instance of RectilinearRegridder, initialized with `source_data=None`.
-        """
-        # Open the NetCDF file and load the target grid and configuration.
-        with xr.open_dataset(filepath) as ds:
-            target_grid = ds
-            config_str = ds.attrs.get("regridder_config")
-            if not config_str:
-                raise ValueError("regridder_config attribute not found in the file.")
-            config = json.loads(config_str)
-
-        # The source_data is set to None to create a reusable, data-agnostic regridder.
-        return cls(
-            source_data=None,
-            target_grid=target_grid,
-            method=config["method"],
-            time_dim=config["time_dim"],
-            **config["method_kwargs"],
-        )
 
     def info(self) -> dict[str, Any]:
         """Get information about the rectilinear regridder instance.
@@ -592,60 +589,20 @@ class CurvilinearRegridder(BaseRegridder):
                 raise ValueError(msg)
 
 
-    def to_file(self, filepath: str) -> None:
-        """Save the regridder configuration to a NetCDF file.
 
-        This method saves the regridder's configuration (method and method-specific
-        keyword arguments) and the target grid to a NetCDF file. The source data is
-        intentionally not saved, allowing the regridder to be reused with different
-        source datasets.
 
-        Args:
-            filepath: Path to save the regridder configuration.
+
+    def _get_config(self) -> dict[str, Any]:
+        """Get the configuration of the regridder.
+
+        Returns:
+            Dictionary containing the regridder's configuration.
         """
-        # Create a serializable dictionary of the regridder's configuration.
-        config = {
+        return {
             "regridder_type": "CurvilinearRegridder",
             "method": self.method,
             "method_kwargs": self.method_kwargs,
         }
-
-        # The target grid is saved as the dataset, and the configuration is stored
-        # as a JSON string in a global attribute.
-        self.target_grid.attrs["regridder_config"] = json.dumps(config)
-        self.target_grid.to_netcdf(filepath)
-
-
-    @classmethod
-    def from_file(cls, filepath: str) -> CurvilinearRegridder:
-        """Load a regridder from a NetCDF file.
-
-        This class method reconstructs a CurvilinearRegridder from a NetCDF file
-        that was created with the `to_file` method. It loads the target grid
-        and the regridding configuration, creating a "data-agnostic" regridder
-        that can be applied to new xarray DataArrays or Datasets.
-
-        Args:
-            filepath: Path to the NetCDF file.
-
-        Returns:
-            An instance of CurvilinearRegridder, initialized with `source_data=None`.
-        """
-        # Open the NetCDF file and load the target grid and configuration.
-        with xr.open_dataset(filepath) as ds:
-            target_grid = ds
-            config_str = ds.attrs.get("regridder_config")
-            if not config_str:
-                raise ValueError("regridder_config attribute not found in the file.")
-            config = json.loads(config_str)
-
-        # The source_data is set to None to create a reusable, data-agnostic regridder.
-        return cls(
-            source_data=None,
-            target_grid=target_grid,
-            method=config["method"],
-            **config["method_kwargs"],
-        )
 
     def info(self) -> dict[str, Any]:
         """Get information about the curvilinear regridder instance.
