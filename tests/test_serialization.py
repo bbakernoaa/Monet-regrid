@@ -27,7 +27,7 @@ import xarray as xr
 from xarray.testing import assert_allclose
 
 import monet_regrid  # noqa: F401
-from monet_regrid.core import CurvilinearRegridder, RectilinearRegridder
+from monet_regrid.core import BaseRegridder, CurvilinearRegridder, RectilinearRegridder
 
 
 @pytest.fixture()
@@ -138,8 +138,12 @@ def test_rectilinear_regridder_serialization(
     filepath = tmp_path / "regridder.nc"
     regridder.to_file(filepath)
 
-    # Load the regridder and apply it to the same data
-    loaded_regridder = RectilinearRegridder.from_file(filepath)
+    # Load the regridder using the base class method
+    loaded_regridder = BaseRegridder.from_file(filepath)
+    assert isinstance(loaded_regridder, RectilinearRegridder)
+    assert loaded_regridder.method == "linear"
+
+    # Apply the loaded regridder to the same data
     result = loaded_regridder(rectilinear_source_grid)
 
     # Check that the results are identical
@@ -160,8 +164,12 @@ def test_curvilinear_regridder_serialization(
     filepath = tmp_path / "regridder.nc"
     regridder.to_file(filepath)
 
-    # Load the regridder and apply it to the same data
-    loaded_regridder = CurvilinearRegridder.from_file(filepath)
+    # Load the regridder using the base class method
+    loaded_regridder = BaseRegridder.from_file(filepath)
+    assert isinstance(loaded_regridder, CurvilinearRegridder)
+    assert loaded_regridder.method == "linear"
+
+    # Apply the loaded regridder to the same data
     result = loaded_regridder(curvilinear_source_grid)
 
     # Check that the results are identical
