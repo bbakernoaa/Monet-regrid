@@ -150,6 +150,77 @@ def test_rectilinear_regridder_serialization(
     assert_allclose(result, expected)
 
 
+def test_curvilinear_regridder_serialization_backward_compatibility(
+    curvilinear_source_grid, curvilinear_target_grid, tmp_path
+):
+    """Test loading a CurvilinearRegridder from the old format."""
+    # Create a regridder and regrid the data
+    regridder = CurvilinearRegridder(
+        source_data=curvilinear_source_grid, target_grid=curvilinear_target_grid
+    )
+    expected = regridder()
+
+    # Create a legacy config file
+    filepath = tmp_path / "legacy_regridder.nc"
+    legacy_config = {
+        "regridder_type": "CurvilinearRegridder",
+        "method": "linear",
+        "method_kwargs": {},
+    }
+    target_grid_with_legacy_config = curvilinear_target_grid.copy()
+    target_grid_with_legacy_config.attrs["regridder_config"] = (
+        __import__("json").dumps(legacy_config)
+    )
+    target_grid_with_legacy_config.to_netcdf(filepath)
+
+    # Load the regridder using the base class method
+    loaded_regridder = BaseRegridder.from_file(filepath)
+    assert isinstance(loaded_regridder, CurvilinearRegridder)
+    assert loaded_regridder.method == "linear"
+
+    # Apply the loaded regridder to the same data
+    result = loaded_regridder(curvilinear_source_grid)
+
+    # Check that the results are identical
+    assert_allclose(result, expected)
+
+
+def test_rectilinear_regridder_serialization_backward_compatibility(
+    rectilinear_source_grid, rectilinear_target_grid, tmp_path
+):
+    """Test loading a RectilinearRegridder from the old format."""
+    # Create a regridder and regrid the data
+    regridder = RectilinearRegridder(
+        source_data=rectilinear_source_grid, target_grid=rectilinear_target_grid
+    )
+    expected = regridder()
+
+    # Create a legacy config file
+    filepath = tmp_path / "legacy_regridder.nc"
+    legacy_config = {
+        "regridder_type": "RectilinearRegridder",
+        "method": "linear",
+        "time_dim": "time",
+        "method_kwargs": {},
+    }
+    target_grid_with_legacy_config = rectilinear_target_grid.copy()
+    target_grid_with_legacy_config.attrs["regridder_config"] = (
+        __import__("json").dumps(legacy_config)
+    )
+    target_grid_with_legacy_config.to_netcdf(filepath)
+
+    # Load the regridder using the base class method
+    loaded_regridder = BaseRegridder.from_file(filepath)
+    assert isinstance(loaded_regridder, RectilinearRegridder)
+    assert loaded_regridder.method == "linear"
+
+    # Apply the loaded regridder to the same data
+    result = loaded_regridder(rectilinear_source_grid)
+
+    # Check that the results are identical
+    assert_allclose(result, expected)
+
+
 def test_curvilinear_regridder_serialization(
     curvilinear_source_grid, curvilinear_target_grid, tmp_path
 ):
