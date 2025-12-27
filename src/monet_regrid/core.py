@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import abc
 import json
-import pickle
 from collections.abc import Hashable
 from typing import Any
 
@@ -83,10 +82,10 @@ class BaseRegridder(abc.ABC):
 
     @abc.abstractmethod
     def _get_config(self) -> dict[str, Any]:
-        """Get the configuration of the regridder.
-
+        """Get the configuration of the regridder for serialization.
         Returns:
-            Dictionary containing the regridder's configuration.
+            Dictionary containing the regridder's configuration,
+            including module and class names for dynamic instantiation.
         """
         pass
 
@@ -105,36 +104,53 @@ class BaseRegridder(abc.ABC):
         self.target_grid.to_netcdf(filepath)
 
     @classmethod
-    def from_file(cls, filepath: str) -> BaseRegridder:
+    def from_file(cls, filepath: str) -> "BaseRegridder":
         """Load a regridder from a NetCDF file.
-
         This class method reconstructs a regridder from a NetCDF file that was
         created with the `to_file` method. It loads the target grid and the
         regridding configuration, creating a "data-agnostic" regridder that
         can be applied to new xarray DataArrays or Datasets.
-
         Args:
             filepath: Path to the NetCDF file.
-
         Returns:
             An instance of a regridder class, initialized with `source_data=None`.
         """
         with xr.open_dataset(filepath) as ds:
-            target_grid = ds
-            config_str = ds.attrs.get("regridder_config")
-            if not config_str:
-                msg = "regridder_config attribute not found in the file."
-                raise ValueError(msg)
-            config = json.loads(config_str)
+            target_grid = ds.copy(deep=True)
 
-        regridder_type = config.pop("regridder_type")
-        if regridder_type == "RectilinearRegridder":
-            regridder_class = RectilinearRegridder
-        elif regridder_type == "CurvilinearRegridder":
-            regridder_class = CurvilinearRegridder
-        else:
-            msg = f"Unknown regridder type: {regridder_type}"
+        config_str = target_grid.attrs.pop("regridder_config", None)
+        if not config_str:
+            msg = "regridder_config attribute not found in the file."
             raise ValueError(msg)
+        config = json.loads(config_str)
+
+        # Handle new format (dynamic import) and old format (hardcoded) for backward compatibility
+        if "module" in config and "class" in config:
+            module_name = config.pop("module")
+            class_name = config.pop("class")
+
+            try:
+                module = __import__(module_name, fromlist=[class_name])
+                regridder_class = getattr(module, class_name)
+            except (ImportError, AttributeError) as e:
+                msg = f"Failed to load regridder class '{class_name}' from module '{module_name}'."
+                raise ImportError(msg) from e
+        elif "regridder_type" in config:
+            regridder_type = config.pop("regridder_type")
+            if regridder_type == "RectilinearRegridder":
+                regridder_class = RectilinearRegridder
+            elif regridder_type == "CurvilinearRegridder":
+                regridder_class = CurvilinearRegridder
+            else:
+                msg = f"Unknown regridder type: {regridder_type}"
+                raise ValueError(msg)
+        else:
+            msg = "Could not determine regridder type from file. Missing 'regridder_type' or 'module'/'class' from config."
+            raise ValueError(msg)
+
+        if not issubclass(regridder_class, cls):
+            msg = f"Loaded class {regridder_class} is not a subclass of {cls}."
+            raise TypeError(msg)
 
         return regridder_class(source_data=None, target_grid=target_grid, **config)
 
@@ -294,13 +310,15 @@ class RectilinearRegridder(BaseRegridder):
 
 
     def _get_config(self) -> dict[str, Any]:
-        """Get the configuration of the regridder.
+        """Get the configuration of the regridder for serialization.
 
         Returns:
-            Dictionary containing the regridder's configuration.
+            Dictionary containing the regridder's configuration,
+            including module and class names for dynamic instantiation.
         """
         return {
-            "regridder_type": "RectilinearRegridder",
+            "module": self.__class__.__module__,
+            "class": self.__class__.__name__,
             "method": self.method,
             "time_dim": self.time_dim,
             "method_kwargs": self.method_kwargs,
@@ -593,13 +611,15 @@ class CurvilinearRegridder(BaseRegridder):
 
 
     def _get_config(self) -> dict[str, Any]:
-        """Get the configuration of the regridder.
+        """Get the configuration of the regridder for serialization.
 
         Returns:
-            Dictionary containing the regridder's configuration.
+            Dictionary containing the regridder's configuration,
+            including module and class names for dynamic instantiation.
         """
         return {
-            "regridder_type": "CurvilinearRegridder",
+            "module": self.__class__.__module__,
+            "class": self.__class__.__name__,
             "method": self.method,
             "method_kwargs": self.method_kwargs,
         }
