@@ -57,12 +57,15 @@ class BaseRegridder(abc.ABC):
         source_data: xr.DataArray | xr.Dataset | None,
         target_grid: xr.Dataset,
     ):
-        """Initialize the regridder with source data and target grid.
+        """Initialize the regridder.
 
-        Args:
-            source_data: The source data to be regridded (DataArray or Dataset), or None
-                to create a data-agnostic regridder.
-            target_grid: The target grid specification as a Dataset
+        Parameters
+        ----------
+        source_data : xr.DataArray | xr.Dataset | None
+            The source data to be regridded. If None, a data-agnostic regridder
+            is created which can be applied to data later.
+        target_grid : xr.Dataset
+            The target grid specification.
         """
         self.source_data = source_data
         self.target_grid = target_grid
@@ -72,18 +75,25 @@ class BaseRegridder(abc.ABC):
     def __call__(self, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation.
 
-        Args:
-            **kwargs: Additional arguments for the regridding operation
+        Parameters
+        ----------
+        **kwargs : Any
+            Additional arguments for the regridding operation.
 
-        Returns:
-            Regridded data with the same type as input (DataArray or Dataset)
+        Returns
+        -------
+        xr.DataArray | xr.Dataset
+            The regridded data.
         """
         pass
 
     @abc.abstractmethod
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.
-        Returns:
+
+        Returns
+        -------
+        dict[str, Any]
             Dictionary containing the regridder's configuration,
             including module and class names for dynamic instantiation.
         """
@@ -96,8 +106,10 @@ class BaseRegridder(abc.ABC):
         NetCDF file. The source data is intentionally not saved, allowing the
         regridder to be reused with different source datasets.
 
-        Args:
-            filepath: Path to save the regridder configuration.
+        Parameters
+        ----------
+        filepath : str
+            Path to save the regridder configuration.
         """
         config = self._get_config()
         self.target_grid.attrs["regridder_config"] = json.dumps(config)
@@ -110,9 +122,15 @@ class BaseRegridder(abc.ABC):
         created with the `to_file` method. It loads the target grid and the
         regridding configuration, creating a "data-agnostic" regridder that
         can be applied to new xarray DataArrays or Datasets.
-        Args:
-            filepath: Path to the NetCDF file.
-        Returns:
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the NetCDF file.
+
+        Returns
+        -------
+        BaseRegridder
             An instance of a regridder class, initialized with `source_data=None`.
         """
         with xr.open_dataset(filepath) as ds:
@@ -158,8 +176,10 @@ class BaseRegridder(abc.ABC):
     def info(self) -> dict[str, Any]:
         """Get information about the regridder instance.
 
-        Returns:
-            Dictionary containing regridder metadata and configuration
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing regridder metadata and configuration.
         """
         pass
 
@@ -219,12 +239,18 @@ class RectilinearRegridder(BaseRegridder):
     ):
         """Initialize the rectilinear regridder.
 
-        Args:
-            source_data: The source data to be regridded (DataArray or Dataset)
-            target_grid: The target grid specification as a Dataset
-            method: Interpolation method ('linear', 'nearest', 'cubic', 'bilinear', 'conservative')
-            time_dim: Name of the time dimension, or None to force regridding over time
-            **kwargs: Additional method-specific arguments
+        Parameters
+        ----------
+        source_data : xr.DataArray | xr.Dataset | None
+            The source data to be regridded.
+        target_grid : xr.Dataset
+            The target grid specification.
+        method : str, optional
+            Interpolation method. Defaults to "linear".
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        **kwargs : Any
+            Additional method-specific arguments.
         """
         self.method = method
         self.time_dim = time_dim
@@ -235,14 +261,47 @@ class RectilinearRegridder(BaseRegridder):
         super().__init__(source_data, target_grid)
 
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
-        """Execute the regridding operation using interpolation methods.
+        """Execute the regridding operation.
 
-        Args:
-            data: Data to regrid (optional, defaults to source_data from initialization)
-            **kwargs: Additional arguments that override initialization parameters
+        This method performs the regridding of the source data to the target grid
+        using the specified interpolation method. It can be called with new data
+        or will use the data provided during initialization.
 
-        Returns:
-            Regridded data with the same type as input (DataArray or Dataset)
+        Parameters
+        ----------
+        data : xr.DataArray | xr.Dataset | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
+        **kwargs : Any
+            Additional keyword arguments to override the regridder's
+            initialization parameters for this specific call. For example,
+            `method='nearest'` could be used to temporarily change the
+            interpolation method.
+
+        Returns
+        -------
+        xr.DataArray | xr.Dataset
+            The regridded data, with the same type as the input `data`.
+
+        Examples
+        --------
+        >>> import xarray as xr
+        >>> import numpy as np
+        >>> source_da = xr.DataArray(
+        ...     np.random.rand(10, 20),
+        ...     dims=["y", "x"],
+        ...     coords={"lat": (("y",), np.arange(0, 10)), "lon": (("x",), np.arange(0, 20))},
+        ... )
+        >>> target_ds = xr.Dataset(
+        ...     coords={
+        ...         "lat": (("y_new",), np.arange(0.5, 10, 2)),
+        ...         "lon": (("x_new",), np.arange(0.5, 20, 2)),
+        ...     }
+        ... )
+        >>> regridder = RectilinearRegridder(source_da, target_ds, method="linear")
+        >>> regridded_da = regridder()
+        >>> print(regridded_da.shape)
+        (5, 10)
         """
         # Use provided data or fall back to source data
         input_data = data if data is not None else self.source_data
@@ -312,9 +371,10 @@ class RectilinearRegridder(BaseRegridder):
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.
 
-        Returns:
-            Dictionary containing the regridder's configuration,
-            including module and class names for dynamic instantiation.
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing the regridder's configuration.
         """
         return {
             "module": self.__class__.__module__,
@@ -327,8 +387,10 @@ class RectilinearRegridder(BaseRegridder):
     def info(self) -> dict[str, Any]:
         """Get information about the rectilinear regridder instance.
 
-        Returns:
-            Dictionary containing regridder metadata and configuration
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing regridder metadata and configuration.
         """
         source_dims = {}
         if hasattr(self.source_data, "dims"):
@@ -358,20 +420,23 @@ class RectilinearRegridder(BaseRegridder):
         skipna: bool = False,
         fill_value: None | Any = None,
     ) -> xr.DataArray | xr.Dataset:
-        """Upsampling of data using statistical methods (e.g. the mean or variance).
+        """Upsample data using statistical methods.
 
-        Args:
-            method: One of the following reduction methods: "sum", "mean", "var", "std",
-                "median", "min", or "max".
-            time_dim: Name of the time dimension. Defaults to "time". Use `None` to
-                force regridding over the time dimension.
-            skipna: If NaN values should be ignored.
-            fill_value: What value to fill uncovered parts of the target grid.
-                By default this will be NaN, and integer type data will be cast to
-                float to accomodate this.
+        Parameters
+        ----------
+        method : str
+            The reduction method, e.g., "sum", "mean", "min", "max".
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        skipna : bool, optional
+            If True, ignores NaN values. Defaults to False.
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
 
-        Returns:
-            xarray.dataset with regridded land cover categorical data.
+        Returns
+        -------
+        xr.DataArray | xr.Dataset
+            The regridded data.
         """
 
         ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
@@ -394,18 +459,21 @@ class RectilinearRegridder(BaseRegridder):
         is not deterministic, and the resulting "most common" one will randomly be
         either of the two.
 
-        Args:
-            values: Numpy array containing all labels expected to be in the
-                input data. For example, `np.array([0, 2, 4])`, if the data only
-                contains the values 0, 2 and 4.
-            time_dim: Name of the time dimension. Defaults to "time". Use `None` to
-                force regridding over the time dimension.
-            fill_value: What value to fill uncovered parts of the target grid.
-                By default this will be NaN, and integer type data will be cast to
-                float to accomodate this.
+        Parameters
+        ----------
+        values : np.ndarray
+            Numpy array containing all labels expected in the input data.
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
+        nan_threshold : float, optional
+            Threshold for NaN values. Defaults to 1.0.
 
-        Returns:
-            Regridded data.
+        Returns
+        -------
+        xr.DataArray
+            The regridded data.
         """
         if isinstance(self.source_data, xr.Dataset):
             msg = (
@@ -443,18 +511,21 @@ class RectilinearRegridder(BaseRegridder):
         is not deterministic, and the resulting "least common" one will randomly be
         either of the two.
 
-        Args:
-            values: Numpy array containing all labels expected to be in the
-                input data. For example, `np.array([0, 2, 4])`, if the data only
-                contains the values 0, 2 and 4.
-            time_dim: Name of the time dimension. Defaults to "time". Use `None` to
-                force regridding over the time dimension.
-            fill_value: What value to fill uncovered parts of the target grid.
-                By default this will be NaN, and integer type data will be cast to
-                float to accomodate this.
+        Parameters
+        ----------
+        values : np.ndarray
+            Numpy array containing all labels expected in the input data.
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
+        nan_threshold : float, optional
+            Threshold for NaN values. Defaults to 1.0.
 
-        Returns:
-            Regridded data.
+        Returns
+        -------
+        xr.DataArray
+            The regridded data.
         """
         if isinstance(self.source_data, xr.Dataset):
             msg = (
@@ -493,11 +564,16 @@ class CurvilinearRegridder(BaseRegridder):
     ):
         """Initialize the curvilinear regridder.
 
-        Args:
-            source_data: The source data to be regridded (DataArray or Dataset)
-            target_grid: The target grid specification as a Dataset
-            method: Interpolation method for curvilinear grids
-            **kwargs: Additional method-specific arguments
+        Parameters
+        ----------
+        source_data : xr.DataArray | xr.Dataset | None
+            The source data to be regridded.
+        target_grid : xr.Dataset
+            The target grid specification.
+        method : str, optional
+            Interpolation method. Defaults to "linear".
+        **kwargs : Any
+            Additional method-specific arguments.
         """
         self.method = method
         self.method_kwargs = kwargs
@@ -506,12 +582,17 @@ class CurvilinearRegridder(BaseRegridder):
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation for curvilinear grids.
 
-        Args:
-            data: Data to regrid (optional, defaults to source_data from initialization)
-            **kwargs: Additional arguments that override initialization parameters
+        Parameters
+        ----------
+        data : xr.DataArray | xr.Dataset | None, optional
+            Data to regrid. Defaults to the source data from initialization.
+        **kwargs : Any
+            Additional arguments to override initialization parameters.
 
-        Returns:
-            Regridded data with the same type as input (DataArray or Dataset)
+        Returns
+        -------
+        xr.DataArray | xr.Dataset
+            The regridded data.
         """
         # Use provided data or fall back to source data
         input_data = data if data is not None else self.source_data
@@ -613,9 +694,10 @@ class CurvilinearRegridder(BaseRegridder):
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.
 
-        Returns:
-            Dictionary containing the regridder's configuration,
-            including module and class names for dynamic instantiation.
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing the regridder's configuration.
         """
         return {
             "module": self.__class__.__module__,
@@ -627,8 +709,10 @@ class CurvilinearRegridder(BaseRegridder):
     def info(self) -> dict[str, Any]:
         """Get information about the curvilinear regridder instance.
 
-        Returns:
-            Dictionary containing regridder metadata and configuration
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing regridder metadata and configuration.
         """
         source_dims = {}
         if hasattr(self.source_data, "dims"):
