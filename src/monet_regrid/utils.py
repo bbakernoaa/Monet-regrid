@@ -802,16 +802,33 @@ def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = No
 
 
 def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
-    """Identify latitude and longitude coordinates in a dataset using cf-xarray.
+    """Identify latitude and longitude coordinates using a fallback strategy.
 
-    Args:
-        ds: Input xarray dataset
+    This function attempts to find the names of the latitude and longitude
+    coordinates in a given xarray Dataset. It uses a hybrid strategy:
 
-    Returns:
-        Tuple of (latitude_name, longitude_name)
+    1.  **CF-xarray:** First, it tries to use the `cf-xarray` accessor to
+        identify coordinates based on CF (Climate and Forecast) conventions
+        (e.g., 'latitude', 'longitude').
+    2.  **Fallback:** If `cf-xarray` fails, it falls back to a predefined
+        list of common, non-standard names (e.g., 'lat', 'lon', 'yc', 'xc', 'y', 'x').
 
-    Raises:
-        ValueError: If latitude or longitude coordinates cannot be identified
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The dataset to inspect.
+
+    Returns
+    -------
+    tuple[str, str]
+        A tuple containing the identified names for the latitude and longitude
+        coordinates, respectively.
+
+    Raises
+    ------
+    ValueError
+        If either the latitude or longitude coordinate cannot be identified
+        through any of the fallback strategies.
     """
     # Try standard CF names first
     try:
