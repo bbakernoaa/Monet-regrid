@@ -577,6 +577,9 @@ class CurvilinearRegridder(BaseRegridder):
         """
         self.method = method
         self.method_kwargs = kwargs
+        # Unpack nested method_kwargs that can occur during deserialization
+        if "method_kwargs" in self.method_kwargs and len(self.method_kwargs) == 1:
+            self.method_kwargs = self.method_kwargs["method_kwargs"]
         self._interpolator_cache: dict[tuple, CurvilinearInterpolator] = {}
         super().__init__(source_data, target_grid)
 
