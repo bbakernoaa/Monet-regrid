@@ -577,10 +577,15 @@ class CurvilinearRegridder(BaseRegridder):
         """
         self.method = method
         self.method_kwargs = kwargs
+        self._interpolator_cache: dict[tuple, CurvilinearInterpolator] = {}
         super().__init__(source_data, target_grid)
 
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation for curvilinear grids.
+
+        This method caches the underlying ``CurvilinearInterpolator`` object after its
+        first creation for a given grid and method configuration. Subsequent calls with
+        the same configuration will reuse the cached interpolator to improve performance.
 
         Parameters
         ----------
@@ -601,22 +606,35 @@ class CurvilinearRegridder(BaseRegridder):
         method = kwargs.get("method", self.method)
         method_kwargs = {**self.method_kwargs, **{k: v for k, v in kwargs.items() if k not in ["method"]}}
 
-        # Identify source coordinates just-in-time from the input data
-        source_lat_name, source_lon_name = identify_cf_coordinates(input_data)
-
-        # Create the CurvilinearInterpolator
-        source_grid = self._create_source_grid_from_data(input_data)
-        # Create the interpolator with the source and target grids
-        interpolator = CurvilinearInterpolator(
-            source_grid=source_grid,
-            target_grid=self.target_grid,
-            source_lat_name=source_lat_name,
-            source_lon_name=source_lon_name,
-            target_lat_name=self.target_lat_name,
-            target_lon_name=self.target_lon_name,
-            method=method,
-            **method_kwargs,
+        # Create a stable cache key from the grids and method config
+        cache_key = (
+            _create_cache_key(input_data),
+            _create_cache_key(self.target_grid),
+            method,
+            tuple(sorted(method_kwargs.items())),
         )
+
+        # Check if we have a cached interpolator
+        if cache_key in self._interpolator_cache:
+            interpolator = self._interpolator_cache[cache_key]
+        else:
+            # Identify source coordinates just-in-time from the input data
+            source_lat_name, source_lon_name = identify_cf_coordinates(input_data)
+
+            # Create the source grid and the interpolator
+            source_grid = self._create_source_grid_from_data(input_data)
+            interpolator = CurvilinearInterpolator(
+                source_grid=source_grid,
+                target_grid=self.target_grid,
+                source_lat_name=source_lat_name,
+                source_lon_name=source_lon_name,
+                target_lat_name=self.target_lat_name,
+                target_lon_name=self.target_lon_name,
+                method=method,
+                **method_kwargs,
+            )
+            # Cache the interpolator
+            self._interpolator_cache[cache_key] = interpolator
 
         # Apply the interpolation to the actual data
         result = interpolator(input_data)

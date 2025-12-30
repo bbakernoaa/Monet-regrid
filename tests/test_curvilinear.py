@@ -1,7 +1,10 @@
+from unittest.mock import patch
+
 import numpy as np
 import xarray as xr
 
 import monet_regrid
+from monet_regrid.core import CurvilinearRegridder
 
 
 def test_curvilinear_interpolator_nearest_interpolation():
@@ -187,3 +190,42 @@ def test_curvilinear_regridder_coordinate_identification():
     assert regridder.source_lon_name == "lon"
     assert regridder.target_lat_name == "latitude"
     assert regridder.target_lon_name == "longitude"
+
+
+def test_curvilinear_regridder_caches_interpolator():
+    """Test that CurvilinearRegridder caches the interpolator object."""
+    # Create source and target grids
+    source_da = xr.DataArray(
+        np.random.rand(5, 5),
+        dims=["y", "x"],
+        coords={
+            "lat": (("y", "x"), np.random.rand(5, 5) * 90),
+            "lon": (("y", "x"), np.random.rand(5, 5) * 360),
+        },
+    )
+    target_ds = xr.Dataset(
+        coords={
+            "lat": (("y_new", "x_new"), np.random.rand(3, 3) * 90),
+            "lon": (("y_new", "x_new"), np.random.rand(3, 3) * 360),
+        }
+    )
+
+    regridder = CurvilinearRegridder(source_da, target_ds, method="linear")
+
+    # Use patch to spy on the CurvilinearInterpolator constructor
+    with patch("monet_regrid.core.CurvilinearInterpolator", autospec=True) as mock_interpolator:
+        # First call - should create and cache an interpolator
+        regridder()
+        mock_interpolator.assert_called_once()
+
+        # Second call with same parameters - should use the cached interpolator
+        regridder()
+        mock_interpolator.assert_called_once()  # Still called only once
+
+        # Third call with different method - should create a new interpolator
+        regridder(method="nearest")
+        assert mock_interpolator.call_count == 2
+
+        # Fourth call with the original method - should use the cache again
+        regridder()
+        assert mock_interpolator.call_count == 2
