@@ -649,64 +649,55 @@ class CurvilinearRegridder(BaseRegridder):
 
         return result
 
-    def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
-        """Create a grid specification from source data."""
-        # Use provided data or fall back to source data
+    def _create_source_grid_from_data(
+        self, source_data: xr.DataArray | xr.Dataset | None = None
+    ) -> xr.Dataset:
+        """Create a grid Dataset from the coordinates of the source data.
+
+        This utility method extracts the latitude and longitude coordinates from the
+        source data to create a new ``xr.Dataset`` that represents the source grid.
+        It uses the ``identify_cf_coordinates`` function to robustly find the
+        coordinate names.
+
+        Parameters
+        ----------
+        source_data : xr.DataArray | xr.Dataset | None, optional
+            The source data from which to extract the grid. If None, it falls back
+            to the ``source_data`` provided during the regridder's initialization.
+            Defaults to None.
+
+        Returns
+        -------
+        xr.Dataset
+            A Dataset containing only the latitude and longitude coordinates of the
+            source data.
+
+        Raises
+        ------
+        ValueError
+            If the source data does not contain identifiable latitude and longitude
+            coordinates.
+        """
         data = source_data if source_data is not None else self.source_data
+        if data is None:
+            msg = "Source data must be provided to create a source grid."
+            raise ValueError(msg)
 
-        # Extract coordinate information from source data
-        # First, determine the coordinate names using cf-xarray if available
-        try:
-            lat_coord = data.cf["latitude"]
-            lon_coord = data.cf["longitude"]
-            lat_name = lat_coord.name
-            lon_name = lon_coord.name
+        # Use the centralized utility to identify coordinate names
+        lat_name, lon_name = identify_cf_coordinates(data)
 
-            # Extract the coordinate variables
-            source_grid = xr.Dataset({lat_name: data[lat_name], lon_name: data[lon_name]})
+        # Extract the coordinate variables into a new Dataset, ensuring they are
+        # assigned as coordinates.
+        source_grid = xr.Dataset().assign_coords({lat_name: data[lat_name], lon_name: data[lon_name]})
 
-            return source_grid
-        except (KeyError, AttributeError):
-            # Fallback to manual search
-            lat_coords = [name for name in data.coords if "lat" in str(name).lower() or "latitude" in str(name).lower()]
-            lon_coords = [
-                name for name in data.coords if "lon" in str(name).lower() or "longitude" in str(name).lower()
-            ]
+        # Update history for provenance, adhering to scientific hygiene
+        history_message = "Created source grid from data coordinates."
+        existing_history = source_grid.attrs.get("history", "")
+        source_grid.attrs["history"] = (
+            f"{existing_history}\n{history_message}" if existing_history else history_message
+        )
 
-            if lat_coords and lon_coords:
-                # If lat/lon coordinates are found in the data, use them
-                lat_name = lat_coords[0]
-                lon_name = lon_coords[0]
-
-                source_grid = xr.Dataset({lat_name: data[lat_name], lon_name: data[lon_name]})
-
-                return source_grid
-            # If no explicit lat/lon coordinates are found in the data,
-            # we need to infer the spatial dimensions from the data shape
-            # and use the source grid that was provided during initialization
-            # In this case, the CurvilinearInterpolator should be initialized differently
-            # This is a complex scenario - for now, let's assume that the source grid
-            # coordinates were already provided during initialization and we can
-            # extract spatial coordinate information from the data dimensions
-            # by assuming the last two dimensions are spatial
-            elif len(data.dims) >= 2:
-                # Use the last two dimensions as spatial dimensions
-                y_dim, x_dim = data.dims[-2], data.dims[-1]
-
-                # Create simple coordinate arrays based on the spatial dimensions
-                y_coords = np.arange(data.sizes[y_dim])
-                x_coords = np.arange(data.sizes[x_dim])
-
-                # Create 2D coordinate grids
-                lon_2d, lat_2d = np.meshgrid(x_coords, y_coords)
-
-                # Create a simple coordinate dataset
-                source_grid = xr.Dataset({"latitude": (["y", "x"], lat_2d), "longitude": (["y", "x"], lon_2d)})
-
-                return source_grid
-            else:
-                msg = "Source data must have at least 2 dimensions for curvilinear regridding"
-                raise ValueError(msg)
+        return source_grid
 
 
 
