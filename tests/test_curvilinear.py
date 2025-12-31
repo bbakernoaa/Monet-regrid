@@ -192,6 +192,51 @@ def test_curvilinear_regridder_coordinate_identification():
     assert regridder.target_lon_name == "longitude"
 
 
+def test_create_source_grid_from_data():
+    """Test that the source grid is correctly created from a DataArray."""
+    # Create a sample source DataArray with latitude and longitude coordinates
+    source_da = xr.DataArray(
+        np.random.rand(10, 20),
+        dims=["y", "x"],
+        coords={
+            "latitude": (("y",), np.arange(40, 50)),
+            "longitude": (("x",), np.arange(-120, -100)),
+        },
+    )
+    source_da.attrs["history"] = "Initial data."
+
+    # A target grid is needed to instantiate the regridder, but it's not used
+    # in the method we're testing.
+    target_ds = xr.Dataset(
+        coords={
+            "lat": (("y_new",), np.arange(40, 50, 2)),
+            "lon": (("x_new",), np.arange(-120, -100, 2)),
+        }
+    )
+
+    # Instantiate the regridder
+    regridder = CurvilinearRegridder(source_da, target_ds)
+
+    # Call the internal method to create the source grid
+    source_grid = regridder._create_source_grid_from_data()
+
+    # 1. Verify that the returned object is an xr.Dataset
+    assert isinstance(source_grid, xr.Dataset)
+
+    # 2. Verify that it contains the correct coordinates
+    assert "latitude" in source_grid.coords
+    assert "longitude" in source_grid.coords
+    assert len(source_grid.coords) == 2
+
+    # 3. Verify that the coordinates match the original DataArray
+    xr.testing.assert_allclose(source_grid["latitude"], source_da["latitude"])
+    xr.testing.assert_allclose(source_grid["longitude"], source_da["longitude"])
+
+    # 4. Verify that the history attribute has been updated correctly
+    assert "history" in source_grid.attrs
+    assert "Created source grid" in source_grid.attrs["history"]
+
+
 def test_curvilinear_regridder_caches_interpolator():
     """Test that CurvilinearRegridder caches the interpolator object."""
     # Create source and target grids
