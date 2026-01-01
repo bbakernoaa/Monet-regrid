@@ -1,6 +1,5 @@
 """Tests for bilinear and cubic interpolation methods."""
 
-
 import numpy as np
 import xarray as xr
 

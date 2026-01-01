@@ -29,9 +29,7 @@ def test_rectilinear_regridder_instantiation_and_call():
     )
 
     # 2. The Action
-    regridder = RectilinearRegridder(
-        source_data=source_da, target_grid=target_ds, method="linear"
-    )
+    regridder = RectilinearRegridder(source_data=source_da, target_grid=target_ds, method="linear")
     regridded_da = regridder()
 
     # 3. The Proof (Validation)

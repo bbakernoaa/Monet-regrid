@@ -116,7 +116,7 @@ class BaseRegridder(abc.ABC):
         self.target_grid.to_netcdf(filepath)
 
     @classmethod
-    def from_file(cls, filepath: str) -> "BaseRegridder":
+    def from_file(cls, filepath: str) -> BaseRegridder:
         """Load a regridder from a NetCDF file.
         This class method reconstructs a regridder from a NetCDF file that was
         created with the `to_file` method. It loads the target grid and the
@@ -375,8 +375,6 @@ class RectilinearRegridder(BaseRegridder):
         )
 
         return regridded_data
-
-
 
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.
@@ -717,10 +715,6 @@ class CurvilinearRegridder(BaseRegridder):
             else:
                 msg = "Source data must have at least 2 dimensions for curvilinear regridding"
                 raise ValueError(msg)
-
-
-
-
 
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.
