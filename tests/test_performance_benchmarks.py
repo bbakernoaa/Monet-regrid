@@ -116,9 +116,7 @@ class TestPerformanceBenchmarks:
         for ny, nx in self.grid_sizes:
             source_grid, target_grid = self._create_test_grids(ny, nx)
             test_data = self._create_test_data(ny, nx)
-            test_data = test_data.assign_coords(
-                {"latitude": source_grid.latitude, "longitude": source_grid.longitude}
-            )
+            test_data = test_data.assign_coords({"latitude": source_grid.latitude, "longitude": source_grid.longitude})
 
             # Time the interpolation
             start_time = time.time()
@@ -142,9 +140,7 @@ class TestPerformanceBenchmarks:
         for ny, nx in sizes:
             source_grid, target_grid = self._create_test_grids(ny, nx)
             test_data = self._create_test_data(ny, nx)
-            test_data = test_data.assign_coords(
-                {"latitude": source_grid.latitude, "longitude": source_grid.longitude}
-            )
+            test_data = test_data.assign_coords({"latitude": source_grid.latitude, "longitude": source_grid.longitude})
 
             start_time = time.time()
             test_data.regrid.nearest(target_grid)
@@ -169,9 +165,7 @@ class TestPerformanceBenchmarks:
         ny, nx = 100, 120
         source_grid, target_grid = self._create_test_grids(ny, nx)
         test_data = self._create_test_data(ny, nx, dtype=np.float64)
-        test_data = test_data.assign_coords(
-            {"latitude": source_grid.latitude, "longitude": source_grid.longitude}
-        )
+        test_data = test_data.assign_coords({"latitude": source_grid.latitude, "longitude": source_grid.longitude})
 
         # Perform interpolation
         start_time = time.time()
@@ -190,9 +184,7 @@ class TestPerformanceBenchmarks:
         ny, nx = 50, 60
         source_grid, target_grid = self._create_test_grids(ny, nx)
         test_data = self._create_test_data(ny, nx)
-        test_data = test_data.assign_coords(
-            {"latitude": source_grid.latitude, "longitude": source_grid.longitude}
-        )
+        test_data = test_data.assign_coords({"latitude": source_grid.latitude, "longitude": source_grid.longitude})
 
         # Time nearest neighbor
         start_time = time.time()

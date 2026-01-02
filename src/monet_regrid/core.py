@@ -116,7 +116,7 @@ class BaseRegridder(abc.ABC):
         self.target_grid.to_netcdf(filepath)
 
     @classmethod
-    def from_file(cls, filepath: str) -> "BaseRegridder":
+    def from_file(cls, filepath: str) -> BaseRegridder:
         """Load a regridder from a NetCDF file.
         This class method reconstructs a regridder from a NetCDF file that was
         created with the `to_file` method. It loads the target grid and the
@@ -236,21 +236,28 @@ class RectilinearRegridder(BaseRegridder):
         method: str = "linear",
         time_dim: str | None = "time",
         **kwargs: Any,
-    ):
+    ) -> None:
         """Initialize the rectilinear regridder.
 
         Parameters
         ----------
         source_data : xr.DataArray | xr.Dataset | None
-            The source data to be regridded.
+            The source data to be regridded. Can be `None` to create a
+            data-agnostic regridder that can be applied later.
         target_grid : xr.Dataset
-            The target grid specification.
+            An xarray Dataset defining the target grid, containing 1D
+            coordinate variables for each spatial dimension (e.g., 'lat', 'lon').
         method : str, optional
-            Interpolation method. Defaults to "linear".
+            The regridding method to use. Supported options are 'linear',
+            'nearest', 'cubic', 'bilinear', and 'conservative'.
+            Defaults to "linear".
         time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
+            The name of the time dimension, which will be excluded from
+            regridding and preserved in the output. If `None`, no dimension
+            is treated as the time dimension. Defaults to "time".
         **kwargs : Any
-            Additional method-specific arguments.
+            Additional method-specific arguments passed to the underlying
+            regridding function (e.g., `nan_threshold` for conservative).
         """
         self.method = method
         self.time_dim = time_dim
@@ -263,25 +270,28 @@ class RectilinearRegridder(BaseRegridder):
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation.
 
-        This method performs the regridding of the source data to the target grid
-        using the specified interpolation method. It can be called with new data
-        or will use the data provided during initialization.
+        This method performs the regridding of the source data to the target
+        grid. It can be called with new data or will use the data provided
+        during initialization.
 
         Parameters
         ----------
         data : xr.DataArray | xr.Dataset | None, optional
-            The data to be regridded. If None, the `source_data` provided
-            during initialization is used. Defaults to None.
+            The data to be regridded. If `None`, the `source_data` provided
+            during initialization is used. This allows a pre-configured
+            regridder to be applied to new datasets. Defaults to None.
         **kwargs : Any
             Additional keyword arguments to override the regridder's
             initialization parameters for this specific call. For example,
-            `method='nearest'` could be used to temporarily change the
+            `method='nearest'` can be used to temporarily change the
             interpolation method.
 
         Returns
         -------
         xr.DataArray | xr.Dataset
-            The regridded data, with the same type as the input `data`.
+            The regridded data on the target grid, with the same type as the
+            input `data`. The object's `history` attribute is updated to
+            document the operation.
 
         Examples
         --------
@@ -365,8 +375,6 @@ class RectilinearRegridder(BaseRegridder):
         )
 
         return regridded_data
-
-
 
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.
@@ -707,10 +715,6 @@ class CurvilinearRegridder(BaseRegridder):
             else:
                 msg = "Source data must have at least 2 dimensions for curvilinear regridding"
                 raise ValueError(msg)
-
-
-
-
 
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.

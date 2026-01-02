@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Test script to verify the RASM dataset coordinate validation fix."""
+
 import logging
 
 import numpy as np

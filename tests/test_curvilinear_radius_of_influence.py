@@ -1,6 +1,5 @@
 """Test for curvilinear interpolator with radius of influence."""
 
-
 import numpy as np
 import xarray as xr
 
