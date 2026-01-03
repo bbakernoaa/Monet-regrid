@@ -1,9 +1,9 @@
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 import xarray as xr
 
-import monet_regrid
 from monet_regrid.core import CurvilinearRegridder
 
 
@@ -18,7 +18,7 @@ def test_curvilinear_interpolator_nearest_interpolation():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -52,7 +52,7 @@ def test_curvilinear_interpolator_nearest_interpolation_with_time():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -93,7 +93,7 @@ def test_curvilinear_interpolator_dataset_interpolation():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -135,7 +135,7 @@ def test_curvilinear_interpolator_linear_interpolation():
     target_lat = 30 + 0.5 * target_x + 0.1 * target_y
     target_lon = -100 + 0.3 * target_x + 0.2 * target_y
 
-    source_grid = xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
+    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
@@ -164,7 +164,7 @@ def test_curvilinear_regridder_coordinate_identification():
     source_x, source_y = np.meshgrid(np.arange(5), np.arange(5))
     source_lat = 30 + 0.1 * source_y
     source_lon = -100 + 0.1 * source_x
-    source_grid = xr.Dataset(
+    xr.Dataset(
         {"lat": (["y", "x"], source_lat), "lon": (["y", "x"], source_lon)},
         coords={"x": np.arange(5), "y": np.arange(5)},
     )
@@ -229,3 +229,96 @@ def test_curvilinear_regridder_caches_interpolator():
         # Fourth call with the original method - should use the cache again
         regridder()
         assert mock_interpolator.call_count == 2
+
+
+def test_curvilinear_interpolator_with_1d_coords():
+    """Test interpolation with 1D source and target coordinates."""
+    # Create source grid with 1D coordinates
+    source_lat = np.arange(30, 35)
+    source_lon = np.arange(-100, -95)
+    xr.Dataset(coords={"latitude": source_lat, "longitude": source_lon})
+
+    # Create target grid with 1D coordinates
+    target_lat = np.linspace(30.5, 33.5, 3)
+    target_lon = np.linspace(-99.5, -96.5, 4)
+    target_grid = xr.Dataset(coords={"latitude": target_lat, "longitude": target_lon})
+
+    # Create test data
+    data_values = np.random.rand(len(source_lat), len(source_lon))
+    test_data = xr.DataArray(
+        data_values,
+        dims=["latitude", "longitude"],
+        coords={"latitude": source_lat, "longitude": source_lon},
+    )
+
+    # Test interpolation
+    result = test_data.regrid.nearest(target_grid)
+
+    assert result.shape == (len(target_lat), len(target_lon))
+
+
+def test_curvilinear_interpolator_invalid_input_type():
+    """Test that a TypeError is raised for invalid input types."""
+    # Create dummy grids
+    source_grid = xr.Dataset({"lat": (("y", "x"), np.zeros((2, 2))), "lon": (("y", "x"), np.zeros((2, 2)))})
+    target_grid = xr.Dataset({"lat": (("y_t", "x_t"), np.ones((3, 3))), "lon": (("y_t", "x_t"), np.ones((3, 3)))})
+    regridder = CurvilinearRegridder(source_grid, target_grid)
+
+    with pytest.raises(ValueError):
+        regridder(xr.DataArray(np.zeros((2, 2)), dims=["y", "x"]))
+
+
+def test_curvilinear_interpolator_data_validation_error():
+    """Test that a ValueError is raised for mismatched data coordinates."""
+    # Create source and target grids
+    source_da = xr.DataArray(
+        np.random.rand(5, 5),
+        dims=["y", "x"],
+        coords={
+            "lat": (("y", "x"), np.random.rand(5, 5) * 90),
+            "lon": (("y", "x"), np.random.rand(5, 5) * 360),
+        },
+    )
+    target_ds = xr.Dataset(
+        coords={
+            "lat": (("y_new", "x_new"), np.random.rand(3, 3) * 90),
+            "lon": (("y_new", "x_new"), np.random.rand(3, 3) * 360),
+        }
+    )
+
+    regridder = CurvilinearRegridder(source_da, target_ds)
+
+    # Create data with incorrect dimensions
+    mismatched_data = xr.DataArray(np.random.rand(4, 4), dims=["y", "x"])
+
+    with pytest.raises(ValueError, match="Could not identify latitude coordinate"):
+        regridder(mismatched_data)
+
+
+def test_curvilinear_attribute_errors():
+    """Test that attribute errors are raised for inappropriate methods."""
+    # Create dummy grids
+    source_da = xr.DataArray(
+        np.random.rand(2, 2),
+        dims=["y", "x"],
+        coords={
+            "lat": (("y", "x"), np.zeros((2, 2))),
+            "lon": (("y", "x"), np.zeros((2, 2))),
+        },
+    )
+    target_ds = xr.Dataset(
+        coords={
+            "lat": (("y_t", "x_t"), np.ones((3, 3))),
+            "lon": (("y_t", "x_t"), np.ones((3, 3))),
+        }
+    )
+
+    # Use 'nearest' method, which doesn't create triangles
+    regridder = CurvilinearRegridder(source_da, target_ds, method="nearest")
+    interpolator = regridder(source_da)
+
+    with pytest.raises(AttributeError):
+        interpolator.triangles
+
+    with pytest.raises(AttributeError):
+        interpolator.convex_hull

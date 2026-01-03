@@ -170,9 +170,7 @@ def test_regrid_rectilinear_to_rectilinear_conservative_nan_robust():
             except ImportError:
                 pass
 
-            da_rechunk.regrid.conservative(
-                ds_target, nan_threshold=0.0 if nan_threshold is None else nan_threshold
-            )
+            da_rechunk.regrid.conservative(ds_target, nan_threshold=0.0 if nan_threshold is None else nan_threshold)
 
         # There are still some differences, this may be due to floating point
         # Not sure how to handle this right now

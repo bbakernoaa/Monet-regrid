@@ -93,9 +93,7 @@ class InterpolationEngine:
             # with points. It should be called via build_conservative_structures.
             # However, if called, we can raise an error or fallback.
             msg = "Conservative regridding requires grid boundaries. Use build_conservative_structures() instead."
-            raise ValueError(
-                msg
-            )
+            raise ValueError(msg)
         else:
             msg = f"Unsupported method: {self.method}"
             raise ValueError(msg)
@@ -243,7 +241,8 @@ class InterpolationEngine:
         except Exception as e:
             if len(source_points_3d) > 4:
                 warnings.warn(
-                    f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor.", stacklevel=2
+                    f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor.",
+                    stacklevel=2,
                 )
             self.method = "nearest"
             self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)
@@ -639,6 +638,4 @@ class InterpolationEngine:
             "Direct linear interpolation computation is not implemented. "
             "Use precomputed weights by calling build_structures first."
         )
-        raise NotImplementedError(
-            msg
-        )
+        raise NotImplementedError(msg)
