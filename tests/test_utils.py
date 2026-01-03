@@ -1,7 +1,8 @@
+import dask.array as da
 import numpy as np
 import xarray as xr
 
-from monet_regrid.utils import format_lat
+from monet_regrid.utils import Grid, create_lat_lon_coords, create_regridding_dataset, format_lat
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 # Old import: from monet_regrid.utils import format_lat
@@ -31,3 +32,40 @@ def test_format_lat():
     assert formatted.attrs["foo"] == "bar"
     assert formatted.lat.attrs["is"] == "coord"
     assert formatted.x.attrs["is"] == "data"
+
+
+def test_create_lat_lon_coords_returns_dask_arrays():
+    """Verify that the coordinate creation function returns lazy Dask arrays."""
+    grid = Grid(
+        north=90,
+        south=-90,
+        east=180,
+        west=-180,
+        resolution_lat=0.1,
+        resolution_lon=0.1,
+    )
+    lat_coords, lon_coords = create_lat_lon_coords(grid)
+    assert isinstance(lat_coords, da.Array)
+    assert isinstance(lon_coords, da.Array)
+
+
+def test_create_regridding_dataset_correctness():
+    """Test the correctness of the created regridding dataset."""
+    grid = Grid(
+        north=90,
+        south=-90,
+        east=180,
+        west=-180,
+        resolution_lat=0.1,
+        resolution_lon=0.1,
+    )
+    ds = create_regridding_dataset(grid)
+
+    # Verify the shape and content of the coordinates
+    assert ds["latitude"].shape == (1801,)
+    assert ds["longitude"].shape == (3601,)
+    # Use .values to get the computed NumPy array for comparison
+    assert ds["latitude"].values.min() == -90
+    assert ds["latitude"].values.max() == 90
+    assert ds["longitude"].values.min() == -180
+    assert ds["longitude"].values.max() == 180

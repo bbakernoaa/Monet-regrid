@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, TypedDict, overload
 
 import cf_xarray  # noqa: F401
+import dask.array as da
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -81,30 +82,31 @@ class Grid:
         return create_regridding_dataset(self, lat_name, lon_name)
 
 
-def create_lat_lon_coords(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
+def create_lat_lon_coords(grid: Grid, chunks: str | int | tuple[int, ...] = "auto") -> tuple[da.Array, da.Array]:
     """Create latitude and longitude coordinates based on the provided grid parameters.
 
     Args:
         grid: Grid object.
+        chunks: The chunk size for the Dask arrays. Defaults to "auto".
 
     Returns:
-        Latititude coordinates, longitude coordinates.
+        Latititude coordinates, longitude coordinates as Dask arrays.
     """
+    # Define the number of steps, ensuring floating point precision
+    num_lat_steps = int(round((grid.north - grid.south) / grid.resolution_lat)) + 1
+    num_lon_steps = int(round((grid.east - grid.west) / grid.resolution_lon)) + 1
 
-    if np.remainder((grid.north - grid.south), grid.resolution_lat) > 0:
-        lat_coords = np.arange(grid.south, grid.north, grid.resolution_lat)
-    else:
-        lat_coords = np.arange(grid.south, grid.north + grid.resolution_lat, grid.resolution_lat)
+    # Create lazy Dask arrays for coordinates
+    lat_coords = da.linspace(grid.south, grid.north, num_lat_steps, chunks=chunks)
+    lon_coords = da.linspace(grid.west, grid.east, num_lon_steps, chunks=chunks)
 
-    if np.remainder((grid.east - grid.west), grid.resolution_lat) > 0:
-        lon_coords = np.arange(grid.west, grid.east, grid.resolution_lon)
-    else:
-        lon_coords = np.arange(grid.west, grid.east + grid.resolution_lon, grid.resolution_lon)
     return lat_coords, lon_coords
 
 
-def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: str = "longitude") -> xr.Dataset:
-    """Create a dataset to use for regridding.
+def create_regridding_dataset(
+    grid: Grid, lat_name: str = "latitude", lon_name: str = "longitude", chunks: str | int | tuple[int, ...] = "auto"
+) -> xr.Dataset:
+    """Create a dataset to use for regridding with lazy Dask coordinates.
 
     Args:
         grid: Grid object containing the bounds and resolution of the cartesian grid.
@@ -112,16 +114,19 @@ def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: 
             Defaults to "latitude".
         lon_name: Name for the longitudinal coordinate and dimension.
             Defaults to "longitude".
+        chunks: The chunk size for the Dask arrays. Defaults to "auto".
 
     Returns:
         A dataset with the latitude and longitude coordinates corresponding to the
-            specified grid. Contains no data variables.
+            specified grid. Contains no data variables and uses lazy Dask coordinates.
     """
-    lat_coords, lon_coords = create_lat_lon_coords(grid)
-    return xr.Dataset(
+    lat_coords, lon_coords = create_lat_lon_coords(grid, chunks=chunks)
+
+    # Create an xarray Dataset with lazy Dask-backed coordinates
+    return xr.Dataset().assign_coords(
         {
-            lat_name: ([lat_name], lat_coords, {"units": "degrees_north"}),
-            lon_name: ([lon_name], lon_coords, {"units": "degrees_east"}),
+            lat_name: (lat_name, lat_coords, {"units": "degrees_north"}),
+            lon_name: (lon_name, lon_coords, {"units": "degrees_east"}),
         }
     )
 
