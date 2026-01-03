@@ -7,7 +7,7 @@ and spherical geometry handling in the CurvilinearInterpolator.
 import numpy as np
 import xarray as xr
 
-import monet_regrid  # noqa: F401
+import monet_regrid
 
 
 class TestCoordinateTransformation:
@@ -44,6 +44,33 @@ class TestCoordinateTransformation:
         )
         result = source_data.regrid.nearest(self.target_grid)
         assert result.shape == self.target_lat.shape
+
+    def test_inverse_transformation(self):
+        """Test inverse coordinate transformation."""
+        transformer = monet_regrid.coordinate_transformer.CoordinateTransformer()
+        lon, lat = 10, 20
+        x, y, z = transformer.transform_coordinates(np.array([lon]), np.array([lat]))
+        lon_inv, lat_inv, _ = transformer.inverse_transform_coordinates(x, y, z)
+        assert np.isclose(lon, lon_inv[0])
+        assert np.isclose(lat, lat_inv[0])
+
+    def test_caching_mechanism(self):
+        """Test caching mechanism."""
+        transformer = monet_regrid.coordinate_transformer.CoordinateTransformer()
+        lon, lat = np.array([10, 20]), np.array([30, 40])
+        x1, _, _ = transformer.transform_coordinates(lon, lat, use_cache=True)
+        x2, _, _ = transformer.transform_coordinates(lon, lat, use_cache=True)
+        assert np.array_equal(x1, x2)
+        assert "size" in transformer.get_cache_stats()
+        transformer.clear_cache()
+        assert transformer.get_cache_stats()["size"] == 0
+
+    def test_distance_threshold_calculation(self):
+        """Test distance threshold calculation."""
+        transformer = monet_regrid.coordinate_transformer.CoordinateTransformer()
+        points = np.random.rand(10, 3)
+        threshold = transformer.calculate_distance_threshold(points)
+        assert threshold > 0
 
     def test_coordinate_transformation_accuracy(self):
         """Test coordinate transformation accuracy with known values."""

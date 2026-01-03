@@ -124,14 +124,10 @@ def curvilinear_target_grid():
     )
 
 
-def test_rectilinear_regridder_serialization(
-    rectilinear_source_grid, rectilinear_target_grid, tmp_path
-):
+def test_rectilinear_regridder_serialization(rectilinear_source_grid, rectilinear_target_grid, tmp_path):
     """Test saving and loading a RectilinearRegridder."""
     # Create a regridder and regrid the data
-    regridder = RectilinearRegridder(
-        source_data=rectilinear_source_grid, target_grid=rectilinear_target_grid
-    )
+    regridder = RectilinearRegridder(source_data=rectilinear_source_grid, target_grid=rectilinear_target_grid)
     expected = regridder()
 
     # Save the regridder
@@ -155,9 +151,7 @@ def test_curvilinear_regridder_serialization_backward_compatibility(
 ):
     """Test loading a CurvilinearRegridder from the old format."""
     # Create a regridder and regrid the data
-    regridder = CurvilinearRegridder(
-        source_data=curvilinear_source_grid, target_grid=curvilinear_target_grid
-    )
+    regridder = CurvilinearRegridder(source_data=curvilinear_source_grid, target_grid=curvilinear_target_grid)
     expected = regridder()
 
     # Create a legacy config file
@@ -168,9 +162,7 @@ def test_curvilinear_regridder_serialization_backward_compatibility(
         "method_kwargs": {},
     }
     target_grid_with_legacy_config = curvilinear_target_grid.copy()
-    target_grid_with_legacy_config.attrs["regridder_config"] = (
-        __import__("json").dumps(legacy_config)
-    )
+    target_grid_with_legacy_config.attrs["regridder_config"] = __import__("json").dumps(legacy_config)
     target_grid_with_legacy_config.to_netcdf(filepath)
 
     # Load the regridder using the base class method
@@ -190,9 +182,7 @@ def test_rectilinear_regridder_serialization_backward_compatibility(
 ):
     """Test loading a RectilinearRegridder from the old format."""
     # Create a regridder and regrid the data
-    regridder = RectilinearRegridder(
-        source_data=rectilinear_source_grid, target_grid=rectilinear_target_grid
-    )
+    regridder = RectilinearRegridder(source_data=rectilinear_source_grid, target_grid=rectilinear_target_grid)
     expected = regridder()
 
     # Create a legacy config file
@@ -204,9 +194,7 @@ def test_rectilinear_regridder_serialization_backward_compatibility(
         "method_kwargs": {},
     }
     target_grid_with_legacy_config = rectilinear_target_grid.copy()
-    target_grid_with_legacy_config.attrs["regridder_config"] = (
-        __import__("json").dumps(legacy_config)
-    )
+    target_grid_with_legacy_config.attrs["regridder_config"] = __import__("json").dumps(legacy_config)
     target_grid_with_legacy_config.to_netcdf(filepath)
 
     # Load the regridder using the base class method
@@ -221,14 +209,10 @@ def test_rectilinear_regridder_serialization_backward_compatibility(
     assert_allclose(result, expected)
 
 
-def test_curvilinear_regridder_serialization(
-    curvilinear_source_grid, curvilinear_target_grid, tmp_path
-):
+def test_curvilinear_regridder_serialization(curvilinear_source_grid, curvilinear_target_grid, tmp_path):
     """Test saving and loading a CurvilinearRegridder."""
     # Create a regridder and regrid the data
-    regridder = CurvilinearRegridder(
-        source_data=curvilinear_source_grid, target_grid=curvilinear_target_grid
-    )
+    regridder = CurvilinearRegridder(source_data=curvilinear_source_grid, target_grid=curvilinear_target_grid)
     expected = regridder()
 
     # Save the regridder

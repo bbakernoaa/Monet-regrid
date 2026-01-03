@@ -242,7 +242,3 @@ def test_build_regridder_default_method():
 
     assert isinstance(built_regridder, xrg.RectilinearRegridder)
     assert built_regridder.method == "linear"  # Default method
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])

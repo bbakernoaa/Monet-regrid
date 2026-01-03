@@ -312,9 +312,7 @@ class CurvilinearInterpolator:
                     f"lat={problematic_lats[:5]}, lon={problematic_lons[:5]} "
                     f"(showing first 5 of {np.sum(non_finite_mask)} non-finite points)"
                 )
-                raise ValueError(
-                    msg
-                )
+                raise ValueError(msg)
 
         # Store as 3D points array
         self.source_points_3d = np.column_stack([self.source_x, self.source_y, self.source_z])
@@ -360,9 +358,7 @@ class CurvilinearInterpolator:
                     f"lat={problematic_lats[:5]}, lon={problematic_lons[:5]} "
                     f"(showing first 5 of {np.sum(non_finite_mask)} non-finite points)"
                 )
-                raise ValueError(
-                    msg
-                )
+                raise ValueError(msg)
 
         # Store as 3D points array
         self.target_points_3d = np.column_stack([self.target_x, self.target_y, self.target_z])
@@ -400,9 +396,7 @@ class CurvilinearInterpolator:
                     f"Conservative regridding requires explicit bounds for {lat_name} and {lon_name}. "
                     "Please ensure 'bounds' attribute is set and variables exist with shape (y, x, 4)."
                 )
-                raise ValueError(
-                    msg
-                )
+                raise ValueError(msg)
 
             source_vertices = get_bounds(self.source_grid, self.source_lat_name, self.source_lon_name)
             target_vertices = get_bounds(self.target_grid, self.target_lat_name, self.target_lon_name)
