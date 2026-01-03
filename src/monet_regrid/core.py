@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import abc
 import json
-from collections.abc import Hashable
 from typing import Any
 
 import cf_xarray  # noqa: F401
@@ -116,7 +115,7 @@ class BaseRegridder(abc.ABC):
         self.target_grid.to_netcdf(filepath)
 
     @classmethod
-    def from_file(cls, filepath: str) -> "BaseRegridder":
+    def from_file(cls, filepath: str) -> BaseRegridder:
         """Load a regridder from a NetCDF file.
         This class method reconstructs a regridder from a NetCDF file that was
         created with the `to_file` method. It loads the target grid and the
@@ -163,7 +162,10 @@ class BaseRegridder(abc.ABC):
                 msg = f"Unknown regridder type: {regridder_type}"
                 raise ValueError(msg)
         else:
-            msg = "Could not determine regridder type from file. Missing 'regridder_type' or 'module'/'class' from config."
+            msg = (
+                "Could not determine regridder type from file. "
+                "Missing 'regridder_type' or 'module'/'class' from config."
+            )
             raise ValueError(msg)
 
         if not issubclass(regridder_class, cls):
@@ -201,12 +203,14 @@ class BaseRegridder(abc.ABC):
             try:
                 self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
             except ValueError as e:
-                raise ValueError(f"Source data validation failed: {e}") from e
+                msg = f"Source data validation failed: {e}"
+                raise ValueError(msg) from e
 
         try:
             self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
         except ValueError as e:
-            raise ValueError(f"Target grid validation failed: {e}") from e
+            msg = f"Target grid validation failed: {e}"
+            raise ValueError(msg) from e
 
     def __getstate__(self) -> dict[str, Any]:
         """Prepare the regridder for serialization (Dask compatibility)."""
@@ -241,16 +245,114 @@ class RectilinearRegridder(BaseRegridder):
 
         Parameters
         ----------
-        source_data : xr.DataArray | xr.Dataset | None
-            The source data to be regridded.
+        source_data : xr.DataArray or xr.Dataset or None
+            The source data to be regridded. It can be a ``DataArray`` with a single
+            variable or a ``Dataset`` with multiple variables. If ``None``, a
+            data-agnostic regridder is created which can be applied to data later
+            by calling the regridder instance.
         target_grid : xr.Dataset
-            The target grid specification.
+            An xarray ``Dataset`` defining the target grid. It must contain the
+            coordinate variables (e.g., 'lat', 'lon') to which the source data
+            will be regridded.
         method : str, optional
-            Interpolation method. Defaults to "linear".
-        time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
+            The regridding method to use. Supported methods include:
+            - ``'linear'``, ``'nearest'``, ``'cubic'``, ``'bilinear'`` for interpolation.
+            - ``'conservative'`` for conservative area-weighted regridding.
+            Defaults to ``'linear'``.
+        time_dim : str or None, optional
+            The name of the time dimension in the source data, if it exists. This
+            dimension is excluded from the regridding process to ensure that
+            temporal data is handled correctly. Defaults to ``'time'``.
         **kwargs : Any
-            Additional method-specific arguments.
+            Additional keyword arguments passed to the underlying regridding functions.
+            For example, ``'skipna'`` for conservative regridding.
+
+        Notes
+        -----
+        The ``RectilinearRegridder`` implements an internal caching mechanism. On the
+        first call, it validates the target grid and formats the source data,
+        caching the results. Subsequent calls with the same data and grid
+        configuration will reuse these cached assets to accelerate the process.
+
+        This class is designed to work seamlessly with Dask for out-of-core
+        computation. When a Dask-backed ``DataArray`` or ``Dataset`` is passed,
+        the entire regridding operation remains lazy, and computation is only
+        triggered when the result is explicitly computed (e.g., with ``.load()``
+        or ``.compute()``).
+
+        Examples
+        --------
+        **1. Basic Usage with In-Memory Data**
+
+        Create a source ``DataArray`` and a target grid ``Dataset``.
+
+        >>> import xarray as xr
+        >>> import numpy as np
+        >>> source_da = xr.DataArray(
+        ...     np.random.rand(100, 200),
+        ...     dims=["y", "x"],
+        ...     coords={
+        ...         "lat": (("y",), np.linspace(20, 60, 100)),
+        ...         "lon": (("x",), np.linspace(-120, -80, 200)),
+        ...     },
+        ...     name="temperature",
+        ... )
+        >>> target_ds = xr.Dataset(
+        ...     coords={
+        ...         "lat": (("y_new",), np.arange(25, 55, 2.0)),
+        ...         "lon": (("x_new",), np.arange(-115, -85, 2.5)),
+        ...     }
+        ... )
+
+        Instantiate the regridder and perform the operation.
+
+        >>> regridder = RectilinearRegridder(source_da, target_ds, method="linear")
+        >>> regridded_da = regridder()
+        >>> print(regridded_da.shape)
+        (15, 12)
+
+        **2. Dask-Aware Workflow for Large Datasets**
+
+        Create a large, chunked source ``DataArray`` using Dask.
+
+        >>> import dask.array as da
+        >>> import pandas as pd
+        >>> source_da_dask = xr.DataArray(
+        ...     da.random.random((2, 1000, 2000), chunks=(1, 500, 500)),
+        ...     dims=["time", "y", "x"],
+        ...     coords={
+        ...         "time": (("time",), pd.to_datetime(["2023-01-01", "2023-01-02"])),
+        ...         "lat": (("y",), np.linspace(20, 60, 1000)),
+        ...         "lon": (("x",), np.linspace(-120, -80, 2000)),
+        ...     },
+        ...     name="precipitation",
+        ... )
+
+        The regridding operation builds a Dask graph without loading data into memory.
+
+        >>> regridder_dask = RectilinearRegridder(source_da_dask, target_ds)
+        >>> regridded_da_dask = regridder_dask()
+        >>> print(regridded_da_dask.chunks)
+        ((1, 1), (15,), (12,))
+
+        **3. Visualization (Track A: Publication with Matplotlib/Cartopy)**
+
+        >>> import matplotlib.pyplot as plt
+        >>> import cartopy.crs as ccrs
+        >>> regridded_computed = regridded_da_dask.isel(time=0).compute()
+        >>> fig = plt.figure(figsize=(10, 5))
+        >>> ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+        >>> _ = regridded_computed.plot(
+        ...     ax=ax, transform=ccrs.PlateCarree(), cmap="viridis"
+        ... )
+        >>> _ = ax.coastlines()
+
+        **4. Visualization (Track B: Interactive Exploration with HvPlot)**
+
+        >>> import hvplot.xarray  # noqa: F401
+        >>> _ = regridded_da_dask.isel(time=0).hvplot.quadmesh(
+        ...     x="lon", y="lat", geo=True, tiles="OSM", cmap="viridis"
+        ... )
         """
         self.method = method
         self.time_dim = time_dim
@@ -282,26 +384,6 @@ class RectilinearRegridder(BaseRegridder):
         -------
         xr.DataArray | xr.Dataset
             The regridded data, with the same type as the input `data`.
-
-        Examples
-        --------
-        >>> import xarray as xr
-        >>> import numpy as np
-        >>> source_da = xr.DataArray(
-        ...     np.random.rand(10, 20),
-        ...     dims=["y", "x"],
-        ...     coords={"lat": (("y",), np.arange(0, 10)), "lon": (("x",), np.arange(0, 20))},
-        ... )
-        >>> target_ds = xr.Dataset(
-        ...     coords={
-        ...         "lat": (("y_new",), np.arange(0.5, 10, 2)),
-        ...         "lon": (("x_new",), np.arange(0.5, 20, 2)),
-        ...     }
-        ... )
-        >>> regridder = RectilinearRegridder(source_da, target_ds, method="linear")
-        >>> regridded_da = regridder()
-        >>> print(regridded_da.shape)
-        (5, 10)
         """
         # Use provided data or fall back to source data
         input_data = data if data is not None else self.source_data
@@ -706,7 +788,7 @@ class CurvilinearRegridder(BaseRegridder):
                 return source_grid
             else:
                 msg = "Source data must have at least 2 dimensions for curvilinear regridding"
-                raise ValueError(msg)
+                raise ValueError(msg) from None
 
 
 
