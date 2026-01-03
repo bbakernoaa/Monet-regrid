@@ -306,7 +306,7 @@ class RectilinearRegridder(BaseRegridder):
 
         Instantiate the regridder and perform the operation.
 
-        >>> regridder = RectilinearRegridder(source_da, target_ds, method="bilinear")
+        >>> regridder = RectilinearRegridder(source_da, target_ds, method="linear")
         >>> regridded_da = regridder()
         >>> print(regridded_da.shape)
         (15, 12)
@@ -342,18 +342,16 @@ class RectilinearRegridder(BaseRegridder):
         >>> regridded_computed = regridded_da_dask.isel(time=0).compute()
         >>> fig = plt.figure(figsize=(10, 5))
         >>> ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
-        >>> regridded_computed.plot(
+        >>> _ = regridded_computed.plot(
         ...     ax=ax, transform=ccrs.PlateCarree(), cmap="viridis"
         ... )
-        >>> ax.coastlines()
-        >>> plt.show()
+        >>> _ = ax.coastlines()
 
         **4. Visualization (Track B: Interactive Exploration with HvPlot)**
 
         >>> import hvplot.xarray  # noqa: F401
-        >>> regridded_da_dask.isel(time=0).hvplot.quadmesh(
-        ...     x="lon", y="lat", geo=True, tiles="OSM",
-        ...     rasterize=True, cmap="viridis"
+        >>> _ = regridded_da_dask.isel(time=0).hvplot.quadmesh(
+        ...     x="lon", y="lat", geo=True, tiles="OSM", cmap="viridis"
         ... )
         """
         self.method = method
