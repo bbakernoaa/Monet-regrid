@@ -277,11 +277,12 @@ class CurvilinearInterpolator:
 
         # Handle both 1D and 2D coordinates
         if source_lat.ndim == 1 and source_lon.ndim == 1:
-            # 1D coordinates (rectilinear grid) - need to create 2D meshgrid
-            source_lon_2d, source_lat_2d = np.meshgrid(source_lon.data, source_lat.data)
+            # Use xarray's lazy broadcasting to create 2D coordinate arrays
+            source_lon_2d, source_lat_2d = xr.broadcast(source_lon, source_lat)
             self.source_shape = source_lat_2d.shape
-            source_lat_flat = source_lat_2d.flatten()
-            source_lon_flat = source_lon_2d.flatten()
+            # Flatten the Dask-backed arrays without computing them
+            source_lat_flat = source_lat_2d.data.flatten()
+            source_lon_flat = source_lon_2d.data.flatten()
         else:
             # 2D coordinates (curvilinear grid) - use as is
             self.source_shape = source_lat.shape
@@ -323,11 +324,12 @@ class CurvilinearInterpolator:
 
         # Handle both 1D and 2D coordinates
         if target_lat.ndim == 1 and target_lon.ndim == 1:
-            # 1D coordinates (rectilinear grid) - need to create 2D meshgrid
-            target_lon_2d, target_lat_2d = np.meshgrid(target_lon.data, target_lat.data)
+            # Use xarray's lazy broadcasting to create 2D coordinate arrays
+            target_lon_2d, target_lat_2d = xr.broadcast(target_lon, target_lat)
             self.target_shape = target_lat_2d.shape
-            target_lat_flat = target_lat_2d.flatten()
-            target_lon_flat = target_lon_2d.flatten()
+            # Flatten the Dask-backed arrays without computing them
+            target_lat_flat = target_lat_2d.data.flatten()
+            target_lon_flat = target_lon_2d.data.flatten()
         else:
             # 2D coordinates (curvilinear grid) - use as is
             self.target_shape = target_lat.shape
