@@ -1,13 +1,13 @@
 import warnings
 
+import dask.array as da
 import numpy as np
 import pytest
 import xarray as xr
 from numpy.testing import assert_array_equal
 
-import dask.array as da
-
 import monet_regrid  # noqa: F401
+from monet_regrid.core import CurvilinearRegridder
 
 try:
     import xesmf
@@ -228,7 +228,6 @@ def test_curvilinear_regridder_lazy_coordinate_creation():
     )
 
     # 3. Instantiate the regridder
-    from monet_regrid.core import CurvilinearRegridder
     regridder = CurvilinearRegridder(source_data=source_data, target_grid=target_grid)
 
     # 4. Call the internal method to generate the source grid

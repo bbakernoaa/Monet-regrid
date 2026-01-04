@@ -1,13 +1,10 @@
-import pytest
-
 """Boundary condition tests for curvilinear regridding edge cases.
 
 This module tests edge cases, boundary conditions, and robustness scenarios
 including poles, date lines, empty grids, and NaN propagation.
 """
-
-
 import numpy as np
+import pytest
 import xarray as xr
 
 
@@ -66,7 +63,7 @@ class TestPoleProximityHandling:
         south_target_lat = np.array([[-89.65, -89.55], [-89.65, -89.55]])
         south_target_lon = np.array([[-135.0, 45.0], [-135.0, 45.0]])
 
-        south_source_grid = xr.Dataset(
+        xr.Dataset(
             {"latitude": (["y", "x"], south_source_lat), "longitude": (["y", "x"], south_source_lon)}
         )
 
@@ -126,7 +123,7 @@ class TestPoleProximityHandling:
         singular_target_lat = np.array([[90.0]])
         singular_target_lon = np.array([[45.0]])
 
-        singular_source_grid = xr.Dataset(
+        xr.Dataset(
             {"latitude": (["y", "x"], singular_source_lat), "longitude": (["y", "x"], singular_source_lon)}
         )
 
@@ -155,6 +152,6 @@ class TestPoleProximityHandling:
             # If it succeeds, verify result properties
             assert result.shape == singular_target_lat.shape
             assert np.all(np.isfinite(result.values)) or np.any(np.isnan(result.values))
-        except Exception:
+        except Exception:  # noqa: S110
             # If it raises an exception, that's acceptable for this edge case
             pass

@@ -62,9 +62,9 @@ def benchmark_regridding():
     # print(f"NaN count: {np.sum(np.isnan(result2.values))}")
 
     # Compare the results to ensure they're the same
-    assert np.allclose(np.asarray(result1.values), np.asarray(result2.values), equal_nan=True), (
-        "Results should be identical"
-    )
+    assert np.allclose(  # noqa: S101
+        np.asarray(result1.values), np.asarray(result2.values), equal_nan=True
+    ), "Results should be identical"
 
     # print("\nPerformance improvement:")
     if first_call_time > 0:
@@ -89,7 +89,7 @@ def benchmark_multiple_calls():
 
     # Time multiple calls
     times = []
-    for i in range(10):
+    for _i in range(10):
         start_time = time.time()
         regridder(source_ds["temperature"])
         elapsed = time.time() - start_time

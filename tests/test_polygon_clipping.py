@@ -3,7 +3,6 @@ Tests for the Numba-optimized polygon clipping algorithms.
 """
 
 import numpy as np
-import pytest
 
 from monet_regrid.methods import _polygon_clipping
 

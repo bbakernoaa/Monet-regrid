@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import abc
 import json
-from collections.abc import Hashable
 from typing import Any
 
 import cf_xarray  # noqa: F401
@@ -164,7 +163,10 @@ class BaseRegridder(abc.ABC):
                 msg = f"Unknown regridder type: {regridder_type}"
                 raise ValueError(msg)
         else:
-            msg = "Could not determine regridder type from file. Missing 'regridder_type' or 'module'/'class' from config."
+            msg = (
+                "Could not determine regridder type from file. Missing 'regridder_type' "
+                "or 'module'/'class' from config."
+            )
             raise ValueError(msg)
 
         if not issubclass(regridder_class, cls):
@@ -202,12 +204,14 @@ class BaseRegridder(abc.ABC):
             try:
                 self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
             except ValueError as e:
-                raise ValueError(f"Source data validation failed: {e}") from e
+                msg = f"Source data validation failed: {e}"
+                raise ValueError(msg) from e
 
         try:
             self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
         except ValueError as e:
-            raise ValueError(f"Target grid validation failed: {e}") from e
+            msg = f"Target grid validation failed: {e}"
+            raise ValueError(msg) from e
 
     def __getstate__(self) -> dict[str, Any]:
         """Prepare the regridder for serialization (Dask compatibility)."""
@@ -447,7 +451,6 @@ class RectilinearRegridder(BaseRegridder):
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
-        nan_threshold: float = 1.0,
     ) -> xr.DataArray:
         """Regrid by taking the most common value within the new grid cells.
 
@@ -499,7 +502,6 @@ class RectilinearRegridder(BaseRegridder):
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
-        nan_threshold: float = 1.0,
     ) -> xr.DataArray:
         """Regrid by taking the least common value within the new grid cells.
 
@@ -791,7 +793,7 @@ class CurvilinearRegridder(BaseRegridder):
                 return source_grid
             else:
                 msg = "Source data must have at least 2 dimensions for curvilinear regridding"
-                raise ValueError(msg)
+                raise ValueError(msg) from None
 
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.
