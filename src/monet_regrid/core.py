@@ -31,6 +31,7 @@ from collections.abc import Hashable
 from typing import Any
 
 import cf_xarray  # noqa: F401
+import dask.array as da
 import numpy as np
 import xarray as xr
 
@@ -581,6 +582,42 @@ class CurvilinearRegridder(BaseRegridder):
         self._interpolator_cache: dict[tuple, CurvilinearInterpolator] = {}
         super().__init__(source_data, target_grid)
 
+    def _validate_inputs(self) -> None:
+        """Validate inputs, overriding the base method for JIT coordinate handling.
+
+        This method performs initial validation on the input data types but defers
+        the identification of source coordinates. This is to support cases where
+        the source data is provided without explicit coordinate variables, which
+        are instead generated lazily during the regridding call.
+
+        Raises
+        ------
+        TypeError
+            If `source_data` is not a valid xarray object or `target_grid`
+            is not an xarray Dataset.
+        ValueError
+            If the target grid's coordinates cannot be identified.
+        """
+        # Validate source_data type, but skip coordinate identification which will be done JIT
+        if self.source_data is not None and not isinstance(
+            self.source_data, (xr.DataArray, xr.Dataset)
+        ):
+            msg = "source_data must be an xarray DataArray or Dataset"
+            raise TypeError(msg)
+
+        # Validate target_grid type and identify its coordinates
+        if not isinstance(self.target_grid, xr.Dataset):
+            msg = "target_grid must be an xarray Dataset"
+            raise TypeError(msg)
+
+        try:
+            self.target_lat_name, self.target_lon_name = identify_cf_coordinates(
+                self.target_grid
+            )
+        except ValueError as e:
+            msg = f"Target grid validation failed: {e}"
+            raise ValueError(msg) from e
+
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation for curvilinear grids.
 
@@ -648,7 +685,29 @@ class CurvilinearRegridder(BaseRegridder):
         return result
 
     def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
-        """Create a grid specification from source data."""
+        """Create a grid specification from source data, with lazy-loading support.
+
+        This method extracts or generates coordinate information from the source data.
+        It first attempts to find explicit CF-compliant latitude/longitude coordinates.
+        If none are found, it falls back to generating a lazy coordinate grid based
+        on the spatial dimensions of the data. This fallback is Dask-aware, using
+        `dask.array.linspace` for Dask-backed data to prevent eager loading.
+
+        Parameters
+        ----------
+        source_data : xr.DataArray | xr.Dataset | None, optional
+            The source data to process. If None, the data from initialization is used.
+
+        Returns
+        -------
+        xr.Dataset
+            A dataset containing the latitude and longitude coordinates.
+
+        Raises
+        ------
+        ValueError
+            If the source data has fewer than two dimensions for fallback generation.
+        """
         # Use provided data or fall back to source data
         data = source_data if source_data is not None else self.source_data
 
@@ -691,15 +750,38 @@ class CurvilinearRegridder(BaseRegridder):
                 # Use the last two dimensions as spatial dimensions
                 y_dim, x_dim = data.dims[-2], data.dims[-1]
 
-                # Create simple coordinate arrays based on the spatial dimensions
-                y_coords = np.arange(data.sizes[y_dim])
-                x_coords = np.arange(data.sizes[x_dim])
+                # Check if the data is Dask-backed
+                is_dask = hasattr(data, "chunks") and data.chunks is not None
+
+                if is_dask:
+                    y_dim_index = data.dims.index(y_dim)
+                    x_dim_index = data.dims.index(x_dim)
+                    y_chunks = data.chunks[y_dim_index]
+                    x_chunks = data.chunks[x_dim_index]
+
+                    y_coords_array = da.linspace(
+                        0, data.sizes[y_dim] - 1, data.sizes[y_dim], chunks=y_chunks
+                    )
+                    x_coords_array = da.linspace(
+                        0, data.sizes[x_dim] - 1, data.sizes[x_dim], chunks=x_chunks
+                    )
+                else:
+                    y_coords_array = np.arange(data.sizes[y_dim])
+                    x_coords_array = np.arange(data.sizes[x_dim])
+
+                y_coords = xr.DataArray(y_coords_array, dims=[y_dim])
+                x_coords = xr.DataArray(x_coords_array, dims=[x_dim])
 
                 # Create 2D coordinate grids
-                lon_2d, lat_2d = np.meshgrid(x_coords, y_coords)
+                lon_2d, lat_2d = xr.broadcast(x_coords, y_coords)
 
                 # Create a simple coordinate dataset
-                source_grid = xr.Dataset({"latitude": (["y", "x"], lat_2d), "longitude": (["y", "x"], lon_2d)})
+                source_grid = xr.Dataset(
+                    {
+                        "latitude": ((y_dim, x_dim), lat_2d.data),
+                        "longitude": ((y_dim, x_dim), lon_2d.data),
+                    }
+                )
 
                 return source_grid
             else:
