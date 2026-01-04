@@ -583,12 +583,11 @@ class CurvilinearRegridder(BaseRegridder):
         super().__init__(source_data, target_grid)
 
     def _validate_inputs(self) -> None:
-        """Validate inputs, overriding the base method for JIT coordinate handling.
+        """Validate inputs, attempting to identify source coordinates gracefully.
 
-        This method performs initial validation on the input data types but defers
-        the identification of source coordinates. This is to support cases where
-        the source data is provided without explicit coordinate variables, which
-        are instead generated lazily during the regridding call.
+        This method validates input data types and attempts to identify source
+        coordinates if they exist. If source coordinates are not found, it fails
+        silently, allowing for lazy coordinate generation in a later step.
 
         Raises
         ------
@@ -598,17 +597,23 @@ class CurvilinearRegridder(BaseRegridder):
         ValueError
             If the target grid's coordinates cannot be identified.
         """
-        # Validate source_data type, but skip coordinate identification which will be done JIT
         if self.source_data is not None and not isinstance(
             self.source_data, (xr.DataArray, xr.Dataset)
         ):
             msg = "source_data must be an xarray DataArray or Dataset"
             raise TypeError(msg)
 
-        # Validate target_grid type and identify its coordinates
         if not isinstance(self.target_grid, xr.Dataset):
             msg = "target_grid must be an xarray Dataset"
             raise TypeError(msg)
+
+        if self.source_data is not None:
+            try:
+                self.source_lat_name, self.source_lon_name = identify_cf_coordinates(
+                    self.source_data
+                )
+            except ValueError:
+                pass
 
         try:
             self.target_lat_name, self.target_lon_name = identify_cf_coordinates(
