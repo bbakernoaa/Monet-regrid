@@ -71,12 +71,12 @@ def conservative_regrid(
 ) -> xr.DataArray | xr.Dataset:
     """Refine a dataset using conservative regridding.
 
-    The method implementation is based on a post by Stephan Hoyer; "For the case of
-    interpolation between rectilinear grids (even on the sphere), you can factorize
-    regridding along each axis. This is less general but makes the entire calculation
-    much simpler, because its feasible to store interpolation weights as dense matrices
-    and to use dense matrix multiplication."
-    https://discourse.pangeo.io/t/conservative-region-aggregation-with-xarray-geopandas-and-sparse/2715/3
+    The method implementation is based on a post by Stephan Hoyer:
+    "For the case of interpolation between rectilinear grids (even on the sphere),
+    you can factorize regridding along each axis. This is less general but makes
+    the entire calculation much simpler, because its feasible to store
+    interpolation weights as dense matrices and to use dense matrix multiplication."
+    https://discourse.pangeo.io/t/conservative-region-aggregation-with-xarray-geopandas-and-sparse/2715
 
     Args:
         data: Input dataset.
