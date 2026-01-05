@@ -1,4 +1,5 @@
 """Implementation of flox reduction based regridding methods."""
+from __future__ import annotations
 
 from typing import Any, overload
 
@@ -6,6 +7,13 @@ import flox.xarray
 import numpy as np
 import pandas as pd
 import xarray as xr
+
+from monet_regrid import utils
+from monet_regrid.methods._shared import (
+    construct_intervals,
+    reduce_data_to_new_domain,
+    restore_properties,
+)
 
 """
 This file is part of monet-regrid.
@@ -29,13 +37,6 @@ limitations under the License.
 Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
-
-from monet_regrid import utils
-from monet_regrid.methods._shared import (
-    construct_intervals,
-    reduce_data_to_new_domain,
-    restore_properties,
-)
 
 
 @overload

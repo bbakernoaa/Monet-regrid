@@ -1,10 +1,14 @@
 """Conservative regridding implementation."""
 
+from __future__ import annotations
+
 from collections.abc import Hashable
 from typing import overload
 
 import numpy as np
 import xarray as xr
+
+from monet_regrid import utils
 
 try:
     import sparse
@@ -33,8 +37,6 @@ limitations under the License.
 Modifications: Package renamed from xarray-regrid to monet-regrid,
 URLs updated, and documentation adapted for new branding.
 """
-
-from monet_regrid import utils
 
 
 @overload
@@ -69,12 +71,12 @@ def conservative_regrid(
 ) -> xr.DataArray | xr.Dataset:
     """Refine a dataset using conservative regridding.
 
-    The method implementation is based on a post by Stephan Hoyer; "For the case of
-    interpolation between rectilinear grids (even on the sphere), you can factorize
-    regridding along each axis. This is less general but makes the entire calculation
-    much simpler, because its feasible to store interpolation weights as dense matrices
-    and to use dense matrix multiplication."
-    https://discourse.pangeo.io/t/conservative-region-aggregation-with-xarray-geopandas-and-sparse/2715/3
+    The method implementation is based on a post by Stephan Hoyer:
+    "For the case of interpolation between rectilinear grids (even on the sphere),
+    you can factorize regridding along each axis. This is less general but makes
+    the entire calculation much simpler, because its feasible to store
+    interpolation weights as dense matrices and to use dense matrix multiplication."
+    https://discourse.pangeo.io/t/conservative-region-aggregation-with-xarray-geopandas-and-sparse/2715
 
     Args:
         data: Input dataset.

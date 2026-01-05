@@ -27,10 +27,10 @@ from __future__ import annotations
 
 import abc
 import json
-from collections.abc import Hashable
 from typing import Any
 
 import cf_xarray  # noqa: F401
+import dask.array as da
 import numpy as np
 import xarray as xr
 
@@ -163,7 +163,10 @@ class BaseRegridder(abc.ABC):
                 msg = f"Unknown regridder type: {regridder_type}"
                 raise ValueError(msg)
         else:
-            msg = "Could not determine regridder type from file. Missing 'regridder_type' or 'module'/'class' from config."
+            msg = (
+                "Could not determine regridder type from file. Missing 'regridder_type' "
+                "or 'module'/'class' from config."
+            )
             raise ValueError(msg)
 
         if not issubclass(regridder_class, cls):
@@ -201,12 +204,14 @@ class BaseRegridder(abc.ABC):
             try:
                 self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
             except ValueError as e:
-                raise ValueError(f"Source data validation failed: {e}") from e
+                msg = f"Source data validation failed: {e}"
+                raise ValueError(msg) from e
 
         try:
             self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
         except ValueError as e:
-            raise ValueError(f"Target grid validation failed: {e}") from e
+            msg = f"Target grid validation failed: {e}"
+            raise ValueError(msg) from e
 
     def __getstate__(self) -> dict[str, Any]:
         """Prepare the regridder for serialization (Dask compatibility)."""
@@ -446,7 +451,7 @@ class RectilinearRegridder(BaseRegridder):
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
-        nan_threshold: float = 1.0,
+        nan_threshold: float = 1.0,  # noqa: ARG002
     ) -> xr.DataArray:
         """Regrid by taking the most common value within the new grid cells.
 
@@ -498,7 +503,7 @@ class RectilinearRegridder(BaseRegridder):
         values: np.ndarray,
         time_dim: str | None = "time",
         fill_value: None | Any = None,
-        nan_threshold: float = 1.0,
+        nan_threshold: float = 1.0,  # noqa: ARG002
     ) -> xr.DataArray:
         """Regrid by taking the least common value within the new grid cells.
 
@@ -581,6 +586,47 @@ class CurvilinearRegridder(BaseRegridder):
         self._interpolator_cache: dict[tuple, CurvilinearInterpolator] = {}
         super().__init__(source_data, target_grid)
 
+    def _validate_inputs(self) -> None:
+        """Validate inputs, attempting to identify source coordinates gracefully.
+
+        This method validates input data types and attempts to identify source
+        coordinates if they exist. If source coordinates are not found, it fails
+        silently, allowing for lazy coordinate generation in a later step.
+
+        Raises
+        ------
+        TypeError
+            If `source_data` is not a valid xarray object or `target_grid`
+            is not an xarray Dataset.
+        ValueError
+            If the target grid's coordinates cannot be identified.
+        """
+        if self.source_data is not None and not isinstance(
+            self.source_data, (xr.DataArray, xr.Dataset)
+        ):
+            msg = "source_data must be an xarray DataArray or Dataset"
+            raise TypeError(msg)
+
+        if not isinstance(self.target_grid, xr.Dataset):
+            msg = "target_grid must be an xarray Dataset"
+            raise TypeError(msg)
+
+        if self.source_data is not None:
+            try:
+                self.source_lat_name, self.source_lon_name = identify_cf_coordinates(
+                    self.source_data
+                )
+            except ValueError:
+                pass
+
+        try:
+            self.target_lat_name, self.target_lon_name = identify_cf_coordinates(
+                self.target_grid
+            )
+        except ValueError as e:
+            msg = f"Target grid validation failed: {e}"
+            raise ValueError(msg) from e
+
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation for curvilinear grids.
 
@@ -648,7 +694,29 @@ class CurvilinearRegridder(BaseRegridder):
         return result
 
     def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
-        """Create a grid specification from source data."""
+        """Create a grid specification from source data, with lazy-loading support.
+
+        This method extracts or generates coordinate information from the source data.
+        It first attempts to find explicit CF-compliant latitude/longitude coordinates.
+        If none are found, it falls back to generating a lazy coordinate grid based
+        on the spatial dimensions of the data. This fallback is Dask-aware, using
+        `dask.array.linspace` for Dask-backed data to prevent eager loading.
+
+        Parameters
+        ----------
+        source_data : xr.DataArray | xr.Dataset | None, optional
+            The source data to process. If None, the data from initialization is used.
+
+        Returns
+        -------
+        xr.Dataset
+            A dataset containing the latitude and longitude coordinates.
+
+        Raises
+        ------
+        ValueError
+            If the source data has fewer than two dimensions for fallback generation.
+        """
         # Use provided data or fall back to source data
         data = source_data if source_data is not None else self.source_data
 
@@ -691,20 +759,43 @@ class CurvilinearRegridder(BaseRegridder):
                 # Use the last two dimensions as spatial dimensions
                 y_dim, x_dim = data.dims[-2], data.dims[-1]
 
-                # Create simple coordinate arrays based on the spatial dimensions
-                y_coords = np.arange(data.sizes[y_dim])
-                x_coords = np.arange(data.sizes[x_dim])
+                # Check if the data is Dask-backed
+                is_dask = hasattr(data, "chunks") and data.chunks is not None
+
+                if is_dask:
+                    y_dim_index = data.dims.index(y_dim)
+                    x_dim_index = data.dims.index(x_dim)
+                    y_chunks = data.chunks[y_dim_index]
+                    x_chunks = data.chunks[x_dim_index]
+
+                    y_coords_array = da.linspace(
+                        0, data.sizes[y_dim] - 1, data.sizes[y_dim], chunks=y_chunks
+                    )
+                    x_coords_array = da.linspace(
+                        0, data.sizes[x_dim] - 1, data.sizes[x_dim], chunks=x_chunks
+                    )
+                else:
+                    y_coords_array = np.arange(data.sizes[y_dim])
+                    x_coords_array = np.arange(data.sizes[x_dim])
+
+                y_coords = xr.DataArray(y_coords_array, dims=[y_dim])
+                x_coords = xr.DataArray(x_coords_array, dims=[x_dim])
 
                 # Create 2D coordinate grids
-                lon_2d, lat_2d = np.meshgrid(x_coords, y_coords)
+                lon_2d, lat_2d = xr.broadcast(x_coords, y_coords)
 
                 # Create a simple coordinate dataset
-                source_grid = xr.Dataset({"latitude": (["y", "x"], lat_2d), "longitude": (["y", "x"], lon_2d)})
+                source_grid = xr.Dataset(
+                    {
+                        "latitude": ((y_dim, x_dim), lat_2d.data),
+                        "longitude": ((y_dim, x_dim), lon_2d.data),
+                    }
+                )
 
                 return source_grid
             else:
                 msg = "Source data must have at least 2 dimensions for curvilinear regridding"
-                raise ValueError(msg)
+                raise ValueError(msg) from None
 
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.

@@ -80,7 +80,7 @@ class CoordinateTransformer:
         if use_cache:
             # Use hash of coordinate values as cache key (for approximate matches)
             coords_tuple = (lon_flat.tobytes(), lat_flat.tobytes(), height_flat.tobytes())
-            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()
+            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()  # noqa: S324
 
             if cache_key in self._cache:
                 return self._cache[cache_key]
@@ -128,7 +128,7 @@ class CoordinateTransformer:
         cache_key = None
         if use_cache:
             coords_tuple = (x_flat.tobytes(), y_flat.tobytes(), z_flat.tobytes())
-            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()
+            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()  # noqa: S324
 
             if cache_key in self._cache:
                 return self._cache[cache_key]

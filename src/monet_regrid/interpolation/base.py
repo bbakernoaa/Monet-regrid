@@ -41,7 +41,7 @@ if HAS_PYKDTREE:
         def data(self):
             return self._data
 
-        def query(self, x, k=1, distance_upper_bound=np.inf, workers=1):
+        def query(self, x, k=1, distance_upper_bound=np.inf):
             x = np.asarray(x)
             is_1d = x.ndim == 1
             if is_1d:
