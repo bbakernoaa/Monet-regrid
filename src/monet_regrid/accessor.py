@@ -1,8 +1,20 @@
+from __future__ import annotations
+
 from collections.abc import Hashable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import xarray as xr
+
+from monet_regrid.constants import GridType
+from monet_regrid.core import BaseRegridder, CurvilinearRegridder, RectilinearRegridder
+from monet_regrid.utils import (
+    _get_grid_type,
+    validate_input,
+)
+
+if TYPE_CHECKING:
+    from monet_regrid.core import BaseRegridder
 
 """
 This file is part of monet-regrid.
@@ -27,13 +39,6 @@ Modifications: Package renamed from xarray-regrid to monet-regrid,
 optimizations, adding curvilinear support, URLs updated,
 and documentation adapted for new branding.
 """
-
-from monet_regrid.constants import GridType
-from monet_regrid.core import BaseRegridder, CurvilinearRegridder, RectilinearRegridder
-from monet_regrid.utils import (
-    _get_grid_type,
-    validate_input,
-)
 
 
 @xr.register_dataarray_accessor("regrid")

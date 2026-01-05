@@ -13,10 +13,11 @@ except ImportError:
     xesmf = None
 
 import dask.array as da
+import numpy as np
 import pandas as pd
+from numpy.testing import assert_array_equal
 
 from monet_regrid.core import CurvilinearRegridder
-
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 

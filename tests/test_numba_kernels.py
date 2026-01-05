@@ -3,7 +3,6 @@ Tests for the Numba-optimized kernels.
 """
 
 import numpy as np
-import pytest
 
 from monet_regrid.methods import _numba_kernels
 

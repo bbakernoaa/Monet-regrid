@@ -315,10 +315,10 @@ def test_curvilinear_attribute_errors():
 
     # Use 'nearest' method, which doesn't create triangles
     regridder = CurvilinearRegridder(source_da, target_ds, method="nearest")
-    interpolator = regridder(source_da)
+    regridder(source_da)
 
     with pytest.raises(AttributeError):
-        interpolator.triangles
+        getattr(regridder, "triangles")
 
     with pytest.raises(AttributeError):
-        interpolator.convex_hull
+        getattr(regridder, "convex_hull")

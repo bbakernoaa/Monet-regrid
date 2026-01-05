@@ -601,5 +601,3 @@ if __name__ == "__main__":
     data_test.test_multidimensional_data()
     data_test.test_nan_patterns()
     data_test.test_extreme_coordinates()
-
-    print("All data generation tests passed!")

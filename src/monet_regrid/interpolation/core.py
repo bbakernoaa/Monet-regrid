@@ -241,7 +241,10 @@ class InterpolationEngine:
         except Exception as e:
             if len(source_points_3d) > 4:
                 warnings.warn(
-                    f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor.",
+                        (
+                            "Could not build Delaunay triangulation for linear interpolation: "
+                            f"{e}. Falling back to nearest neighbor."
+                        ),
                     stacklevel=2,
                 )
             self.method = "nearest"
@@ -397,7 +400,8 @@ class InterpolationEngine:
 
         # Determine number of targets - this info is not explicitly in the sparse arrays
         # We need to know it from context or store it.
-        # We can infer it from the target_indices max, but that might be smaller than actual targets if last ones are empty.
+        # We can infer it from the target_indices max, but that might be smaller
+        # than actual targets if last ones are empty.
         # We should store n_targets in precomputed_weights or pass it.
         # For now, let's look at self.target_points_3d if available.
         if self.target_points_3d is not None:
