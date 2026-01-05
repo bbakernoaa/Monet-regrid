@@ -12,7 +12,11 @@ try:
 except ImportError:
     xesmf = None
 
+import dask.array as da
 import pandas as pd
+
+from monet_regrid.core import CurvilinearRegridder
+
 
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 
@@ -207,3 +211,43 @@ def test_regrid_rectilinear_to_rectilinear_conservative_xesmf_equivalence():
             # Not sure why there is a difference here.
             # xr.testing.assert_equal(data_regrid.isnull(), data_esmf.isnull())
             pass
+
+
+def test_create_source_grid_from_data_lazy():
+    """Test that _create_source_grid_from_data generates a lazy grid."""
+    # 1. Create a dummy target grid, it's not the focus but needed for instantiation
+    target_grid = xr.Dataset(coords={"lat": (("y",), [0.5]), "lon": (("x",), [0.5])})
+
+    # Instantiate the regridder with source_data=None, as we'll pass it to the method directly
+    regridder = CurvilinearRegridder(source_data=None, target_grid=target_grid)
+
+    # 2. Create a source DataArray without explicit coordinates, backed by Dask
+    source_data_lazy = xr.DataArray(
+        da.zeros((10, 20), chunks=(5, 5)),
+        dims=["y", "x"],
+    )
+
+    # 3. Call the private method to be tested
+    source_grid = regridder._create_source_grid_from_data(source_data_lazy)
+
+    # 4. Assert that the coordinates are Dask arrays (The Proof of Laziness)
+    assert hasattr(source_grid["latitude"].data, "dask")
+    assert hasattr(source_grid["longitude"].data, "dask")
+    assert isinstance(source_grid["latitude"].data, da.Array)
+    assert isinstance(source_grid["longitude"].data, da.Array)
+
+    # 5. Assert shape and values for correctness
+    assert source_grid["latitude"].shape == (10, 20)
+    assert source_grid["longitude"].shape == (10, 20)
+
+    # Check a corner value to ensure meshgrid-like logic is correct
+    computed_lon = source_grid["longitude"].compute()
+    computed_lat = source_grid["latitude"].compute()
+
+    expected_lon_row = np.arange(20)
+    expected_lat_col = np.arange(10)
+
+    assert_array_equal(computed_lon[0, :], expected_lon_row)
+    assert_array_equal(computed_lat[:, 0], expected_lat_col)
+    assert computed_lon[-1, -1] == 19
+    assert computed_lat[-1, -1] == 9

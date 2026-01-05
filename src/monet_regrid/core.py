@@ -31,6 +31,7 @@ from collections.abc import Hashable
 from typing import Any
 
 import cf_xarray  # noqa: F401
+import dask.array as da
 import numpy as np
 import xarray as xr
 
@@ -648,7 +649,38 @@ class CurvilinearRegridder(BaseRegridder):
         return result
 
     def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
-        """Create a grid specification from source data."""
+        """Create a grid specification from source data.
+
+        This method extracts or generates a source grid (an ``xr.Dataset`` with
+        ``latitude`` and ``longitude`` coordinates) from the input data. It follows
+        a fallback strategy:
+
+        1. It first attempts to identify CF-compliant ``latitude`` and ``longitude``
+           coordinates using ``cf-xarray``.
+        2. If that fails, it searches for coordinates with names containing "lat" or "lon".
+        3. If no explicit coordinates are found, it assumes the last two dimensions
+           of the data are spatial (y, x) and generates lazy 2D ``latitude`` and
+           ``longitude`` grids using Dask for memory efficiency.
+
+        Parameters
+        ----------
+        source_data : xr.DataArray | xr.Dataset | None, optional
+            The data from which to create the grid. If None, it uses the
+            ``source_data`` provided during the regridder's initialization.
+            Defaults to None.
+
+        Returns
+        -------
+        xr.Dataset
+            A dataset containing the source grid's ``latitude`` and ``longitude``
+            coordinates.
+
+        Raises
+        ------
+        ValueError
+            If the source data has fewer than two dimensions and no explicit
+            coordinates can be found, making it impossible to infer a grid.
+        """
         # Use provided data or fall back to source data
         data = source_data if source_data is not None else self.source_data
 
@@ -691,16 +723,24 @@ class CurvilinearRegridder(BaseRegridder):
                 # Use the last two dimensions as spatial dimensions
                 y_dim, x_dim = data.dims[-2], data.dims[-1]
 
-                # Create simple coordinate arrays based on the spatial dimensions
-                y_coords = np.arange(data.sizes[y_dim])
-                x_coords = np.arange(data.sizes[x_dim])
+                # Create lazy coordinate arrays using Dask
+                y_coords = da.linspace(0, data.sizes[y_dim] - 1, data.sizes[y_dim], chunks=-1)
+                x_coords = da.linspace(0, data.sizes[x_dim] - 1, data.sizes[x_dim], chunks=-1)
 
-                # Create 2D coordinate grids
-                lon_2d, lat_2d = np.meshgrid(x_coords, y_coords)
+                # Wrap in DataArrays for broadcasting
+                y_da = xr.DataArray(y_coords, dims=y_dim)
+                x_da = xr.DataArray(x_coords, dims=x_dim)
+
+                # Create 2D coordinate grids using lazy broadcasting
+                lat_2d, lon_2d = xr.broadcast(y_da, x_da)
 
                 # Create a simple coordinate dataset
-                source_grid = xr.Dataset({"latitude": (["y", "x"], lat_2d), "longitude": (["y", "x"], lon_2d)})
-
+                source_grid = xr.Dataset(
+                    {
+                        "latitude": (["y", "x"], lat_2d.data),
+                        "longitude": (["y", "x"], lon_2d.data),
+                    }
+                )
                 return source_grid
             else:
                 msg = "Source data must have at least 2 dimensions for curvilinear regridding"
