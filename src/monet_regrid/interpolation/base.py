@@ -18,7 +18,7 @@ except ImportError:
 
 if HAS_PYKDTREE:
 
-    class CKDTree:
+    class cKDTree:
         """Adapter for pykdtree to mimic scipy.spatial.cKDTree."""
 
         def __init__(self, data, leafsize=10):
