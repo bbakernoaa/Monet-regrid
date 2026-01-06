@@ -144,7 +144,7 @@ def conservative_regrid_dataset(
     # Create weights array and coverage mask for each regridding dim
     weights = {}
     covered = {}
-    for coord in coords:  # noqa: PLC0206
+    for coord in coords:
         covered[coord] = (coords[coord] <= data[coord].max()) & (coords[coord] >= data[coord].min())
 
         target_coords = coords[coord].to_numpy()
@@ -158,7 +158,7 @@ def conservative_regrid_dataset(
         weights[coord] = da_weights
 
     # Apply the weights, using a unique set that matches chunking of each array
-    for array in data_vars.keys():  # noqa: PLC0206
+    for array in data_vars.keys():
         var_weights = {}
         for coord, weight_array in weights.items():
             var_input_chunks = data_vars[array].chunksizes.get(coord)

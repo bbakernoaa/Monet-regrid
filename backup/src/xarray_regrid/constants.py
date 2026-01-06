@@ -6,7 +6,7 @@ class GridType(Enum):
 
     RECTILINEAR = "rectilinear"
     """Rectilinear grid where coordinates are 1D arrays."""
-    
+
     CURVILINEAR = "curvilinear"
     """Curvilinear grid where coordinates are 2D arrays."""
 

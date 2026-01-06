@@ -1,0 +1,19 @@
+repos:
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.1
+    hooks:
+    -   id: ruff
+        args:
+        - --fix
+        exclude: ^backup/
+    -   id: ruff-format
+        args:
+        - --check
+        exclude: ^backup/
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.9.0
+    hooks:
+    -   id: mypy
+        files: src/
+        args: [--config-file=pyproject.toml]
+        additional_dependencies: ["types-requests", "numpy", "pandas-stubs", "xarray", "types-PyYAML", "scipy", "flox", "dask", "cf_xarray", "sparse", "pykdtree", "pyproj", "numba", "pooch", "h5netcdf", "zarr", "matplotlib", "pytest"]
