@@ -1,4 +1,5 @@
 """Implementation of flox reduction based regridding methods."""
+
 from __future__ import annotations
 
 from typing import Any, overload

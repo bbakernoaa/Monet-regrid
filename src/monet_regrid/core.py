@@ -191,7 +191,7 @@ class BaseRegridder(abc.ABC):
         # When source_data is None, we skip validation related to it.
         # This allows for the creation of a data-agnostic regridder.
         if self.source_data is not None:
-            if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
+            if not isinstance(self.source_data, xr.DataArray | xr.Dataset):
                 msg = "source_data must be an xarray DataArray or Dataset"
                 raise TypeError(msg)
 
@@ -601,9 +601,7 @@ class CurvilinearRegridder(BaseRegridder):
         ValueError
             If the target grid's coordinates cannot be identified.
         """
-        if self.source_data is not None and not isinstance(
-            self.source_data, (xr.DataArray, xr.Dataset)
-        ):
+        if self.source_data is not None and not isinstance(self.source_data, xr.DataArray | xr.Dataset):
             msg = "source_data must be an xarray DataArray or Dataset"
             raise TypeError(msg)
 
@@ -613,16 +611,12 @@ class CurvilinearRegridder(BaseRegridder):
 
         if self.source_data is not None:
             try:
-                self.source_lat_name, self.source_lon_name = identify_cf_coordinates(
-                    self.source_data
-                )
+                self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
             except ValueError:
                 pass
 
         try:
-            self.target_lat_name, self.target_lon_name = identify_cf_coordinates(
-                self.target_grid
-            )
+            self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
         except ValueError as e:
             msg = f"Target grid validation failed: {e}"
             raise ValueError(msg) from e
@@ -768,12 +762,8 @@ class CurvilinearRegridder(BaseRegridder):
                     y_chunks = data.chunks[y_dim_index]
                     x_chunks = data.chunks[x_dim_index]
 
-                    y_coords_array = da.linspace(
-                        0, data.sizes[y_dim] - 1, data.sizes[y_dim], chunks=y_chunks
-                    )
-                    x_coords_array = da.linspace(
-                        0, data.sizes[x_dim] - 1, data.sizes[x_dim], chunks=x_chunks
-                    )
+                    y_coords_array = da.linspace(0, data.sizes[y_dim] - 1, data.sizes[y_dim], chunks=y_chunks)
+                    x_coords_array = da.linspace(0, data.sizes[x_dim] - 1, data.sizes[x_dim], chunks=x_chunks)
                 else:
                     y_coords_array = np.arange(data.sizes[y_dim])
                     x_coords_array = np.arange(data.sizes[x_dim])

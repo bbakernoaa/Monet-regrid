@@ -632,7 +632,7 @@ class InterpolationEngine:
         else:
             return result.reshape(-1)
 
-    def _interpolate_linear_direct(self, source_data: np.ndarray) -> np.ndarray:
+    def _interpolate_linear_direct(self, _: np.ndarray) -> np.ndarray:
         """Direct computation of linear interpolation (fallback)."""
         # This is a fallback implementation if precomputed weights are not available
         # In practice, we should always have precomputed weights
