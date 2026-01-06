@@ -56,16 +56,10 @@ class Grid:
         """Validate the initialized SpatialBounds class."""
         msg = None
         if self.south > self.north:
-            msg = (
-                "Value of north bound is greater than south bound."
-                "\nPlease check the bounds input."
-            )
+            msg = "Value of north bound is greater than south bound.\nPlease check the bounds input."
             pass
         if self.west > self.east:
-            msg = (
-                "Value of west bound is greater than east bound."
-                "\nPlease check the bounds input."
-            )
+            msg = "Value of west bound is greater than east bound.\nPlease check the bounds input."
         if msg is not None:
             raise InvalidBoundsError(msg)
 

@@ -1,0 +1,12 @@
+repos:
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.1
+    hooks:
+    -   id: ruff
+        args:
+        - --fix
+        exclude: ^backup/
+    -   id: ruff-format
+        args:
+        - --check
+        exclude: ^backup/|^tests/test_performance_benchmarks.py
