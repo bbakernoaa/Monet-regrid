@@ -758,37 +758,32 @@ class CurvilinearRegridder(BaseRegridder):
             elif len(data.dims) >= 2:
                 # Use the last two dimensions as spatial dimensions
                 y_dim, x_dim = data.dims[-2], data.dims[-1]
+                y_size, x_size = data.sizes[y_dim], data.sizes[x_dim]
 
                 # Check if the data is Dask-backed
-                is_dask = hasattr(data, "chunks") and data.chunks is not None
+                is_dask = hasattr(data.data, "chunks")
 
                 if is_dask:
-                    y_dim_index = data.dims.index(y_dim)
-                    x_dim_index = data.dims.index(x_dim)
-                    y_chunks = data.chunks[y_dim_index]
-                    x_chunks = data.chunks[x_dim_index]
-
-                    y_coords_array = da.linspace(
-                        0, data.sizes[y_dim] - 1, data.sizes[y_dim], chunks=y_chunks
-                    )
-                    x_coords_array = da.linspace(
-                        0, data.sizes[x_dim] - 1, data.sizes[x_dim], chunks=x_chunks
-                    )
+                    y_chunks = data.chunks[data.dims.index(y_dim)]
+                    x_chunks = data.chunks[data.dims.index(x_dim)]
+                    y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
+                    x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
                 else:
-                    y_coords_array = np.arange(data.sizes[y_dim])
-                    x_coords_array = np.arange(data.sizes[x_dim])
+                    y_coords_array = np.arange(y_size)
+                    x_coords_array = np.arange(x_size)
 
+                # Wrap in DataArrays for broadcasting
                 y_coords = xr.DataArray(y_coords_array, dims=[y_dim])
                 x_coords = xr.DataArray(x_coords_array, dims=[x_dim])
 
-                # Create 2D coordinate grids
+                # Create lazy 2D coordinate grids
                 lon_2d, lat_2d = xr.broadcast(x_coords, y_coords)
 
-                # Create a simple coordinate dataset
+                # Create a coordinate dataset, ensuring data remains lazy
                 source_grid = xr.Dataset(
                     {
-                        "latitude": ((y_dim, x_dim), lat_2d.data),
-                        "longitude": ((y_dim, x_dim), lon_2d.data),
+                        "latitude": lat_2d,
+                        "longitude": lon_2d,
                     }
                 )
 
