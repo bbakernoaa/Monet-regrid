@@ -517,166 +517,27 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
         ValueError: If coordinates cannot be identified or if mixed dimensions are found
     """
     try:
-        # Import cf_xarray to ensure it's registered with xarray
+        lat_name, lon_name = identify_cf_coordinates(ds)
+        lat_coord = ds[lat_name]
+        lon_coord = ds[lon_name]
 
-        # Access latitude and longitude coordinates using cf-xarray
-        try:
-            lat_coord = ds.cf["latitude"]
-            lon_coord = ds.cf["longitude"]
+        lat_ndim = lat_coord.ndim
+        lon_ndim = lon_coord.ndim
 
-            # Check the number of dimensions for each coordinate
-            lat_ndim = lat_coord.ndim
-            lon_ndim = lon_coord.ndim
+        if lat_ndim != lon_ndim:
+            msg = f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
+            raise ValueError(msg) from None
 
-            # Both coordinates should have the same number of dimensions
-            if lat_ndim != lon_ndim:
-                msg = f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
-                raise ValueError(msg) from None
-
-            # Determine grid type based on dimensionality
-            if lat_ndim == 1:
-                return GridType.RECTILINEAR
-            elif lat_ndim == 2:
-                # Any 2D coordinates are treated as curvilinear since
-                # rectilinear interpolation expects 1D dimension coordinates
-                return GridType.CURVILINEAR
-            else:
-                msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
-                raise ValueError(msg) from None
-
-        except KeyError:
-            # Fallback to manual search for coordinate names and check their dimensions
-            # Look for coordinates that represent latitude/longitude regardless of name
-            lat_coord_names = [
-                name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["lat", "yc", "y"])
-            ]
-            lon_coord_names = [
-                name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["lon", "xc", "x"])
-            ]
-
-            # If we have both lat and lon coordinates, check their dimensions
-            if lat_coord_names and lon_coord_names:
-                lat_coord = ds[lat_coord_names[0]]
-                lon_coord = ds[lon_coord_names[0]]
-
-                # Check the number of dimensions for each coordinate
-                lat_ndim = lat_coord.ndim
-                lon_ndim = lon_coord.ndim
-
-                # Both coordinates should have the same number of dimensions
-                if lat_ndim != lon_ndim:
-                    msg = (
-                        f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
-                    )
-                    raise ValueError(msg) from None
-
-                # Determine grid type based on dimensionality
-                if lat_ndim == 1:
-                    return GridType.RECTILINEAR
-                elif lat_ndim == 2:
-                    # Check if 2D coordinates are actually just meshgrid of 1D coordinates
-                    # In such cases, we should still treat them as rectilinear
-                    try:
-                        # For true rectilinear grids with 2D coordinates,
-                        # lat varies only along one dimension and lon varies only along another
-                        # Check if latitude is constant along the second axis (x-direction)
-                        np.any(np.diff(lat_coord.values, axis=1) != 0)
-                        # Check if longitude is constant along the first axis (y-direction)
-                        np.any(np.diff(lon_coord.values, axis=0) != 0)
-
-                        # If lat only varies in y and lon only varies in x, it's still
-                        # treated as curvilinear since rectilinear interpolation expects 1D coordinates
-                        return GridType.CURVILINEAR
-                    except (IndexError, AttributeError):
-                        # If we can't determine, default to curvilinear for safety
-                        return GridType.CURVILINEAR
-                else:
-                    msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
-                    raise ValueError(msg) from None
-            else:
-                # If we don't have lat/lon or x/y named coordinates, try to identify coordinates by their dimensions
-                # Look for coordinates that have 2 dimensions (which would indicate curvilinear)
-                potential_lat_coords = []
-                potential_lon_coords = []
-
-                for coord_name in ds.coords:
-                    coord_var = ds[coord_name]
-                    if coord_var.ndim == 2:
-                        # If we find 2D coordinates, check if they look like latitude/longitude
-                        if (
-                            "lat" in str(coord_name).lower()
-                            or "yc" in str(coord_name).lower()
-                            or "y" in str(coord_name).lower()
-                        ):
-                            potential_lat_coords.append(coord_name)
-                        elif (
-                            "lon" in str(coord_name).lower()
-                            or "xc" in str(coord_name).lower()
-                            or "x" in str(coord_name).lower()
-                        ):
-                            potential_lon_coords.append(coord_name)
-
-                # If we still don't have any lat/lon coords, look for any 2D coordinates
-                # and try to determine if they represent latitude/longitude based on units
-                if not potential_lat_coords and not potential_lon_coords:
-                    for coord_name in ds.coords:
-                        coord_var = ds[coord_name]
-                        if coord_var.ndim == 2:
-                            attrs = coord_var.attrs
-                            units = attrs.get("units", "").lower()
-                            if "degree" in units and ("north" in units or "lat" in str(coord_name).lower()):
-                                potential_lat_coords.append(coord_name)
-                            elif "degree" in units and ("east" in units or "lon" in str(coord_name).lower()):
-                                potential_lon_coords.append(coord_name)
-
-                # If we have found potential lat/lon coordinates
-                if potential_lat_coords and potential_lon_coords:
-                    # Use the first ones found
-                    lat_coord = ds[potential_lat_coords[0]]
-                    lon_coord = ds[potential_lon_coords[0]]
-
-                    # Both should be 2D for curvilinear
-                    if lat_coord.ndim == 2 and lon_coord.ndim == 2:
-                        return GridType.CURVILINEAR
-                    else:
-                        msg = f"Coordinates found but not both 2D: lat={lat_coord.ndim}D, lon={lon_coord.ndim}D"
-                        raise ValueError(msg) from None
-                else:
-                    # If we still can't find them, try to find any 1D coordinates that look like lat/lon
-                    for coord_name in ds.coords:
-                        coord_var = ds[coord_name]
-                        if coord_var.ndim == 1:
-                            if (
-                                "lat" in str(coord_name).lower()
-                                or "lon" in str(coord_name).lower()
-                                or "y" in str(coord_name).lower()
-                                or "x" in str(coord_name).lower()
-                            ):
-                                # This is likely a rectilinear grid with 1D coordinates
-                                # Look for both lat and lon
-                                lat_1d_names = [
-                                    name
-                                    for name in ds.coords
-                                    if ds[name].ndim == 1 and ("lat" in str(name).lower() or "y" in str(name).lower())
-                                ]
-                                lon_1d_names = [
-                                    name
-                                    for name in ds.coords
-                                    if ds[name].ndim == 1 and ("lon" in str(name).lower() or "x" in str(name).lower())
-                                ]
-
-                                if lat_1d_names and lon_1d_names:
-                                    return GridType.RECTILINEAR
-
-                    msg = "No latitude or longitude coordinates found"
-                    raise ValueError(msg) from None
+        if lat_ndim == 1:
+            return GridType.RECTILINEAR
+        elif lat_ndim == 2:
+            return GridType.CURVILINEAR
+        else:
+            msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
+            raise ValueError(msg) from None
 
     except (KeyError, ValueError) as e:
         msg = f"Could not identify coordinate: {e}"
-        raise ValueError(msg) from e
-    except AttributeError as e:
-        # cf-xarray might not be available or coordinates not properly defined
-        msg = "cf-xarray coordinate detection failed - coordinates not properly defined"
         raise ValueError(msg) from e
 
 

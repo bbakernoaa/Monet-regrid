@@ -1,11 +1,8 @@
 import numpy as np
 import xarray as xr
 
-from monet_regrid.utils import format_lat
-
-# REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: from monet_regrid.utils import format_lat
-# New import: from monet_regrid.utils import format_lat
+from monet_regrid.constants import GridType
+from monet_regrid.utils import _get_grid_type, format_lat
 
 
 def test_format_lat():
@@ -28,6 +25,36 @@ def test_format_lat():
     assert (formatted.x.isel(lat=0) == -89.5).all()
     assert (formatted.x.isel(lat=-1) == 89.5).all()
     # Check that attrs have been preserved
-    assert formatted.attrs["foo"] == "bar"
-    assert formatted.lat.attrs["is"] == "coord"
-    assert formatted.x.attrs["is"] == "data"
+    assert formatted.attrs["foo"] =="bar"
+    assert formatted.lat.attrs["is"] =="coord"
+    assert formatted.x.attrs["is"] =="data"
+
+
+def test_get_grid_type_rectilinear():
+    """Test rectilinear grid detection."""
+    ds = xr.Dataset(
+        {
+            "foo": (("lat", "lon"), np.zeros((10, 20))),
+        },
+        coords={
+            "lat": np.arange(10),
+            "lon": np.arange(20),
+        },
+    )
+    grid_type = _get_grid_type(ds)
+    assert grid_type == GridType.RECTILINEAR
+
+
+def test_get_grid_type_curvilinear():
+    """Test curvilinear grid detection."""
+    ds = xr.Dataset(
+        {
+            "foo": (("y", "x"), np.zeros((10, 20))),
+        },
+        coords={
+            "lat": (("y", "x"), np.zeros((10, 20))),
+            "lon": (("y", "x"), np.zeros((10, 20))),
+        },
+    )
+    grid_type = _get_grid_type(ds)
+    assert grid_type == GridType.CURVILINEAR
