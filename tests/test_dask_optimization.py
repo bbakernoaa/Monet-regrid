@@ -7,7 +7,6 @@ This derivative work Copyright (c) 2024 monet-regrid Developers.
 
 import dask.array as da
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.core import CurvilinearRegridder

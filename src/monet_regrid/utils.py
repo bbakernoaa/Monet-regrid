@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, TypedDict, overload
 
 import cf_xarray  # noqa: F401
+import dask.array as da
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -69,67 +70,103 @@ class Grid:
         if msg is not None:
             raise InvalidBoundsError(msg)
 
-    def create_regridding_dataset(self, lat_name: str = "latitude", lon_name: str = "longitude") -> xr.Dataset:
-        """Create a dataset to use for regridding.
+    def create_regridding_dataset(
+        self,
+        lat_name: str = "latitude",
+        lon_name: str = "longitude",
+        use_dask: bool = False,
+    ) -> xr.Dataset:
+        """Create a dataset for regridding, with optional Dask support.
 
-        Args:
-            grid: Grid object containing the bounds and resolution of the
-                cartesian grid.
-            lat_name: Name for the latitudinal coordinate and dimension.
-                Defaults to "latitude".
-            lon_name: Name for the longitudinal coordinate and dimension.
-                Defaults to "longitude".
+        This method is a convenient wrapper around the `create_regridding_dataset`
+        function.
 
-        Returns:
-            A dataset with the latitude and longitude coordinates corresponding to the
-                specified grid. Contains no data variables.
+        Parameters
+        ----------
+        lat_name : str, optional
+            Name for the latitudinal coordinate. Defaults to "latitude".
+        lon_name : str, optional
+            Name for the longitudinal coordinate. Defaults to "longitude".
+        use_dask : bool, optional
+            If True, create coordinates as lazy Dask arrays. Defaults to False.
+
+        Returns
+        -------
+        xr.Dataset
+            A dataset with the specified latitude and longitude coordinates.
         """
-        return create_regridding_dataset(self, lat_name, lon_name)
+        return create_regridding_dataset(self, lat_name, lon_name, use_dask=use_dask)
 
 
-def create_lat_lon_coords(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
+def create_lat_lon_coords(grid: Grid, use_dask: bool = False) -> tuple[np.ndarray | da.Array, np.ndarray | da.Array]:
     """Create latitude and longitude coordinates based on the provided grid parameters.
 
-    Args:
-        grid: Grid object.
+    This function can generate either NumPy arrays (eager) or Dask arrays (lazy),
+    depending on the `use_dask` flag.
 
-    Returns:
-        Latititude coordinates, longitude coordinates.
+    Parameters
+    ----------
+    grid : Grid
+        Grid object specifying bounds and resolution.
+    use_dask : bool, optional
+        If True, generate lazy Dask arrays instead of NumPy arrays. Defaults to False.
+
+    Returns
+    -------
+    tuple[np.ndarray | da.Array, np.ndarray | da.Array]
+        A tuple containing the latitude and longitude coordinates.
     """
+    # Select the appropriate array library (dask.array or numpy)
+    xp = da if use_dask else np
 
-    if np.remainder((grid.north - grid.south), grid.resolution_lat) > 0:
-        lat_coords = np.arange(grid.south, grid.north, grid.resolution_lat)
-    else:
-        lat_coords = np.arange(grid.south, grid.north + grid.resolution_lat, grid.resolution_lat)
+    # Calculate the number of points for latitude and longitude
+    n_lat = round((grid.north - grid.south) / grid.resolution_lat) + 1
+    n_lon = round((grid.east - grid.west) / grid.resolution_lon) + 1
 
-    if np.remainder((grid.east - grid.west), grid.resolution_lat) > 0:
-        lon_coords = np.arange(grid.west, grid.east, grid.resolution_lon)
-    else:
-        lon_coords = np.arange(grid.west, grid.east + grid.resolution_lon, grid.resolution_lon)
+    # Generate the coordinate arrays using linspace for robustness
+    lat_coords = xp.linspace(grid.south, grid.north, n_lat)
+    lon_coords = xp.linspace(grid.west, grid.east, n_lon)
+
     return lat_coords, lon_coords
 
 
-def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: str = "longitude") -> xr.Dataset:
-    """Create a dataset to use for regridding.
+def create_regridding_dataset(
+    grid: Grid,
+    lat_name: str = "latitude",
+    lon_name: str = "longitude",
+    use_dask: bool = False,
+) -> xr.Dataset:
+    """Create a dataset to use for regridding, with optional lazy-loading.
 
-    Args:
-        grid: Grid object containing the bounds and resolution of the cartesian grid.
-        lat_name: Name for the latitudinal coordinate and dimension.
-            Defaults to "latitude".
-        lon_name: Name for the longitudinal coordinate and dimension.
-            Defaults to "longitude".
+    Parameters
+    ----------
+    grid : Grid
+        Grid object containing the bounds and resolution of the cartesian grid.
+    lat_name : str, optional
+        Name for the latitudinal coordinate and dimension. Defaults to "latitude".
+    lon_name : str, optional
+        Name for the longitudinal coordinate and dimension. Defaults to "longitude".
+    use_dask : bool, optional
+        If True, create coordinates as lazy Dask arrays. Defaults to False.
 
-    Returns:
+    Returns
+    -------
+    xr.Dataset
         A dataset with the latitude and longitude coordinates corresponding to the
-            specified grid. Contains no data variables.
+        specified grid. Contains no data variables.
     """
-    lat_coords, lon_coords = create_lat_lon_coords(grid)
-    return xr.Dataset(
+    lat_coords, lon_coords = create_lat_lon_coords(grid, use_dask=use_dask)
+
+    # Use assign_coords to create a dataset without data variables
+    # This is more explicit than the Dataset constructor for this purpose
+    ds = xr.Dataset()
+    ds = ds.assign_coords(
         {
-            lat_name: ([lat_name], lat_coords, {"units": "degrees_north"}),
-            lon_name: ([lon_name], lon_coords, {"units": "degrees_east"}),
+            lat_name: (lat_name, lat_coords, {"units": "degrees_north"}),
+            lon_name: (lon_name, lon_coords, {"units": "degrees_east"}),
         }
     )
+    return ds
 
 
 def to_intervalindex(coords: np.ndarray) -> pd.IntervalIndex:

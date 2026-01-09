@@ -760,17 +760,17 @@ class CurvilinearRegridder(BaseRegridder):
                 y_dim, x_dim = data.dims[-2], data.dims[-1]
                 y_size, x_size = data.sizes[y_dim], data.sizes[x_dim]
 
-                # Check if the data is Dask-backed
-                is_dask = hasattr(data.data, "chunks")
-
-                if is_dask:
+                # Check if the data is Dask-backed and select the appropriate array library
+                if hasattr(data.data, "chunks"):
+                    xp = da
                     y_chunks = data.chunks[data.dims.index(y_dim)]
                     x_chunks = data.chunks[data.dims.index(x_dim)]
-                    y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
-                    x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
+                    y_coords_array = xp.linspace(0, y_size - 1, y_size, chunks=y_chunks)
+                    x_coords_array = xp.linspace(0, x_size - 1, x_size, chunks=x_chunks)
                 else:
-                    y_coords_array = np.arange(y_size)
-                    x_coords_array = np.arange(x_size)
+                    xp = np
+                    y_coords_array = xp.arange(y_size)
+                    x_coords_array = xp.arange(x_size)
 
                 # Wrap in DataArrays for broadcasting
                 y_coords = xr.DataArray(y_coords_array, dims=[y_dim])
