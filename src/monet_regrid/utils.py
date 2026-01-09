@@ -120,8 +120,8 @@ def create_lat_lon_coords(grid: Grid, use_dask: bool = False) -> tuple[np.ndarra
     xp = da if use_dask else np
 
     # Calculate the number of points for latitude and longitude
-    n_lat = int(round((grid.north - grid.south) / grid.resolution_lat)) + 1
-    n_lon = int(round((grid.east - grid.west) / grid.resolution_lon)) + 1
+    n_lat = round((grid.north - grid.south) / grid.resolution_lat) + 1
+    n_lon = round((grid.east - grid.west) / grid.resolution_lon) + 1
 
     # Generate the coordinate arrays using linspace for robustness
     lat_coords = xp.linspace(grid.south, grid.north, n_lat)
