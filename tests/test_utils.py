@@ -25,9 +25,9 @@ def test_format_lat():
     assert (formatted.x.isel(lat=0) == -89.5).all()
     assert (formatted.x.isel(lat=-1) == 89.5).all()
     # Check that attrs have been preserved
-    assert formatted.attrs["foo"] =="bar"
-    assert formatted.lat.attrs["is"] =="coord"
-    assert formatted.x.attrs["is"] =="data"
+    assert formatted.attrs["foo"] == "bar"
+    assert formatted.lat.attrs["is"] == "coord"
+    assert formatted.x.attrs["is"] == "data"
 
 
 def test_get_grid_type_rectilinear():
