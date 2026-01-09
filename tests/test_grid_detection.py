@@ -248,5 +248,5 @@ def test_get_grid_type_missing_one_coord():
     """Test that an error is raised if only one coordinate is found."""
     lat = np.linspace(-90, 90, 10)
     ds = xr.Dataset(coords={"latitude": lat})
-    with pytest.raises(ValueError, match="No latitude or longitude coordinates found"):
+    with pytest.raises(ValueError, match="Could not identify coordinate: Could not identify longitude coordinate"):
         _get_grid_type(ds)
