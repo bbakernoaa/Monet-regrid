@@ -30,7 +30,6 @@ import json
 from typing import Any
 
 import cf_xarray  # noqa: F401
-import dask.array as da
 import numpy as np
 import xarray as xr
 
