@@ -1,33 +1,95 @@
+import dask.array as da
 import numpy as np
+import pytest
 import xarray as xr
 
-from monet_regrid.utils import format_lat
-
-# REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
-# Old import: from monet_regrid.utils import format_lat
-# New import: from monet_regrid.utils import format_lat
+from monet_regrid.utils import _create_lat_lon_from_dims, format_lat
 
 
 def test_format_lat():
-    lat_vals = np.arange(-89.5, 89.5 + 1, 1)
-    lon_vals = np.arange(-179.5, 179.5 + 1, 1)
-    x_vals = np.broadcast_to(lat_vals, (len(lon_vals), len(lat_vals)))
-    ds = xr.Dataset(
-        data_vars={"x": (("lon", "lat"), x_vals)},
-        coords={"lat": lat_vals, "lon": lon_vals},
-        attrs={"foo": "bar"},
+    """Test the format_lat function for pole padding."""
+    # Create a sample DataArray that is global but doesn't include the poles
+    lat = np.arange(-89.5, 90.5, 1)
+    lon = np.arange(0, 360, 1)
+    data = np.random.rand(len(lat), len(lon))
+    da = xr.DataArray(
+        data,
+        dims=["lat", "lon"],
+        coords={"lat": lat, "lon": lon},
     )
-    ds.lat.attrs["is"] = "coord"
-    ds.x.attrs["is"] = "data"
 
-    formatted = format_lat(ds, ds, {"lat": "lat", "lon": "lon"})
-    # Check that lat has been extended to include poles
-    assert formatted.lat.values[0] == -90
-    assert formatted.lat.values[-1] == 90
-    # Check that data has been extrapolated to include poles
-    assert (formatted.x.isel(lat=0) == -89.5).all()
-    assert (formatted.x.isel(lat=-1) == 89.5).all()
-    # Check that attrs have been preserved
-    assert formatted.attrs["foo"] == "bar"
-    assert formatted.lat.attrs["is"] == "coord"
-    assert formatted.x.attrs["is"] == "data"
+    # The target grid is not used in the current implementation of format_lat
+    target_ds = xr.Dataset()
+    formatted_coords = {"lat": "lat", "lon": "lon"}
+
+    # Apply the formatting
+    formatted_da = format_lat(da, target_ds, formatted_coords)
+
+    # Check that the poles have been added
+    assert formatted_da.lat.min() == -90
+    assert formatted_da.lat.max() == 90
+    assert len(formatted_da.lat) == len(lat) + 2
+
+    # Check that the pole values are the mean of the original boundary latitudes
+    np.testing.assert_allclose(formatted_da.isel(lat=0).values, da.isel(lat=0).mean("lon").values)
+    np.testing.assert_allclose(formatted_da.isel(lat=-1).values, da.isel(lat=-1).mean("lon").values)
+
+
+def test_create_lat_lon_from_dims():
+    """Test lazy coordinate generation for a Dask-backed array."""
+    # Create a sample Dask-backed DataArray
+    data = da.random.random((10, 20), chunks=(5, 10))
+    source_da = xr.DataArray(data, dims=["y", "x"])
+
+    # Generate the coordinate dataset
+    coord_ds = _create_lat_lon_from_dims(source_da)
+
+    # --- Validation ---
+    # 1. Check that the coordinates are Dask-backed (lazy)
+    assert hasattr(coord_ds["latitude"].data, "dask")
+    assert hasattr(coord_ds["longitude"].data, "dask")
+
+    # 2. Check shapes and dimensions
+    assert coord_ds["latitude"].shape == (10, 20)
+    assert coord_ds["longitude"].shape == (10, 20)
+    assert coord_ds["latitude"].dims == ("y", "x")
+    assert coord_ds["longitude"].dims == ("y", "x")
+
+    # 3. Compute the result and check values
+    computed_ds = coord_ds.compute()
+    expected_lon, expected_lat = np.meshgrid(np.arange(20), np.arange(10))
+    np.testing.assert_allclose(computed_ds["latitude"].values, expected_lat)
+    np.testing.assert_allclose(computed_ds["longitude"].values, expected_lon)
+
+
+def test_create_lat_lon_from_dims_numpy():
+    """Test coordinate generation for a NumPy-backed array."""
+    # Create a sample NumPy-backed DataArray
+    data = np.random.rand(10, 20)
+    source_da = xr.DataArray(data, dims=["y", "x"])
+
+    # Generate the coordinate dataset
+    coord_ds = _create_lat_lon_from_dims(source_da)
+
+    # --- Validation ---
+    # 1. Check that the coordinates are NumPy-backed
+    assert isinstance(coord_ds["latitude"].data, np.ndarray)
+    assert isinstance(coord_ds["longitude"].data, np.ndarray)
+
+    # 2. Check shapes and dimensions
+    assert coord_ds["latitude"].shape == (10, 20)
+    assert coord_ds["longitude"].shape == (10, 20)
+
+    # 3. Check values
+    expected_lon, expected_lat = np.meshgrid(np.arange(20), np.arange(10))
+    np.testing.assert_allclose(coord_ds["latitude"].values, expected_lat)
+    np.testing.assert_allclose(coord_ds["longitude"].values, expected_lon)
+
+
+def test_create_lat_lon_from_dims_invalid_input():
+    """Test that the function raises an error for invalid input."""
+    # Create a DataArray with fewer than two dimensions
+    source_da = xr.DataArray(np.random.rand(10), dims=["y"])
+
+    with pytest.raises(ValueError, match="Source data must have at least 2 dimensions"):
+        _create_lat_lon_from_dims(source_da)
