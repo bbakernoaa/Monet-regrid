@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, TypedDict, overload
 
 import cf_xarray  # noqa: F401
+import dask.array as da
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -872,3 +873,67 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
             lon_name = lon_candidates[0]
 
     return str(lat_name), str(lon_name)
+
+
+def _create_lat_lon_from_dims(data: xr.DataArray | xr.Dataset) -> xr.Dataset:
+    """Generate lazy 2D latitude and longitude coordinates from spatial dimensions.
+
+    This utility creates a dataset containing 2D 'latitude' and 'longitude'
+    DataArrays based on the last two dimensions of the input `data`. It is
+    designed to be Dask-aware, using `dask.array.linspace` to generate
+    lazy coordinates if the input data is Dask-backed, thus preventing
+    unnecessary eager computation.
+
+    Parameters
+    ----------
+    data : xr.DataArray | xr.Dataset
+        The source data from which to infer spatial dimensions. It is
+        expected to have at least two dimensions.
+
+    Returns
+    -------
+    xr.Dataset
+        A new dataset containing the lazily-generated 'latitude' and
+        'longitude' coordinates.
+
+    Raises
+    ------
+    ValueError
+        If the input `data` has fewer than two dimensions.
+    """
+    if len(data.dims) < 2:
+        msg = "Source data must have at least 2 dimensions for curvilinear regridding"
+        raise ValueError(msg)
+
+    # Use the last two dimensions as spatial dimensions
+    y_dim, x_dim = data.dims[-2], data.dims[-1]
+    y_size, x_size = data.sizes[y_dim], data.sizes[x_dim]
+
+    # Check if the data is Dask-backed
+    is_dask = hasattr(data.data, "chunks")
+
+    if is_dask:
+        y_chunks = data.chunks[data.dims.index(y_dim)]
+        x_chunks = data.chunks[data.dims.index(x_dim)]
+        y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
+        x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
+    else:
+        y_coords_array = np.arange(y_size)
+        x_coords_array = np.arange(x_size)
+
+    # Wrap in DataArrays for broadcasting
+    y_coords = xr.DataArray(y_coords_array, dims=[y_dim])
+    x_coords = xr.DataArray(x_coords_array, dims=[x_dim])
+
+    # Create lazy 2D coordinate grids
+    lat_2d, lon_2d = xr.broadcast(y_coords, x_coords)
+
+    # Create a coordinate dataset, ensuring data remains lazy
+    source_grid = xr.Dataset(
+        {
+            "latitude": lat_2d,
+            "longitude": lon_2d,
+        }
+    )
+
+    return source_grid
