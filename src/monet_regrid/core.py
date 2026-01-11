@@ -693,29 +693,51 @@ class CurvilinearRegridder(BaseRegridder):
 
         return result
 
-    def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
+    def _create_source_grid_from_data(
+        self, source_data: xr.DataArray | xr.Dataset | None = None
+    ) -> xr.Dataset:
         """Create a grid specification from source data, with lazy-loading support.
-
         This method extracts or generates coordinate information from the source data.
         It first attempts to find explicit CF-compliant latitude/longitude coordinates.
         If none are found, it falls back to generating a lazy coordinate grid based
         on the spatial dimensions of the data. This fallback is Dask-aware, using
         `dask.array.linspace` for Dask-backed data to prevent eager loading.
-
         Parameters
         ----------
         source_data : xr.DataArray | xr.Dataset | None, optional
-            The source data to process. If None, the data from initialization is used.
-
+            The source data to process. If ``None``, the data from initialization is used.
         Returns
         -------
         xr.Dataset
             A dataset containing the latitude and longitude coordinates.
-
         Raises
         ------
         ValueError
             If the source data has fewer than two dimensions for fallback generation.
+        Examples
+        --------
+        Create a lazy Dask-backed ``DataArray`` without explicit coordinates.
+        >>> import dask.array as da
+        >>> import xarray as xr
+        >>> data = da.random.random((10, 20), chunks=(5, 5))
+        >>> source_da = xr.DataArray(data, dims=["y", "x"])
+        Create a ``CurvilinearRegridder`` (partially initialized).
+        >>> class MockRegridder(CurvilinearRegridder):
+        ...     def __init__(self):
+        ...         self.source_data = source_da
+        >>> regridder = MockRegridder()
+        Generate the source grid, which should have lazy coordinates.
+        >>> source_grid = regridder._create_source_grid_from_data(source_da)
+        >>> "latitude" in source_grid.coords
+        True
+        >>> "longitude" in source_grid.coords
+        True
+        >>> isinstance(source_grid["latitude"].data, da.Array)
+        True
+        >>> source_grid["latitude"].shape
+        (10, 20)
+        >>> source_grid["latitude"].dims
+        ('y', 'x')
         """
         # Use provided data or fall back to source data
         data = source_data if source_data is not None else self.source_data
@@ -777,7 +799,7 @@ class CurvilinearRegridder(BaseRegridder):
                 x_coords = xr.DataArray(x_coords_array, dims=[x_dim])
 
                 # Create lazy 2D coordinate grids
-                lon_2d, lat_2d = xr.broadcast(x_coords, y_coords)
+                lat_2d, lon_2d = xr.broadcast(y_coords, x_coords)
 
                 # Create a coordinate dataset, ensuring data remains lazy
                 source_grid = xr.Dataset(
