@@ -236,3 +236,26 @@ def test_curvilinear_regridder_lazy_coordinate_creation():
     # 5. Assert that the coordinates are Dask arrays
     assert isinstance(source_grid["latitude"].data, da.Array)
     assert isinstance(source_grid["longitude"].data, da.Array)
+
+
+def test_curvilinear_regridder_lazy_coordinate_creation_with_correct_dims():
+    """Verify that fallback coordinates have the correct (y, x) dimension order."""
+    # 1. Create a dask-chunked DataArray without explicit coordinates
+    source_data = xr.DataArray(
+        da.random.random((10, 20), chunks=(5, 10)),
+        dims=["y", "x"],
+    )
+
+    # 2. Instantiate a mock regridder to isolate the method
+    class MockRegridder(CurvilinearRegridder):
+        def __init__(self):
+            self.source_data = source_data
+
+    regridder = MockRegridder()
+
+    # 3. Call the internal method to generate the source grid
+    source_grid = regridder._create_source_grid_from_data(source_data)
+
+    # 4. Assert that the dimensions are in the correct order ('y', 'x')
+    assert source_grid["latitude"].dims == ("y", "x")
+    assert source_grid["longitude"].dims == ("y", "x")
