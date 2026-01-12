@@ -37,8 +37,10 @@ import xarray as xr
 from monet_regrid.curvilinear import CurvilinearInterpolator
 from monet_regrid.methods import conservative, interp
 from monet_regrid.methods.flox_reduce import compute_mode, statistic_reduce
+from monet_regrid.constants import GridType
 from monet_regrid.utils import (
     _create_cache_key,
+    _get_grid_type,
     format_for_regrid,
     identify_cf_coordinates,
     validate_input,
@@ -188,30 +190,15 @@ class BaseRegridder(abc.ABC):
 
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs."""
-        # When source_data is None, we skip validation related to it.
-        # This allows for the creation of a data-agnostic regridder.
-        if self.source_data is not None:
-            if not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
-                msg = "source_data must be an xarray DataArray or Dataset"
-                raise TypeError(msg)
+        if self.source_data is not None and not isinstance(
+            self.source_data, (xr.DataArray, xr.Dataset)
+        ):
+            msg = "source_data must be an xarray DataArray or Dataset"
+            raise TypeError(msg)
 
         if not isinstance(self.target_grid, xr.Dataset):
             msg = "target_grid must be an xarray Dataset"
             raise TypeError(msg)
-
-        # Use a centralized coordinate identification function
-        if self.source_data is not None:
-            try:
-                self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
-            except ValueError as e:
-                msg = f"Source data validation failed: {e}"
-                raise ValueError(msg) from e
-
-        try:
-            self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
-        except ValueError as e:
-            msg = f"Target grid validation failed: {e}"
-            raise ValueError(msg) from e
 
     def __getstate__(self) -> dict[str, Any]:
         """Prepare the regridder for serialization (Dask compatibility)."""
@@ -233,6 +220,20 @@ class RectilinearRegridder(BaseRegridder):
     This class handles regridding between rectilinear grids using various interpolation
     methods like linear, nearest-neighbor, bilinear, cubic, and conservative approaches.
     """
+
+    def _validate_inputs(self) -> None:
+        """Validate the source data and target grid inputs."""
+        super()._validate_inputs()
+        if self.source_data is not None:
+            source_grid_type = _get_grid_type(self.source_data)
+            if source_grid_type != GridType.RECTILINEAR:
+                msg = "Source data must be on a rectilinear grid for RectilinearRegridder."
+                raise ValueError(msg)
+
+        target_grid_type = _get_grid_type(self.target_grid)
+        if target_grid_type != GridType.RECTILINEAR:
+            msg = "Target grid must be on a rectilinear grid for RectilinearRegridder."
+            raise ValueError(msg)
 
     def __init__(
         self,
@@ -776,15 +777,20 @@ class CurvilinearRegridder(BaseRegridder):
             # by assuming the last two dimensions are spatial
             elif len(data.dims) >= 2:
                 # Use the last two dimensions as spatial dimensions
-                y_dim, x_dim = data.dims[-2], data.dims[-1]
+                dims = tuple(data.dims)
+                y_dim, x_dim = dims[-2], dims[-1]
                 y_size, x_size = data.sizes[y_dim], data.sizes[x_dim]
 
                 # Check if the data is Dask-backed
-                is_dask = hasattr(data.data, "chunks")
+                if isinstance(data, xr.DataArray):
+                    is_dask = data.chunks is not None
+                else:  # It's a Dataset
+                    is_dask = bool(data.chunks)
 
                 if is_dask:
-                    y_chunks = data.chunks[data.dims.index(y_dim)]
-                    x_chunks = data.chunks[data.dims.index(x_dim)]
+                    dim_list = list(data.dims)
+                    y_chunks = data.chunks[dim_list.index(y_dim)]
+                    x_chunks = data.chunks[dim_list.index(x_dim)]
                     y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
                     x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
                 else:

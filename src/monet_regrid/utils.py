@@ -727,58 +727,40 @@ def validate_input(
 def validate_input(
     data: xr.DataArray | xr.Dataset,
     ds_target_grid: xr.Dataset,
-    time_dim: str | None,  # noqa: ARG001
+    time_dim: str | None,
 ) -> xr.Dataset:
-    # Check for coordinate compatibility using semantic matching instead of exact name matching
-    # This allows latitude/longitude to match with lat/lon, etc.
+    """Validate and prepare the target grid for regridding.
+    This function identifies the spatial coordinates in the source and target
+    grids and constructs a new, validated target grid. It ensures that any
+    non-spatial coordinates (like 'time') from the original target grid are
+    preserved.
+    Args:
+        data: The source DataArray or Dataset.
+        ds_target_grid: The target grid Dataset.
+        time_dim: The name of the time dimension, if any.
+    Returns:
+        A new xr.Dataset representing the validated target grid.
+    """
+    _, _ = identify_cf_coordinates(data)  # Fails early if source coords are missing
+    target_lat, target_lon = identify_cf_coordinates(ds_target_grid)
 
-    def _find_coordinate_matches(source_coords: list[Hashable], target_coords: list[Hashable]) -> list[Hashable]:
-        """Find semantic matches between coordinate names."""
-        matches: list[Hashable] = []
+    validated_coords = {
+        target_lat: ds_target_grid[target_lat],
+        target_lon: ds_target_grid[target_lon],
+    }
 
-        # Define coordinate name patterns
-        lat_patterns = ["lat", "latitude", "y", "yc"]
-        lon_patterns = ["lon", "longitude", "x", "xc"]
+    # Add all other coordinates from the target grid that are not the identified
+    # spatial coordinates. This preserves dimensions like 'time'.
+    for coord_name, coord_da in ds_target_grid.coords.items():
+        if coord_name not in [target_lat, target_lon]:
+            validated_coords[coord_name] = coord_da
 
-        source_lat_coords = [c for c in source_coords if any(p in str(c).lower() for p in lat_patterns)]
-        source_lon_coords = [c for c in source_coords if any(p in str(c).lower() for p in lon_patterns)]
-        target_lat_coords = [c for c in target_coords if any(p in str(c).lower() for p in lat_patterns)]
-        target_lon_coords = [c for c in target_coords if any(p in str(c).lower() for p in lon_patterns)]
+    # Ensure the specified time_dim is included if it exists. This is slightly
+    # redundant with the loop above but acts as a safeguard.
+    if time_dim and time_dim in ds_target_grid.coords:
+        validated_coords[time_dim] = ds_target_grid[time_dim]
 
-        # If we have both lat and lon coordinates in both source and target, we have matches
-        if source_lat_coords and source_lon_coords and target_lat_coords and target_lon_coords:
-            matches.extend(source_lat_coords[:1])  # Take first match
-            matches.extend(source_lon_coords[:1])  # Take first match
-
-        # Also check for exact coordinate name matches
-        exact_matches = set(source_coords).intersection(set(target_coords))
-        matches.extend(exact_matches)
-
-        return matches
-
-    # Check coordinate compatibility
-    coord_matches = _find_coordinate_matches(list(data.coords), list(ds_target_grid.coords))
-
-    if len(coord_matches) == 0:
-        # Only check dimensions if no coordinate matches found
-        dim_matches = set(data.dims).intersection(set(ds_target_grid.dims))
-
-        if len(dim_matches) == 0:
-            # As a last resort, check for semantic dimension matches
-            semantic_dim_matches = _find_coordinate_matches(list(data.dims), list(ds_target_grid.dims))
-
-            if len(semantic_dim_matches) == 0:
-                msg = (
-                    "No compatible coordinates or dimensions found between source and target:\n"
-                    " regridding is not possible.\n"
-                    f"Target coords: {list(ds_target_grid.coords)}\n"
-                    f"Source coords: {list(data.coords)}\n"
-                    f"Target dims: {list(ds_target_grid.dims)}\n"
-                    f"Source dims: {list(data.dims)}"
-                )
-                raise ValueError(msg)
-
-    return ds_target_grid
+    return xr.Dataset(coords=validated_coords)
 
 
 def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = None) -> tuple:

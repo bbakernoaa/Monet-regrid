@@ -259,3 +259,20 @@ def test_curvilinear_regridder_lazy_coordinate_creation_with_correct_dims():
     # 4. Assert that the dimensions are in the correct order ('y', 'x')
     assert source_grid["latitude"].dims == ("y", "x")
     assert source_grid["longitude"].dims == ("y", "x")
+
+
+def test_build_regridder_factory():
+    """Test the factory function for building the correct regridder."""
+    ds = xr.Dataset(
+        {"data": (("y", "x"), np.array([[1, 1], [1, 1]]))},
+        coords={"y": range(2), "x": range(2)},
+    )
+    ds_out = xr.Dataset(coords={"y": range(1), "x": range(1)})
+
+    # Test that "linear" method returns a RectilinearRegridder for rectilinear grids
+    regridder_linear = ds.regrid.build_regridder(ds_out, method="linear")
+    assert isinstance(regridder_linear, monet_regrid.RectilinearRegridder)
+
+    # Test that "conservative" method also returns a RectilinearRegridder
+    regridder_conservative = ds.regrid.build_regridder(ds_out, method="conservative")
+    assert isinstance(regridder_conservative, monet_regrid.RectilinearRegridder)
