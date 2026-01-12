@@ -716,17 +716,14 @@ class CurvilinearRegridder(BaseRegridder):
             If the source data has fewer than two dimensions for fallback generation.
         Examples
         --------
-        Create a lazy Dask-backed ``DataArray`` without explicit coordinates.
         >>> import dask.array as da
         >>> import xarray as xr
         >>> data = da.random.random((10, 20), chunks=(5, 5))
         >>> source_da = xr.DataArray(data, dims=["y", "x"])
-        Create a ``CurvilinearRegridder`` (partially initialized).
         >>> class MockRegridder(CurvilinearRegridder):
         ...     def __init__(self):
         ...         self.source_data = source_da
         >>> regridder = MockRegridder()
-        Generate the source grid, which should have lazy coordinates.
         >>> source_grid = regridder._create_source_grid_from_data(source_da)
         >>> "latitude" in source_grid.coords
         True
@@ -802,7 +799,7 @@ class CurvilinearRegridder(BaseRegridder):
                 lat_2d, lon_2d = xr.broadcast(y_coords, x_coords)
 
                 # Create a coordinate dataset, ensuring data remains lazy
-                source_grid = xr.Dataset(
+                source_grid = xr.Dataset().assign_coords(
                     {
                         "latitude": lat_2d,
                         "longitude": lon_2d,
