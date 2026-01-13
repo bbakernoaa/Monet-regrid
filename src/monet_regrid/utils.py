@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, TypedDict, overload
 
 import cf_xarray  # noqa: F401
+import dask.array as da
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -82,45 +83,61 @@ class Grid:
         return create_regridding_dataset(self, lat_name, lon_name)
 
 
-def create_lat_lon_coords(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
-    """Create latitude and longitude coordinates based on the provided grid parameters.
+def create_lat_lon_coords(grid: Grid) -> tuple[da.Array, da.Array]:
+    """Create lazily-computed latitude and longitude coordinates.
 
-    Args:
-        grid: Grid object.
+    This function uses Dask to generate coordinate arrays, preventing them from
+    being loaded into memory until they are explicitly computed. This is critical
+    for handling large, high-resolution grids efficiently.
 
-    Returns:
-        Latititude coordinates, longitude coordinates.
+    Parameters
+    ----------
+    grid : Grid
+        A `Grid` object containing the spatial bounds and resolution.
+
+    Returns
+    -------
+    tuple[da.Array, da.Array]
+        A tuple containing the lazily-computed latitude and longitude Dask arrays.
     """
-
     if np.remainder((grid.north - grid.south), grid.resolution_lat) > 0:
-        lat_coords = np.arange(grid.south, grid.north, grid.resolution_lat)
+        lat_coords = da.arange(grid.south, grid.north, grid.resolution_lat)
     else:
-        lat_coords = np.arange(grid.south, grid.north + grid.resolution_lat, grid.resolution_lat)
+        lat_coords = da.arange(grid.south, grid.north + grid.resolution_lat, grid.resolution_lat)
 
-    if np.remainder((grid.east - grid.west), grid.resolution_lat) > 0:
-        lon_coords = np.arange(grid.west, grid.east, grid.resolution_lon)
+    if np.remainder((grid.east - grid.west), grid.resolution_lon) > 0:
+        lon_coords = da.arange(grid.west, grid.east, grid.resolution_lon)
     else:
-        lon_coords = np.arange(grid.west, grid.east + grid.resolution_lon, grid.resolution_lon)
+        lon_coords = da.arange(grid.west, grid.east + grid.resolution_lon, grid.resolution_lon)
+
     return lat_coords, lon_coords
 
 
 def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: str = "longitude") -> xr.Dataset:
-    """Create a dataset to use for regridding.
+    """Create a lazy xarray.Dataset for regridding.
 
-    Args:
-        grid: Grid object containing the bounds and resolution of the cartesian grid.
-        lat_name: Name for the latitudinal coordinate and dimension.
-            Defaults to "latitude".
-        lon_name: Name for the longitudinal coordinate and dimension.
-            Defaults to "longitude".
+    This function constructs a dataset containing only coordinate information,
+    which is generated lazily using Dask. This approach is highly memory-efficient
+    for defining large target grids for regridding operations.
 
-    Returns:
-        A dataset with the latitude and longitude coordinates corresponding to the
-            specified grid. Contains no data variables.
+    Parameters
+    ----------
+    grid : Grid
+        A `Grid` object defining the spatial bounds and resolution.
+    lat_name : str, optional
+        The desired name for the latitude coordinate, by default "latitude".
+    lon_name : str, optional
+        The desired name for the longitude coordinate, by default "longitude".
+
+    Returns
+    -------
+    xr.Dataset
+        A dataset with Dask-backed latitude and longitude coordinates and no
+        data variables.
     """
     lat_coords, lon_coords = create_lat_lon_coords(grid)
     return xr.Dataset(
-        {
+        coords={
             lat_name: ([lat_name], lat_coords, {"units": "degrees_north"}),
             lon_name: ([lon_name], lon_coords, {"units": "degrees_east"}),
         }
