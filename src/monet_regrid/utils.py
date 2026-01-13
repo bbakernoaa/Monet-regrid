@@ -381,9 +381,7 @@ def format_lat(
     return obj
 
 
-def format_lon(
-    obj: xr.DataArray | xr.Dataset, target: xr.Dataset, formatted_coords: dict[str, str]
-) -> xr.DataArray | xr.Dataset:
+def format_lon(obj: xr.DataArray | xr.Dataset, target: xr.Dataset, formatted_coords: dict[str, str]) -> xr.DataArray | xr.Dataset:
     """Format the longitude coordinate by shifting the source grid to line up with
     the target anywhere in the range of -360 to 360, and then add a single wraparound
     padding column if the domain is inferred to be global and the east or west edges
@@ -548,12 +546,8 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
         except KeyError:
             # Fallback to manual search for coordinate names and check their dimensions
             # Look for coordinates that represent latitude/longitude regardless of name
-            lat_coord_names = [
-                name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["lat", "yc", "y"])
-            ]
-            lon_coord_names = [
-                name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["lon", "xc", "x"])
-            ]
+            lat_coord_names = [name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["lat", "yc", "y"])]
+            lon_coord_names = [name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["lon", "xc", "x"])]
 
             # If we have both lat and lon coordinates, check their dimensions
             if lat_coord_names and lon_coord_names:
@@ -566,9 +560,7 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
 
                 # Both coordinates should have the same number of dimensions
                 if lat_ndim != lon_ndim:
-                    msg = (
-                        f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
-                    )
+                    msg = f"Mismatched coordinate dimensions: latitude has {lat_ndim} dims, longitude has {lon_ndim} dims"
                     raise ValueError(msg) from None
 
                 # Determine grid type based on dimensionality
@@ -604,17 +596,9 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                     coord_var = ds[coord_name]
                     if coord_var.ndim == 2:
                         # If we find 2D coordinates, check if they look like latitude/longitude
-                        if (
-                            "lat" in str(coord_name).lower()
-                            or "yc" in str(coord_name).lower()
-                            or "y" in str(coord_name).lower()
-                        ):
+                        if "lat" in str(coord_name).lower() or "yc" in str(coord_name).lower() or "y" in str(coord_name).lower():
                             potential_lat_coords.append(coord_name)
-                        elif (
-                            "lon" in str(coord_name).lower()
-                            or "xc" in str(coord_name).lower()
-                            or "x" in str(coord_name).lower()
-                        ):
+                        elif "lon" in str(coord_name).lower() or "xc" in str(coord_name).lower() or "x" in str(coord_name).lower():
                             potential_lon_coords.append(coord_name)
 
                 # If we still don't have any lat/lon coords, look for any 2D coordinates
@@ -782,9 +766,7 @@ def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = No
     """
     # Create a hashable representation of the coordinates
     # Includes name, shape, dtype, and the raw values as bytes
-    coords_key = frozenset(
-        (name, coord.shape, coord.dtype, coord.values.tobytes()) for name, coord in data.coords.items()
-    )
+    coords_key = frozenset((name, coord.shape, coord.dtype, coord.values.tobytes()) for name, coord in data.coords.items())
 
     # The dimensions are also important
     dims_key = tuple(sorted(data.dims))
@@ -830,9 +812,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
         except KeyError:
             # Fallback to common non-CF names
             lat_candidates = [
-                name
-                for name in ds.coords
-                if any(keyword in str(name).lower() for keyword in ["latitude", "lat", "yc", "y"])
+                name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["latitude", "lat", "yc", "y"])
             ]
             if not lat_candidates:
                 msg = "Could not identify latitude coordinate"
@@ -847,9 +827,7 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
         except KeyError:
             # Fallback to common non-CF names
             lon_candidates = [
-                name
-                for name in ds.coords
-                if any(keyword in str(name).lower() for keyword in ["longitude", "lon", "xc", "x"])
+                name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["longitude", "lon", "xc", "x"])
             ]
             if not lon_candidates:
                 msg = "Could not identify longitude coordinate"

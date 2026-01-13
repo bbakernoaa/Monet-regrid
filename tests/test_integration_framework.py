@@ -19,9 +19,7 @@ class TestEndToEndWorkflows:
         self.source_lat, self.source_lon = self._create_curvilinear_grid(10, 12, 30, 50, -100, -80)
         self.target_lat, self.target_lon = self._create_curvilinear_grid(8, 10, 32, 48, -98, -82, perturbation=0.3)
 
-        self.source_grid = xr.Dataset(
-            {"latitude": (["y", "x"], self.source_lat), "longitude": (["y", "x"], self.source_lon)}
-        )
+        self.source_grid = xr.Dataset({"latitude": (["y", "x"], self.source_lat), "longitude": (["y", "x"], self.source_lon)})
 
         self.target_grid = xr.Dataset(
             {
@@ -86,9 +84,7 @@ class TestEndToEndWorkflows:
         target_lat_1d = np.linspace(32, 48, 8)
         target_lon_1d = np.linspace(-98, -82, 10)
 
-        rectilinear_target = xr.Dataset(
-            {"latitude": (["y_target"], target_lat_1d), "longitude": (["x_target"], target_lon_1d)}
-        )
+        rectilinear_target = xr.Dataset({"latitude": (["y_target"], target_lat_1d), "longitude": (["x_target"], target_lon_1d)})
 
         # Create test data for this specific test
         data_values = np.random.rand(10, 12) * 10 + 100

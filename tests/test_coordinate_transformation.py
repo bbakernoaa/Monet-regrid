@@ -21,9 +21,7 @@ class TestCoordinateTransformation:
         self.target_lat = np.array([[5, 7], [5, 7]])
         self.target_lon = np.array([[-5, -5], [5, 5]])
 
-        self.source_grid = xr.Dataset(
-            {"latitude": (["y", "x"], self.source_lat), "longitude": (["y", "x"], self.source_lon)}
-        )
+        self.source_grid = xr.Dataset({"latitude": (["y", "x"], self.source_lat), "longitude": (["y", "x"], self.source_lon)})
 
         self.target_grid = xr.Dataset(
             {

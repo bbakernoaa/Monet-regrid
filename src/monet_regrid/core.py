@@ -165,10 +165,7 @@ class BaseRegridder(abc.ABC):
                 msg = f"Unknown regridder type: {regridder_type}"
                 raise ValueError(msg)
         else:
-            msg = (
-                "Could not determine regridder type from file. Missing 'regridder_type' "
-                "or 'module'/'class' from config."
-            )
+            msg = "Could not determine regridder type from file. Missing 'regridder_type' " "or 'module'/'class' from config."
             raise ValueError(msg)
 
         if not issubclass(regridder_class, cls):
@@ -364,9 +361,7 @@ class RectilinearRegridder(BaseRegridder):
         # Update history attribute for provenance
         history_message = f"Regridded using RectilinearRegridder with method='{method}'"
         existing_history = regridded_data.attrs.get("history", "")
-        regridded_data.attrs["history"] = (
-            f"{existing_history}\n{history_message}" if existing_history else history_message
-        )
+        regridded_data.attrs["history"] = f"{existing_history}\n{history_message}" if existing_history else history_message
 
         return regridded_data
 
@@ -401,8 +396,7 @@ class RectilinearRegridder(BaseRegridder):
                 source_dims = {dim: self.source_data.sizes[dim] for dim in self.source_data.dims}
             else:
                 source_dims = {
-                    dim: len(self.source_data[dim]) if dim in self.source_data.dims else 0
-                    for dim in self.source_data.dims
+                    dim: len(self.source_data[dim]) if dim in self.source_data.dims else 0 for dim in self.source_data.dims
                 }
 
         return {
@@ -600,7 +594,7 @@ class CurvilinearRegridder(BaseRegridder):
         ValueError
             If the target grid's coordinates cannot be identified.
         """
-        if self.source_data is not None and not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
+        if self.source_data is not None and not isinstance(self.source_data, xr.DataArray | xr.Dataset):
             msg = "source_data must be an xarray DataArray or Dataset"
             raise TypeError(msg)
 
@@ -745,9 +739,7 @@ class CurvilinearRegridder(BaseRegridder):
         except (KeyError, AttributeError):
             # Fallback to manual search
             lat_coords = [name for name in data.coords if "lat" in str(name).lower() or "latitude" in str(name).lower()]
-            lon_coords = [
-                name for name in data.coords if "lon" in str(name).lower() or "longitude" in str(name).lower()
-            ]
+            lon_coords = [name for name in data.coords if "lon" in str(name).lower() or "longitude" in str(name).lower()]
 
             if lat_coords and lon_coords:
                 # If lat/lon coordinates are found in the data, use them
@@ -837,8 +829,7 @@ class CurvilinearRegridder(BaseRegridder):
                 source_dims = {dim: self.source_data.sizes[dim] for dim in self.source_data.dims}
             else:
                 source_dims = {
-                    dim: len(self.source_data[dim]) if dim in self.source_data.dims else 0
-                    for dim in self.source_data.dims
+                    dim: len(self.source_data[dim]) if dim in self.source_data.dims else 0 for dim in self.source_data.dims
                 }
 
         return {

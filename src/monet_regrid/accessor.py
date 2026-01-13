@@ -55,9 +55,7 @@ class Regridder:
     def __init__(self, xarray_obj: xr.DataArray | xr.Dataset):
         self._obj = xarray_obj
 
-    def _prepare_regridder(
-        self, ds_target_grid: xr.Dataset, method: str, time_dim: str | None, **kwargs: Any
-    ) -> BaseRegridder:
+    def _prepare_regridder(self, ds_target_grid: xr.Dataset, method: str, time_dim: str | None, **kwargs: Any) -> BaseRegridder:
         """Prepare and build the appropriate regridder."""
         source_grid_type = _get_grid_type(self._obj)
         target_grid_type = _get_grid_type(ds_target_grid)

@@ -128,9 +128,7 @@ class InterpolationEngine:
 
         # Find candidates
         k_candidates = 25
-        _dists, indices = self.source_kdtree.query(
-            target_centers_3d, k=k_candidates, distance_upper_bound=radius_of_influence
-        )
+        _dists, indices = self.source_kdtree.query(target_centers_3d, k=k_candidates, distance_upper_bound=radius_of_influence)
 
         # indices has shape (M, k). Invalid indices are self.source_kdtree.n
         # We need to clean this up for the kernel
@@ -241,8 +239,7 @@ class InterpolationEngine:
         except Exception as e:
             if len(source_points_3d) > 4:
                 warnings.warn(
-                    "Could not build Delaunay triangulation for linear interpolation:"
-                    f" {e}. Falling back to nearest neighbor.",
+                    "Could not build Delaunay triangulation for linear interpolation:" f" {e}. Falling back to nearest neighbor.",
                     stacklevel=2,
                 )
             self.method = "nearest"
@@ -600,11 +597,7 @@ class InterpolationEngine:
                         weights = self.precomputed_weights["barycentric_weights"][target_idx]
 
                         # Get the source point indices for this triangle
-                        if (
-                            hasattr(self, "triangles")
-                            and self.triangles is not None
-                            and hasattr(self.triangles, "simplices")
-                        ):
+                        if hasattr(self, "triangles") and self.triangles is not None and hasattr(self.triangles, "simplices"):
                             vertex_indices = self.triangles.simplices[simplex_idx]
 
                             for slice_idx in range(reshaped_data.shape[0]):
@@ -632,7 +625,7 @@ class InterpolationEngine:
         else:
             return result.reshape(-1)
 
-    def _interpolate_linear_direct(self, source_data: np.ndarray) -> np.ndarray:
+    def _interpolate_linear_direct(self, _source_data: np.ndarray) -> np.ndarray:
         """Direct computation of linear interpolation (fallback)."""
         # This is a fallback implementation if precomputed weights are not available
         # In practice, we should always have precomputed weights
