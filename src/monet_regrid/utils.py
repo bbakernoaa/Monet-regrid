@@ -33,7 +33,8 @@ URLs updated, and documentation adapted for new branding.
 """
 
 
-class InvalidBoundsError(Exception): ...
+class InvalidBoundsError(Exception):
+    ...
 
 
 class CoordHandler(TypedDict):
@@ -56,16 +57,10 @@ class Grid:
         """Validate the initialized SpatialBounds class."""
         msg = None
         if self.south > self.north:
-            msg = (
-                "Value of north bound is greater than south bound."
-                "\nPlease check the bounds input."
-            )
+            msg = "Value of north bound is greater than south bound." "\nPlease check the bounds input."
             pass
         if self.west > self.east:
-            msg = (
-                "Value of west bound is greater than east bound."
-                "\nPlease check the bounds input."
-            )
+            msg = "Value of west bound is greater than east bound." "\nPlease check the bounds input."
         if msg is not None:
             raise InvalidBoundsError(msg)
 
@@ -247,7 +242,8 @@ def format_for_regrid(
     obj: xr.Dataset,
     target: xr.Dataset,
     stats: bool = False,
-) -> xr.Dataset: ...
+) -> xr.Dataset:
+    ...
 
 
 @overload
@@ -255,7 +251,8 @@ def format_for_regrid(
     obj: xr.DataArray,
     target: xr.Dataset,
     stats: bool = False,
-) -> xr.DataArray: ...
+) -> xr.DataArray:
+    ...
 
 
 def format_for_regrid(
@@ -464,11 +461,13 @@ def coord_is_covered(obj: xr.DataArray | xr.Dataset, target: xr.Dataset, coord: 
 
 
 @overload
-def ensure_monotonic(obj: xr.DataArray, coord: Hashable) -> xr.DataArray: ...
+def ensure_monotonic(obj: xr.DataArray, coord: Hashable) -> xr.DataArray:
+    ...
 
 
 @overload
-def ensure_monotonic(obj: xr.Dataset, coord: Hashable) -> xr.Dataset: ...
+def ensure_monotonic(obj: xr.Dataset, coord: Hashable) -> xr.Dataset:
+    ...
 
 
 def ensure_monotonic(obj: xr.DataArray | xr.Dataset, coord: Hashable) -> xr.DataArray | xr.Dataset:
@@ -485,11 +484,13 @@ def ensure_monotonic(obj: xr.DataArray | xr.Dataset, coord: Hashable) -> xr.Data
 
 
 @overload
-def update_coord(obj: xr.DataArray, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray: ...
+def update_coord(obj: xr.DataArray, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray:
+    ...
 
 
 @overload
-def update_coord(obj: xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.Dataset: ...
+def update_coord(obj: xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.Dataset:
+    ...
 
 
 def update_coord(obj: xr.DataArray | xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray | xr.Dataset:
@@ -713,7 +714,8 @@ def validate_input(
     data: xr.Dataset,
     ds_target_grid: xr.Dataset,
     time_dim: str | None,
-) -> xr.Dataset: ...
+) -> xr.Dataset:
+    ...
 
 
 @overload
@@ -721,46 +723,65 @@ def validate_input(
     data: xr.DataArray,
     ds_target_grid: xr.Dataset,
     time_dim: str | None,
-) -> xr.Dataset: ...
+) -> xr.Dataset:
+    ...
 
 
 def validate_input(
     data: xr.DataArray | xr.Dataset,
     ds_target_grid: xr.Dataset,
-    time_dim: str | None,
+    time_dim: str | None,  # noqa: ARG001
 ) -> xr.Dataset:
-    """Validate and prepare the target grid for regridding.
-    This function identifies the spatial coordinates in the source and target
-    grids and constructs a new, validated target grid. It ensures that any
-    non-spatial coordinates (like 'time') from the original target grid are
-    preserved.
-    Args:
-        data: The source DataArray or Dataset.
-        ds_target_grid: The target grid Dataset.
-        time_dim: The name of the time dimension, if any.
-    Returns:
-        A new xr.Dataset representing the validated target grid.
-    """
-    _, _ = identify_cf_coordinates(data)  # Fails early if source coords are missing
-    target_lat, target_lon = identify_cf_coordinates(ds_target_grid)
+    # Check for coordinate compatibility using semantic matching instead of exact name matching
+    # This allows latitude/longitude to match with lat/lon, etc.
 
-    validated_coords = {
-        target_lat: ds_target_grid[target_lat],
-        target_lon: ds_target_grid[target_lon],
-    }
+    def _find_coordinate_matches(source_coords: list[Hashable], target_coords: list[Hashable]) -> list[Hashable]:
+        """Find semantic matches between coordinate names."""
+        matches: list[Hashable] = []
 
-    # Add all other coordinates from the target grid that are not the identified
-    # spatial coordinates. This preserves dimensions like 'time'.
-    for coord_name, coord_da in ds_target_grid.coords.items():
-        if coord_name not in [target_lat, target_lon]:
-            validated_coords[coord_name] = coord_da
+        # Define coordinate name patterns
+        lat_patterns = ["lat", "latitude", "y", "yc"]
+        lon_patterns = ["lon", "longitude", "x", "xc"]
 
-    # Ensure the specified time_dim is included if it exists. This is slightly
-    # redundant with the loop above but acts as a safeguard.
-    if time_dim and time_dim in ds_target_grid.coords:
-        validated_coords[time_dim] = ds_target_grid[time_dim]
+        source_lat_coords = [c for c in source_coords if any(p in str(c).lower() for p in lat_patterns)]
+        source_lon_coords = [c for c in source_coords if any(p in str(c).lower() for p in lon_patterns)]
+        target_lat_coords = [c for c in target_coords if any(p in str(c).lower() for p in lat_patterns)]
+        target_lon_coords = [c for c in target_coords if any(p in str(c).lower() for p in lon_patterns)]
 
-    return xr.Dataset(coords=validated_coords)
+        # If we have both lat and lon coordinates in both source and target, we have matches
+        if source_lat_coords and source_lon_coords and target_lat_coords and target_lon_coords:
+            matches.extend(source_lat_coords[:1])  # Take first match
+            matches.extend(source_lon_coords[:1])  # Take first match
+
+        # Also check for exact coordinate name matches
+        exact_matches = set(source_coords).intersection(set(target_coords))
+        matches.extend(exact_matches)
+
+        return matches
+
+    # Check coordinate compatibility
+    coord_matches = _find_coordinate_matches(list(data.coords), list(ds_target_grid.coords))
+
+    if len(coord_matches) == 0:
+        # Only check dimensions if no coordinate matches found
+        dim_matches = set(data.dims).intersection(set(ds_target_grid.dims))
+
+        if len(dim_matches) == 0:
+            # As a last resort, check for semantic dimension matches
+            semantic_dim_matches = _find_coordinate_matches(list(data.dims), list(ds_target_grid.dims))
+
+            if len(semantic_dim_matches) == 0:
+                msg = (
+                    "No compatible coordinates or dimensions found between source and target:\n"
+                    " regridding is not possible.\n"
+                    f"Target coords: {list(ds_target_grid.coords)}\n"
+                    f"Source coords: {list(data.coords)}\n"
+                    f"Target dims: {list(ds_target_grid.dims)}\n"
+                    f"Source dims: {list(data.dims)}"
+                )
+                raise ValueError(msg)
+
+    return ds_target_grid
 
 
 def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = None) -> tuple:

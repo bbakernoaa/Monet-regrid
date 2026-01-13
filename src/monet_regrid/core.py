@@ -190,9 +190,7 @@ class BaseRegridder(abc.ABC):
 
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs."""
-        if self.source_data is not None and not isinstance(
-            self.source_data, (xr.DataArray, xr.Dataset)
-        ):
+        if self.source_data is not None and not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
             msg = "source_data must be an xarray DataArray or Dataset"
             raise TypeError(msg)
 
@@ -602,9 +600,7 @@ class CurvilinearRegridder(BaseRegridder):
         ValueError
             If the target grid's coordinates cannot be identified.
         """
-        if self.source_data is not None and not isinstance(
-            self.source_data, (xr.DataArray, xr.Dataset)
-        ):
+        if self.source_data is not None and not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
             msg = "source_data must be an xarray DataArray or Dataset"
             raise TypeError(msg)
 
@@ -614,16 +610,12 @@ class CurvilinearRegridder(BaseRegridder):
 
         if self.source_data is not None:
             try:
-                self.source_lat_name, self.source_lon_name = identify_cf_coordinates(
-                    self.source_data
-                )
+                self.source_lat_name, self.source_lon_name = identify_cf_coordinates(self.source_data)
             except ValueError:
                 pass
 
         try:
-            self.target_lat_name, self.target_lon_name = identify_cf_coordinates(
-                self.target_grid
-            )
+            self.target_lat_name, self.target_lon_name = identify_cf_coordinates(self.target_grid)
         except ValueError as e:
             msg = f"Target grid validation failed: {e}"
             raise ValueError(msg) from e
@@ -694,9 +686,7 @@ class CurvilinearRegridder(BaseRegridder):
 
         return result
 
-    def _create_source_grid_from_data(
-        self, source_data: xr.DataArray | xr.Dataset | None = None
-    ) -> xr.Dataset:
+    def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
         """Create a grid specification from source data, with lazy-loading support.
         This method extracts or generates coordinate information from the source data.
         It first attempts to find explicit CF-compliant latitude/longitude coordinates.

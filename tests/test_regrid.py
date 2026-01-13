@@ -166,7 +166,7 @@ def test_regrid_rectilinear_to_rectilinear_conservative_nan_robust():
             warnings.filterwarnings("ignore", category=UserWarning)
             # Filter PerformanceWarning specifically if available from dask
             try:
-                from dask.array.core import PerformanceWarning  # noqa: PLC0415
+                from dask.array.core import PerformanceWarning
 
                 warnings.filterwarnings("ignore", category=PerformanceWarning)
             except ImportError:

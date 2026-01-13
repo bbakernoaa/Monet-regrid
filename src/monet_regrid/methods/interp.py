@@ -36,7 +36,8 @@ def interp_regrid(
     data: xr.DataArray,
     target_ds: xr.Dataset,
     method: Literal["linear", "nearest", "cubic", "bilinear"],
-) -> xr.DataArray: ...
+) -> xr.DataArray:
+    ...
 
 
 @overload
@@ -44,7 +45,8 @@ def interp_regrid(
     data: xr.Dataset,
     target_ds: xr.Dataset,
     method: Literal["linear", "nearest", "cubic", "bilinear"],
-) -> xr.Dataset: ...
+) -> xr.Dataset:
+    ...
 
 
 def interp_regrid(
@@ -62,40 +64,18 @@ def interp_regrid(
     Returns:
         Regridded input dataset
     """
-    # Identify common coordinates
-    coord_names = set(target_ds.coords).intersection(set(data.coords))
-
-    # Handle dimensions present in the target but not the source
+    # Add any missing dimensions from the target grid to the source data.
+    # This is crucial for broadcasting non-spatial dimensions like 'time'.
     missing_dims = set(target_ds.dims) - set(data.dims)
     if missing_dims:
         for dim in missing_dims:
-            if dim in target_ds.coords:
+            if dim in target_ds:
                 data = data.expand_dims({dim: target_ds[dim]})
 
-    # If the input is a DataArray and we have compatible coordinates, try fast path
-    if isinstance(data, xr.DataArray) and len(coord_names) > 0:
-        # Check if coordinates are monotonic (required for RegularGridInterpolator)
-        # and if we have a dense grid
-        try:
-            return _interp_regrid_fast(data, target_ds, method, list(coord_names))
-        except (ValueError, IndexError, NotImplementedError):
-            # Fallback to xarray's interp if fast path fails
-            # e.g. if coordinates are not monotonic or other edge cases
-            pass
-
-    # Map coordinate names to dimension names for the interpolation
-    coords = {data[name].dims[0]: target_ds[name] for name in coord_names if name in data.coords}
-    coord_attrs = {coord: data[coord].attrs for coord in coord_names if coord in data.coords}
-
-    # Perform the interpolation using dimension names
-    interped = data.interp(
-        coords=coords,
-        method=method,
-    )
-
-    # xarray's interp drops some of the coordinate's attributes (e.g. long_name)
-    for coord in coord_names:
-        interped[coord].attrs = coord_attrs[coord]
+    # Use all dimension coordinates from the target for interpolation.
+    # This correctly handles spatial interpolation and broadcasting.
+    coords = {dim: target_ds[dim] for dim in target_ds.dims if dim in target_ds}
+    interped = data.interp(coords=coords, method=method)
 
     return interped
 

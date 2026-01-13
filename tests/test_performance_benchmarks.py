@@ -155,9 +155,9 @@ class TestPerformanceBenchmarks:
             time_ratio = times[i] / times[i - 1]
 
             # Allow up to 8x time increase for 4x size increase (some overhead is expected)
-            assert time_ratio < 8.0, (
-                f"Time scaling too steep: {time_ratio:.2f}x increase for {size_ratio:.2f}x size increase"
-            )
+            assert (
+                time_ratio < 8.0
+            ), f"Time scaling too steep: {time_ratio:.2f}x increase for {size_ratio:.2f}x size increase"
 
     def test_memory_efficiency(self):
         """Test that memory usage is reasonable for large grids."""

@@ -102,12 +102,8 @@ class Regridder:
             target_grid_type = _get_grid_type(ds_target_grid)
 
         if GridType.CURVILINEAR in (source_grid_type, target_grid_type):
-            return CurvilinearRegridder(
-                source_data=self._obj, target_grid=ds_target_grid, method=method, **kwargs
-            )
-        return RectilinearRegridder(
-            source_data=self._obj, target_grid=ds_target_grid, method=method, **kwargs
-        )
+            return CurvilinearRegridder(source_data=self._obj, target_grid=ds_target_grid, method=method, **kwargs)
+        return RectilinearRegridder(source_data=self._obj, target_grid=ds_target_grid, method=method, **kwargs)
 
     def linear(
         self,

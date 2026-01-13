@@ -47,7 +47,8 @@ def statistic_reduce(
     method: str,
     skipna: bool = False,
     fill_value: None | Any = None,
-) -> xr.DataArray: ...
+) -> xr.DataArray:
+    ...
 
 
 @overload
@@ -58,7 +59,8 @@ def statistic_reduce(
     method: str,
     skipna: bool = False,
     fill_value: None | Any = None,
-) -> xr.Dataset: ...
+) -> xr.Dataset:
+    ...
 
 
 def statistic_reduce(

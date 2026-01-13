@@ -63,9 +63,7 @@ class TestPoleProximityHandling:
         south_target_lat = np.array([[-89.65, -89.55], [-89.65, -89.55]])
         south_target_lon = np.array([[-135.0, 45.0], [-135.0, 45.0]])
 
-        xr.Dataset(
-            {"latitude": (["y", "x"], south_source_lat), "longitude": (["y", "x"], south_source_lon)}
-        )
+        xr.Dataset({"latitude": (["y", "x"], south_source_lat), "longitude": (["y", "x"], south_source_lon)})
 
         south_target_grid = xr.Dataset(
             {
@@ -123,9 +121,7 @@ class TestPoleProximityHandling:
         singular_target_lat = np.array([[90.0]])
         singular_target_lon = np.array([[45.0]])
 
-        xr.Dataset(
-            {"latitude": (["y", "x"], singular_source_lat), "longitude": (["y", "x"], singular_source_lon)}
-        )
+        xr.Dataset({"latitude": (["y", "x"], singular_source_lat), "longitude": (["y", "x"], singular_source_lon)})
 
         singular_target_grid = xr.Dataset(
             {
