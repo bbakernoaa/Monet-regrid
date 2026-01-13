@@ -146,10 +146,10 @@ def conservative_regrid_dataset(
     # Create weights array and coverage mask for each regridding dim
     weights = {}
     covered = {}
-    for coord in coords:
-        covered[coord] = (coords[coord] <= data[coord].max()) & (coords[coord] >= data[coord].min())
+    for coord, coord_array in coords.items():
+        covered[coord] = (coord_array <= data[coord].max()) & (coord_array >= data[coord].min())
 
-        target_coords = coords[coord].to_numpy()
+        target_coords = coord_array.to_numpy()
         source_coords = data[coord].to_numpy()
         nd_weights = get_weights(source_coords, target_coords)
 
@@ -160,21 +160,21 @@ def conservative_regrid_dataset(
         weights[coord] = da_weights
 
     # Apply the weights, using a unique set that matches chunking of each array
-    for array in data_vars.keys():
+    for array, data_array in data_vars.items():
         var_weights = {}
         for coord, weight_array in weights.items():
-            var_input_chunks = data_vars[array].chunksizes.get(coord)
+            var_input_chunks = data_array.chunksizes.get(coord)
             var_output_chunks = output_chunks.get(coord) if output_chunks else None
             var_weights[coord] = format_weights(
                 weight_array,
                 coord,
-                data_vars[array].dtype,
+                data_array.dtype,
                 var_input_chunks,
                 var_output_chunks,
             )
 
         data_vars[array] = apply_weights(
-            da=data_vars[array],
+            da=data_array,
             weights=var_weights,
             skipna=skipna,
             nan_threshold=nan_threshold,
@@ -184,7 +184,7 @@ def conservative_regrid_dataset(
         var_covered = xr.DataArray(True)
         for coord in var_weights.keys():
             var_covered = var_covered & covered[coord]
-        data_vars[array] = data_vars[array].where(var_covered)
+        data_vars[array] = data_array.where(var_covered)
 
     # Rebuild the results ensuring we preserve attributes and other coordinates
     for array, attrs in data_attrs.items():
