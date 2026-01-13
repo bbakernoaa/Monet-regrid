@@ -70,9 +70,7 @@ def test_build_regridder_with_conservative_method():
     target_grid = xr.Dataset({"lat": ("lat", np.linspace(-4, 4, 8)), "lon": ("lon", np.linspace(-4, 4, 8))})
 
     regridder_accessor = xrg.Regridder(source_data)
-    built_regridder = regridder_accessor.build_regridder(
-        target_grid, method="conservative", skipna=True, nan_threshold=0.5
-    )
+    built_regridder = regridder_accessor.build_regridder(target_grid, method="conservative", skipna=True, nan_threshold=0.5)
 
     assert isinstance(built_regridder, xrg.RectilinearRegridder)
     assert built_regridder.method == "conservative"

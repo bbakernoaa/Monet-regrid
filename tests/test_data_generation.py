@@ -105,9 +105,7 @@ class TestDataGenerator:
         if data_type == "temperature":
             # Temperature field with realistic gradient
             base_temp = 280.0 + 20.0 * np.sin(np.pi * source_lat / 180)  # Latitudinal gradient
-            temp_gradient = (
-                10.0 * (source_lon - source_lon.min()) / (source_lon.max() - source_lon.min())
-            )  # Longitudinal gradient
+            temp_gradient = 10.0 * (source_lon - source_lon.min()) / (source_lon.max() - source_lon.min())  # Longitudinal gradient
             data_values = base_temp + temp_gradient
 
             # Add realistic spatial correlation
@@ -148,9 +146,7 @@ class TestDataGenerator:
 
             if noise_level > 0:
                 u_noise = TestDataGenerator._generate_spatial_noise(ny, nx, noise_level * 2.0, seed)
-                v_noise = TestDataGenerator._generate_spatial_noise(
-                    ny, nx, noise_level * 2.0, seed + 1 if seed else None
-                )
+                v_noise = TestDataGenerator._generate_spatial_noise(ny, nx, noise_level * 2.0, seed + 1 if seed else None)
                 u_component += u_noise
                 v_component += v_noise
 
@@ -192,9 +188,7 @@ class TestDataGenerator:
         return smoothed_noise
 
     @staticmethod
-    def create_polar_grid(
-        ny: int, nx: int, pole: str = "north", distance_from_pole: float = 10.0
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def create_polar_grid(ny: int, nx: int, pole: str = "north", distance_from_pole: float = 10.0) -> tuple[np.ndarray, np.ndarray]:
         """Create a grid near the poles.
 
         Args:
@@ -532,9 +526,7 @@ class TestDataCharacteristics:
         base_data = TestDataGenerator.create_test_dataset(lat, lon, data_type="temperature", noise_level=0.0)
 
         for noise_level in [0.0, 0.1, 0.5]:
-            noisy_data = TestDataGenerator.create_test_dataset(
-                lat, lon, data_type="temperature", noise_level=noise_level, seed=42
-            )
+            noisy_data = TestDataGenerator.create_test_dataset(lat, lon, data_type="temperature", noise_level=noise_level, seed=42)
 
             assert noisy_data.shape == (5, 6)
 
@@ -548,9 +540,7 @@ class TestDataCharacteristics:
         base_data = TestDataGenerator.create_test_dataset(base_lat, base_lon, data_type="temperature")
 
         # Test with different dimensions
-        test_data = TestDataGenerator.create_multidimensional_data(
-            base_data, time_steps=3, levels=2, add_temporal_correlation=True
-        )
+        test_data = TestDataGenerator.create_multidimensional_data(base_data, time_steps=3, levels=2, add_temporal_correlation=True)
 
         assert test_data.shape == (2, 3, 4, 5)  # (level, time, y, x)
         assert "level" in test_data.dims
@@ -563,9 +553,7 @@ class TestDataCharacteristics:
         base_data = TestDataGenerator.create_test_dataset(lat, lon, data_type="temperature")
 
         for nan_pattern in ["random", "clustered", "striped", "edge"]:
-            nan_data = TestDataGenerator.create_dataset_with_nans(
-                base_data, nan_percentage=20.0, nan_pattern=nan_pattern, seed=42
-            )
+            nan_data = TestDataGenerator.create_dataset_with_nans(base_data, nan_percentage=20.0, nan_pattern=nan_pattern, seed=42)
 
             assert nan_data.shape == (6, 8)
 

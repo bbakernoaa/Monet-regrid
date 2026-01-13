@@ -55,27 +55,10 @@ class Regridder:
     def __init__(self, xarray_obj: xr.DataArray | xr.Dataset):
         self._obj = xarray_obj
 
-    def _get_source_grid_type(self) -> GridType:
-        """Detect the grid type of the source object."""
-        try:
-            if isinstance(self._obj, xr.Dataset):
-                ds = self._obj
-            else:  # DataArray
-                coord_vars = {name: self._obj.coords[name] for name in self._obj.coords}
-                ds = xr.Dataset(coord_vars)
-            return _get_grid_type(ds)
-        except (KeyError, AttributeError, ValueError):
-            return GridType.RECTILINEAR
-
-    def _prepare_regridder(
-        self, ds_target_grid: xr.Dataset, method: str, time_dim: str | None, **kwargs: Any
-    ) -> BaseRegridder:
+    def _prepare_regridder(self, ds_target_grid: xr.Dataset, method: str, time_dim: str | None, **kwargs: Any) -> BaseRegridder:
         """Prepare and build the appropriate regridder."""
-        source_grid_type = self._get_source_grid_type()
-        try:
-            target_grid_type = _get_grid_type(ds_target_grid)
-        except (KeyError, AttributeError, ValueError):
-            target_grid_type = GridType.RECTILINEAR
+        source_grid_type = _get_grid_type(self._obj)
+        target_grid_type = _get_grid_type(ds_target_grid)
 
         if GridType.CURVILINEAR not in (source_grid_type, target_grid_type):
             validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
@@ -100,7 +83,6 @@ class Regridder:
         **kwargs: Any,
     ) -> BaseRegridder:
         """Factory method to build the appropriate regridder based on grid type.
-
         Args:
             ds_target_grid: Dataset containing the target coordinates.
             method: The regridding method to use.
@@ -109,17 +91,13 @@ class Regridder:
             target_grid_type: The grid type of the target data. If not provided, it
                 will be detected automatically.
             **kwargs: Additional keyword arguments to pass to the regridder.
-
         Returns:
             An instance of the appropriate regridder class based on grid type.
         """
         if source_grid_type is None:
-            source_grid_type = self._get_source_grid_type()
+            source_grid_type = _get_grid_type(self._obj)
         if target_grid_type is None:
-            try:
-                target_grid_type = _get_grid_type(ds_target_grid)
-            except (KeyError, AttributeError, ValueError):
-                target_grid_type = GridType.RECTILINEAR
+            target_grid_type = _get_grid_type(ds_target_grid)
 
         if GridType.CURVILINEAR in (source_grid_type, target_grid_type):
             return CurvilinearRegridder(source_data=self._obj, target_grid=ds_target_grid, method=method, **kwargs)

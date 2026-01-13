@@ -24,9 +24,7 @@ class TestKDTreeStructure:
         self.target_lon = np.linspace(-10, 10, 6)
         self.target_lat_2d, self.target_lon_2d = np.meshgrid(self.target_lat, self.target_lon)
 
-        self.source_grid = xr.Dataset(
-            {"latitude": (["y", "x"], self.source_lat_2d), "longitude": (["y", "x"], self.source_lon_2d)}
-        )
+        self.source_grid = xr.Dataset({"latitude": (["y", "x"], self.source_lat_2d), "longitude": (["y", "x"], self.source_lon_2d)})
 
         self.target_grid = xr.Dataset(
             {
@@ -75,9 +73,7 @@ class TestConvexHullStructure:
         self.target_lat = np.array([[0.5, 1.5], [0.5, 1.5]])
         self.target_lon = np.array([[-0.5, -0.5], [0.5, 0.5]])
 
-        self.source_grid = xr.Dataset(
-            {"latitude": (["y", "x"], self.source_lat), "longitude": (["y", "x"], self.source_lon)}
-        )
+        self.source_grid = xr.Dataset({"latitude": (["y", "x"], self.source_lat), "longitude": (["y", "x"], self.source_lon)})
 
         self.target_grid = xr.Dataset(
             {

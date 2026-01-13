@@ -196,20 +196,14 @@ class CurvilinearInterpolator:
     @property
     def distance_threshold(self) -> float:
         """Access distance threshold from the interpolation engine."""
-        if (
-            hasattr(self.interpolation_engine, "distance_threshold")
-            and self.interpolation_engine.distance_threshold is not None
-        ):
+        if hasattr(self.interpolation_engine, "distance_threshold") and self.interpolation_engine.distance_threshold is not None:
             return self.interpolation_engine.distance_threshold
         return float("inf")
 
     @property
     def source_indices(self) -> np.ndarray:
         """Access source indices from the interpolation engine."""
-        if (
-            hasattr(self.interpolation_engine, "source_indices")
-            and self.interpolation_engine.source_indices is not None
-        ):
+        if hasattr(self.interpolation_engine, "source_indices") and self.interpolation_engine.source_indices is not None:
             return self.interpolation_engine.source_indices
         msg = f"'{self.__class__.__name__}' object has no attribute 'source_indices'"
         raise AttributeError(msg)
@@ -235,10 +229,7 @@ class CurvilinearInterpolator:
     @property
     def precomputed_weights(self) -> dict:
         """Access precomputed weights from the interpolation engine."""
-        if (
-            hasattr(self.interpolation_engine, "precomputed_weights")
-            and self.interpolation_engine.precomputed_weights is not None
-        ):
+        if hasattr(self.interpolation_engine, "precomputed_weights") and self.interpolation_engine.precomputed_weights is not None:
             return self.interpolation_engine.precomputed_weights
         msg = f"'{self.__class__.__name__}' object has no attribute 'precomputed_weights'"
         raise AttributeError(msg)
@@ -299,9 +290,7 @@ class CurvilinearInterpolator:
         )
 
         # Check for finite values before creating 3D points array
-        if not (
-            np.isfinite(self.source_x).all() and np.isfinite(self.source_y).all() and np.isfinite(self.source_z).all()
-        ):
+        if not (np.isfinite(self.source_x).all() and np.isfinite(self.source_y).all() and np.isfinite(self.source_z).all()):
             # Identify problematic coordinates
             non_finite_mask = ~(np.isfinite(self.source_x) & np.isfinite(self.source_y) & np.isfinite(self.source_z))
             if np.any(non_finite_mask):
@@ -345,9 +334,7 @@ class CurvilinearInterpolator:
         )
 
         # Check for finite values before creating 3D points array
-        if not (
-            np.isfinite(self.target_x).all() and np.isfinite(self.target_y).all() and np.isfinite(self.target_z).all()
-        ):
+        if not (np.isfinite(self.target_x).all() and np.isfinite(self.target_y).all() and np.isfinite(self.target_z).all()):
             # Identify problematic coordinates
             non_finite_mask = ~(np.isfinite(self.target_x) & np.isfinite(self.target_y) & np.isfinite(self.target_z))
             if np.any(non_finite_mask):
@@ -418,9 +405,7 @@ class CurvilinearInterpolator:
             )
         else:
             # Standard interpolation
-            self.interpolation_engine.build_structures(
-                self.source_points_3d, self.target_points_3d, self.radius_of_influence
-            )
+            self.interpolation_engine.build_structures(self.source_points_3d, self.target_points_3d, self.radius_of_influence)
 
     def _precompute_interpolation_weights(self) -> None:
         """Precompute interpolation weights for build-once/apply-many pattern."""

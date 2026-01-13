@@ -70,14 +70,10 @@ class TestPerformanceBenchmarks:
             target_y_idx, target_x_idx = np.ogrid[0:target_ny, 0:target_nx]
             target_perturbation = 3.0
             target_lat_perturb = (
-                target_perturbation
-                * np.sin(2 * np.pi * target_y_idx / target_ny)
-                * np.cos(2 * np.pi * target_x_idx / target_nx)
+                target_perturbation * np.sin(2 * np.pi * target_y_idx / target_ny) * np.cos(2 * np.pi * target_x_idx / target_nx)
             )
             target_lon_perturb = (
-                target_perturbation
-                * np.cos(2 * np.pi * target_y_idx / target_ny)
-                * np.sin(2 * np.pi * target_x_idx / target_nx)
+                target_perturbation * np.cos(2 * np.pi * target_y_idx / target_ny) * np.sin(2 * np.pi * target_x_idx / target_nx)
             )
             target_lat_2d += target_lat_perturb
             target_lon_2d += target_lon_perturb
@@ -155,9 +151,7 @@ class TestPerformanceBenchmarks:
             time_ratio = times[i] / times[i - 1]
 
             # Allow up to 8x time increase for 4x size increase (some overhead is expected)
-            assert time_ratio < 8.0, (
-                f"Time scaling too steep: {time_ratio:.2f}x increase for {size_ratio:.2f}x size increase"
-            )
+            assert time_ratio < 8.0, f"Time scaling too steep: {time_ratio:.2f}x increase for {size_ratio:.2f}x size increase"
 
     def test_memory_efficiency(self):
         """Test that memory usage is reasonable for large grids."""

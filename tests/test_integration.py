@@ -18,9 +18,7 @@ def test_rectilinear_to_rectilinear_regridding():
     # Create source data on a rectilinear grid
     source_lat = np.linspace(-10, 10, 20)
     source_lon = np.linspace(-20, 20, 30)
-    source_data = xr.DataArray(
-        np.random.random((20, 30)), dims=["lat", "lon"], coords={"lat": source_lat, "lon": source_lon}
-    )
+    source_data = xr.DataArray(np.random.random((20, 30)), dims=["lat", "lon"], coords={"lat": source_lat, "lon": source_lon})
 
     # Create target grid
     target_lat = np.linspace(-8, 8, 15)
@@ -63,9 +61,7 @@ def test_curvilinear_to_curvilinear_regridding():
     )
 
     # Check grid types
-    source_type = _get_grid_type(
-        xr.Dataset({"latitude": source_data["latitude"], "longitude": source_data["longitude"]})
-    )
+    source_type = _get_grid_type(xr.Dataset({"latitude": source_data["latitude"], "longitude": source_data["longitude"]}))
     target_type = _get_grid_type(target_grid)
 
     assert source_type == GridType.CURVILINEAR
@@ -85,9 +81,7 @@ def test_rectilinear_to_curvilinear_regridding():
     # Create rectilinear source data
     source_lat = np.linspace(-10, 10, 20)
     source_lon = np.linspace(-20, 20, 30)
-    source_data = xr.DataArray(
-        np.random.random((20, 30)), dims=["lat", "lon"], coords={"lat": source_lat, "lon": source_lon}
-    )
+    source_data = xr.DataArray(np.random.random((20, 30)), dims=["lat", "lon"], coords={"lat": source_lat, "lon": source_lon})
 
     # Create curvilinear target grid
     target_x, target_y = np.meshgrid(np.linspace(0, 19, 15), np.linspace(0, 29, 20))
@@ -130,9 +124,7 @@ def test_curvilinear_to_rectilinear_regridding():
     target_grid = xr.Dataset({"lat": (["lat"], target_lat), "lon": (["lon"], target_lon)})
 
     # Check source grid type
-    source_type = _get_grid_type(
-        xr.Dataset({"latitude": source_data["latitude"], "longitude": source_data["longitude"]})
-    )
+    source_type = _get_grid_type(xr.Dataset({"latitude": source_data["latitude"], "longitude": source_data["longitude"]}))
     assert source_type == GridType.CURVILINEAR
 
     # Use the regrid accessor (this should use CurvilinearRegridder)
@@ -151,9 +143,7 @@ def test_backward_compatibility():
     # Create source data on a rectilinear grid
     source_lat = np.linspace(-10, 10, 20)
     source_lon = np.linspace(-20, 20, 30)
-    source_data = xr.DataArray(
-        np.random.random((20, 30)), dims=["lat", "lon"], coords={"lat": source_lat, "lon": source_lon}
-    )
+    source_data = xr.DataArray(np.random.random((20, 30)), dims=["lat", "lon"], coords={"lat": source_lat, "lon": source_lon})
 
     # Create target grid
     target_lat = np.linspace(-8, 8, 15)
@@ -244,9 +234,7 @@ def test_grid_detection_accuracy():
         {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
     )
 
-    curv_source_type = _get_grid_type(
-        xr.Dataset({"latitude": curv_data["latitude"], "longitude": curv_data["longitude"]})
-    )
+    curv_source_type = _get_grid_type(xr.Dataset({"latitude": curv_data["latitude"], "longitude": curv_data["longitude"]}))
     curv_target_type = _get_grid_type(curv_grid)
 
     assert curv_source_type == GridType.CURVILINEAR

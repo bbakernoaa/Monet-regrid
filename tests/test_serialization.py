@@ -146,9 +146,7 @@ def test_rectilinear_regridder_serialization(rectilinear_source_grid, rectilinea
     assert_allclose(result, expected)
 
 
-def test_curvilinear_regridder_serialization_backward_compatibility(
-    curvilinear_source_grid, curvilinear_target_grid, tmp_path
-):
+def test_curvilinear_regridder_serialization_backward_compatibility(curvilinear_source_grid, curvilinear_target_grid, tmp_path):
     """Test loading a CurvilinearRegridder from the old format."""
     # Create a regridder and regrid the data
     regridder = CurvilinearRegridder(source_data=curvilinear_source_grid, target_grid=curvilinear_target_grid)
@@ -177,9 +175,7 @@ def test_curvilinear_regridder_serialization_backward_compatibility(
     assert_allclose(result, expected)
 
 
-def test_rectilinear_regridder_serialization_backward_compatibility(
-    rectilinear_source_grid, rectilinear_target_grid, tmp_path
-):
+def test_rectilinear_regridder_serialization_backward_compatibility(rectilinear_source_grid, rectilinear_target_grid, tmp_path):
     """Test loading a RectilinearRegridder from the old format."""
     # Create a regridder and regrid the data
     regridder = RectilinearRegridder(source_data=rectilinear_source_grid, target_grid=rectilinear_target_grid)
