@@ -190,7 +190,7 @@ class BaseRegridder(abc.ABC):
 
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs."""
-        if self.source_data is not None and not isinstance(self.source_data, (xr.DataArray, xr.Dataset)):
+        if self.source_data is not None and not isinstance(self.source_data, xr.DataArray | xr.Dataset):
             msg = "source_data must be an xarray DataArray or Dataset"
             raise TypeError(msg)
 
