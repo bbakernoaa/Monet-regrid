@@ -6,7 +6,7 @@ import pytest
 import xarray as xr
 from numpy.testing import assert_array_equal
 
-import monet_regrid  # noqa: F401
+import monet_regrid
 from monet_regrid.core import CurvilinearRegridder
 
 try:
