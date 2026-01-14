@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import dask.array as da
 import numpy as np
 import pytest
 import xarray as xr
@@ -21,7 +22,10 @@ def test_curvilinear_interpolator_nearest_interpolation():
     xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
 
     target_grid = xr.Dataset(
-        {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
+        {
+            "latitude": (["y_target", "x_target"], target_lat),
+            "longitude": (["y_target", "x_target"], target_lon),
+        }
     )
 
     # Create test data
@@ -322,3 +326,52 @@ def test_curvilinear_attribute_errors():
 
     with pytest.raises(AttributeError):
         assert regridder.convex_hull
+
+
+def test_curvilinear_interpolator_dask_lazy_evaluation():
+    """Test Dask-aware lazy evaluation in CurvilinearInterpolator.
+
+    This test verifies that when `CurvilinearInterpolator` is initialized
+    with Dask-backed xarray objects, the coordinate transformations are
+    performed lazily. It asserts that the internal coordinate arrays remain
+    as Dask arrays until computation is explicitly triggered. It also checks
+    that the final regridded output is a Dask array.
+    """
+    # 1. Create Dask-backed source grid
+    source_x_da, source_y_da = da.meshgrid(da.arange(5, chunks=2), da.arange(6, chunks=2))
+    source_lat_da = 30 + 0.5 * source_x_da + 0.1 * source_y_da
+    source_lon_da = -100 + 0.3 * source_x_da + 0.2 * source_y_da
+
+    # 2. Create Dask-backed target grid
+    target_x_da, target_y_da = da.meshgrid(da.linspace(0, 4, 3, chunks=2), da.linspace(0, 5, 4, chunks=2))
+    target_lat_da = 30 + 0.5 * target_x_da + 0.1 * target_y_da
+    target_lon_da = -100 + 0.3 * target_x_da + 0.2 * target_y_da
+
+    target_grid = xr.Dataset({"lat": (["y_target", "x_target"], target_lat_da), "lon": (["y_target", "x_target"], target_lon_da)})
+
+    # 3. Create Dask-backed test data
+    data_values_da = da.random.random((6, 5), chunks=(3, 3))
+    test_data = xr.DataArray(
+        data_values_da,
+        dims=["y", "x"],
+        coords={"lat": (["y", "x"], source_lat_da), "lon": (["y", "x"], source_lon_da)},
+    )
+
+    # 4. Build the regridder
+    regridder = CurvilinearRegridder(test_data, target_grid, method="nearest")
+
+    # The interpolator is created on the first call
+    result = regridder()
+
+    # 5. Assert that internal transformed coordinates are Dask arrays
+    # The interpolator is stored in a private cache
+    interpolator = next(iter(regridder._interpolator_cache.values()))
+    assert isinstance(interpolator.source_points_3d, da.Array)
+    assert isinstance(interpolator.target_points_3d, da.Array)
+
+    # 6. Assert that the final result is a Dask array
+    assert isinstance(result.data, da.Array)
+
+    # 7. Verify the computed shape to ensure the Dask graph is valid
+    computed_result = result.compute()
+    assert computed_result.shape == target_lat_da.shape
