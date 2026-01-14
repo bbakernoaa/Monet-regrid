@@ -241,6 +241,56 @@ def test_grid_detection_accuracy():
     assert curv_target_type == GridType.CURVILINEAR
 
 
+def test_regridding_accuracy_with_synthetic_data():
+    """Test the numerical accuracy of regridding with a synthetic dataset."""
+    # 1. Define a known, spatially-varying analytical function.
+    # A linear function should be perfectly interpolated by a linear regridder.
+    def analytical_func(lat, lon):
+        """A simple, smooth, linear function of latitude and longitude."""
+        return 0.1 * lat + 0.05 * lon
+
+    # 2. Create the source data on a coarse rectilinear grid.
+    # We use a longitude range that does not wrap around to avoid boundary issues
+    # with the current linear interpolation implementation.
+    source_lat = np.linspace(-90, 90, 10)
+    source_lon = np.linspace(-170, 170, 20)
+    source_lon_mesh, source_lat_mesh = np.meshgrid(source_lon, source_lat)
+    source_values = analytical_func(source_lat_mesh, source_lon_mesh)
+    source_data = xr.DataArray(
+        source_values,
+        dims=["lat", "lon"],
+        coords={"lat": source_lat, "lon": source_lon},
+        name="synthetic_data",
+    )
+    source_data.attrs["history"] = "Created synthetic source data."
+
+    # 3. Create the target grid (higher resolution)
+    target_lat = np.linspace(-90, 90, 20)
+    target_lon = np.linspace(-170, 170, 40)
+    target_grid = xr.Dataset(coords={"lat": target_lat, "lon": target_lon})
+
+    # 4. Perform the regridding
+    regridded_data = source_data.regrid.linear(target_grid)
+    regridded_data.attrs["history"] = (
+        f"{source_data.attrs['history']} Regridded to a higher resolution grid."
+    )
+
+    # 5. Calculate the "true" values on the target grid using the analytical function
+    target_lon_mesh, target_lat_mesh = np.meshgrid(target_lon, target_lat)
+    true_values = analytical_func(target_lat_mesh, target_lon_mesh)
+    expected_data = xr.DataArray(
+        true_values,
+        dims=["lat", "lon"],
+        coords={"lat": target_lat, "lon": target_lon},
+        name="synthetic_data",
+    )
+
+    # 6. Assert that the regridded data is close to the true analytical solution.
+    # Because the underlying function is linear, the interpolation should be exact.
+    # A small tolerance is used to account for floating-point representation errors.
+    xr.testing.assert_allclose(regridded_data, expected_data, rtol=1e-6, atol=1e-6)
+
+
 if __name__ == "__main__":
     test_rectilinear_to_rectilinear_regridding()
     test_curvilinear_to_curvilinear_regridding()
@@ -249,4 +299,5 @@ if __name__ == "__main__":
     test_backward_compatibility()
     test_different_methods_curvilinear()
     test_grid_detection_accuracy()
+    test_regridding_accuracy_with_synthetic_data()
     logging.info("All integration tests passed!")
