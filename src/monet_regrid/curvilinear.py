@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import dask.array as da
 import numpy as np
 import xarray as xr
 from scipy.spatial import Delaunay, cKDTree  # type: ignore
@@ -63,12 +64,77 @@ def _apply_interpolation_wrapper(data_slice, engine, target_shape):
     return interpolated.reshape(final_shape)
 
 
+def _check_and_raise_on_non_finite(
+    x: np.ndarray | da.Array,
+    y: np.ndarray | da.Array,
+    z: np.ndarray | da.Array,
+    lats: np.ndarray | da.Array,
+    lons: np.ndarray | da.Array,
+) -> None:
+    """Check for non-finite values and raise a detailed ValueError.
+
+    This function inspects the transformed 3D coordinates (x, y, z) for any
+    non-finite values (NaN, inf). It handles both NumPy and Dask arrays by
+    branching its logic. If non-finite values are found, it raises a
+    `ValueError` with the coordinates of the first few problematic points.
+
+    Parameters
+    ----------
+    x : np.ndarray | da.Array
+        The x-component of the transformed coordinates.
+    y : np.ndarray | da.Array
+        The y-component of the transformed coordinates.
+    z : np.ndarray | da.Array
+        The z-component of the transformed coordinates.
+    lats : np.ndarray | da.Array
+        The original latitude values, used for error reporting.
+    lons : np.ndarray | da.Array
+        The original longitude values, used for error reporting.
+
+    Raises
+    ------
+    ValueError
+        If any of the input coordinates (x, y, z) contain non-finite values.
+    """
+    is_dask = isinstance(x, da.Array)
+
+    if is_dask:
+        # For Dask, compute the check in a single pass
+        all_finite = (da.isfinite(x).all() & da.isfinite(y).all() & da.isfinite(z).all()).compute()
+    else:
+        # For NumPy, check eagerly
+        all_finite = np.isfinite(x).all() and np.isfinite(y).all() and np.isfinite(z).all()
+
+    if not all_finite:
+        if is_dask:
+            non_finite_mask = ~(da.isfinite(x) & da.isfinite(y) & da.isfinite(z)).compute()
+            problematic_lats = lats.compute()[non_finite_mask]
+            problematic_lons = lons.compute()[non_finite_mask]
+        else:
+            non_finite_mask = ~(np.isfinite(x) & np.isfinite(y) & np.isfinite(z))
+            problematic_lats = lats[non_finite_mask]
+            problematic_lons = lons[non_finite_mask]
+
+        msg = (
+            f"Non-finite coordinates found during transformation: "
+            f"lat={problematic_lats[:5]}, lon={problematic_lons[:5]} "
+            f"(showing first 5 of {np.sum(non_finite_mask)} non-finite points)"
+        )
+        raise ValueError(msg)
+
+
 class CurvilinearInterpolator:
     """Optimized interpolator for curvilinear grids using 3D coordinate transformations.
 
     This class handles interpolation between curvilinear grids by transforming
     geographic coordinates to 3D geocentric coordinates (EPSG 4979 → 4978) and
     performing surface-aware interpolation in 3D space.
+
+    It is designed to be Dask-aware, allowing for lazy evaluation of coordinate
+    transformations on large, out-of-core datasets. The interpolation itself
+    is performed using SciPy, which requires in-memory NumPy arrays, so a
+    `.compute()` call is triggered internally only when building the interpolation
+    structures.
     """
 
     def __init__(
@@ -262,49 +328,39 @@ class CurvilinearInterpolator:
 
     def _transform_coordinates(self) -> None:
         """Transform geographic coordinates to 3D geocentric coordinates."""
+        # Use dask.array for lazy evaluation of coordinate transformations
         # Extract source coordinates
         source_lat = self.source_grid[self.source_lat_name]
         source_lon = self.source_grid[self.source_lon_name]
 
         # Handle both 1D and 2D coordinates
         if source_lat.ndim == 1 and source_lon.ndim == 1:
-            # 1D coordinates (rectilinear grid) - need to create 2D meshgrid
-            source_lon_2d, source_lat_2d = np.meshgrid(source_lon.data, source_lat.data)
+            # 1D coordinates (rectilinear grid) - use Dask-aware meshgrid
+            source_lon_2d, source_lat_2d = da.meshgrid(source_lon.data, source_lat.data)
             self.source_shape = source_lat_2d.shape
             source_lat_flat = source_lat_2d.flatten()
             source_lon_flat = source_lon_2d.flatten()
         else:
             # 2D coordinates (curvilinear grid) - use as is
             self.source_shape = source_lat.shape
-            source_lat_flat = source_lat.data.flatten()
-            source_lon_flat = source_lon.data.flatten()
+            source_lat_flat = da.asarray(source_lat.data).flatten()
+            source_lon_flat = da.asarray(source_lon.data).flatten()
 
         # Clamp coordinates to valid ranges to handle edge cases gracefully
-        source_lat_flat = np.clip(source_lat_flat, -90.0, 90.0)  # type: ignore[assignment]
-        source_lon_flat = np.clip(source_lon_flat, -180.0, 180.0)  # type: ignore[assignment]
+        source_lat_flat = da.clip(source_lat_flat, -90.0, 90.0)
+        source_lon_flat = da.clip(source_lon_flat, -180.0, 180.0)
 
         # Transform to 3D coordinates (assuming height=0 for surface points)
-        source_heights = np.zeros_like(source_lat_flat)
+        source_heights = da.zeros_like(source_lat_flat)
         self.source_x, self.source_y, self.source_z = self.coordinate_transformer.transform_coordinates(
             source_lon_flat, source_lat_flat, source_heights
         )
 
         # Check for finite values before creating 3D points array
-        if not (np.isfinite(self.source_x).all() and np.isfinite(self.source_y).all() and np.isfinite(self.source_z).all()):
-            # Identify problematic coordinates
-            non_finite_mask = ~(np.isfinite(self.source_x) & np.isfinite(self.source_y) & np.isfinite(self.source_z))
-            if np.any(non_finite_mask):
-                problematic_lats = source_lat_flat[non_finite_mask]
-                problematic_lons = source_lon_flat[non_finite_mask]
-                msg = (
-                    f"Non-finite coordinates found during transformation: "
-                    f"lat={problematic_lats[:5]}, lon={problematic_lons[:5]} "
-                    f"(showing first 5 of {np.sum(non_finite_mask)} non-finite points)"
-                )
-                raise ValueError(msg)
+        _check_and_raise_on_non_finite(self.source_x, self.source_y, self.source_z, source_lat_flat, source_lon_flat)
 
         # Store as 3D points array
-        self.source_points_3d = np.column_stack([self.source_x, self.source_y, self.source_z])
+        self.source_points_3d = da.stack([self.source_x, self.source_y, self.source_z], axis=1)
 
         # Extract target coordinates
         target_lat = self.target_grid[self.target_lat_name]
@@ -312,43 +368,32 @@ class CurvilinearInterpolator:
 
         # Handle both 1D and 2D coordinates
         if target_lat.ndim == 1 and target_lon.ndim == 1:
-            # 1D coordinates (rectilinear grid) - need to create 2D meshgrid
-            target_lon_2d, target_lat_2d = np.meshgrid(target_lon.data, target_lat.data)
+            # 1D coordinates (rectilinear grid) - use Dask-aware meshgrid
+            target_lon_2d, target_lat_2d = da.meshgrid(target_lon.data, target_lat.data)
             self.target_shape = target_lat_2d.shape
             target_lat_flat = target_lat_2d.flatten()
             target_lon_flat = target_lon_2d.flatten()
         else:
             # 2D coordinates (curvilinear grid) - use as is
             self.target_shape = target_lat.shape
-            target_lat_flat = target_lat.data.flatten()
-            target_lon_flat = target_lon.data.flatten()
+            target_lat_flat = da.asarray(target_lat.data).flatten()
+            target_lon_flat = da.asarray(target_lon.data).flatten()
 
         # Clamp coordinates to valid ranges to handle edge cases gracefully
-        target_lat_flat = np.clip(target_lat_flat, -90.0, 90.0)  # type: ignore[assignment]
-        target_lon_flat = np.clip(target_lon_flat, -180.0, 180.0)  # type: ignore[assignment]
+        target_lat_flat = da.clip(target_lat_flat, -90.0, 90.0)
+        target_lon_flat = da.clip(target_lon_flat, -180.0, 180.0)
 
         # Transform to 3D coordinates (assuming height=0 for surface points)
-        target_heights = np.zeros_like(target_lat_flat)
+        target_heights = da.zeros_like(target_lat_flat)
         self.target_x, self.target_y, self.target_z = self.coordinate_transformer.transform_coordinates(
             target_lon_flat, target_lat_flat, target_heights
         )
 
         # Check for finite values before creating 3D points array
-        if not (np.isfinite(self.target_x).all() and np.isfinite(self.target_y).all() and np.isfinite(self.target_z).all()):
-            # Identify problematic coordinates
-            non_finite_mask = ~(np.isfinite(self.target_x) & np.isfinite(self.target_y) & np.isfinite(self.target_z))
-            if np.any(non_finite_mask):
-                problematic_lats = target_lat_flat[non_finite_mask]
-                problematic_lons = target_lon_flat[non_finite_mask]
-                msg = (
-                    f"Non-finite coordinates found during transformation: "
-                    f"lat={problematic_lats[:5]}, lon={problematic_lons[:5]} "
-                    f"(showing first 5 of {np.sum(non_finite_mask)} non-finite points)"
-                )
-                raise ValueError(msg)
+        _check_and_raise_on_non_finite(self.target_x, self.target_y, self.target_z, target_lat_flat, target_lon_flat)
 
         # Store as 3D points array
-        self.target_points_3d = np.column_stack([self.target_x, self.target_y, self.target_z])
+        self.target_points_3d = da.stack([self.target_x, self.target_y, self.target_z], axis=1)
 
     def _build_interpolation_structures(self) -> None:
         """Build interpolation structures based on method."""
@@ -356,6 +401,12 @@ class CurvilinearInterpolator:
         self.interpolation_engine = InterpolationEngine(
             method=self.method, spherical=self.spherical, fill_method=self.fill_method, extrapolate=self.extrapolate
         )
+
+        # SciPy-based interpolation engines require numpy arrays, so we compute them
+        # only when needed. This preserves lazy evaluation for coordinate transformations
+        # while ensuring compatibility with the underlying interpolation libraries.
+        source_points_3d_np = self.source_points_3d.compute()
+        target_points_3d_np = self.target_points_3d.compute()
 
         if self.method == "conservative":
             # Extract boundaries (code omitted for brevity, same as previous)
@@ -389,8 +440,8 @@ class CurvilinearInterpolator:
             target_vertices = get_bounds(self.target_grid, self.target_lat_name, self.target_lon_name)
 
             self.interpolation_engine.build_conservative_structures(
-                self.source_points_3d,
-                self.target_points_3d,
+                source_points_3d_np,
+                target_points_3d_np,
                 source_vertices,
                 target_vertices,
                 radius_of_influence=self.radius_of_influence,
@@ -398,14 +449,14 @@ class CurvilinearInterpolator:
         elif self.method in ["bilinear", "cubic"]:
             # Structured interpolation requires source shape
             self.interpolation_engine.build_structures(
-                self.source_points_3d,
-                self.target_points_3d,
+                source_points_3d_np,
+                target_points_3d_np,
                 self.radius_of_influence,
                 source_shape=self.source_shape,  # type: ignore[arg-type]
             )
         else:
             # Standard interpolation
-            self.interpolation_engine.build_structures(self.source_points_3d, self.target_points_3d, self.radius_of_influence)
+            self.interpolation_engine.build_structures(source_points_3d_np, target_points_3d_np, self.radius_of_influence)
 
     def _precompute_interpolation_weights(self) -> None:
         """Precompute interpolation weights for build-once/apply-many pattern."""
