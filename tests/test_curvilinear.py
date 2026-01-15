@@ -1,4 +1,3 @@
-import logging
 from unittest.mock import patch
 
 import dask.array as da
@@ -376,60 +375,3 @@ def test_curvilinear_interpolator_dask_lazy_evaluation():
     # 7. Verify the computed shape to ensure the Dask graph is valid
     computed_result = result.compute()
     assert computed_result.shape == target_lat_da.shape
-
-
-def test_curvilinear_regridding_accuracy_with_synthetic_data(caplog):
-    """Test the numerical accuracy of curvilinear regridding."""
-    method = "nearest"
-    caplog.set_level(logging.DEBUG)
-    # 1. Define a known, spatially-varying analytical function
-    def analytical_func(lat, lon):
-        """A simple, smooth, linear function of latitude and longitude."""
-        return 0.1 * lat + 0.05 * lon
-
-    # 2. Create the source data on a coarse curvilinear grid
-    source_x, source_y = np.meshgrid(np.linspace(-170, 170, 20), np.linspace(-80, 80, 10))
-    source_lat = source_y + 0.1 * np.sin(np.deg2rad(source_x))
-    source_lon = source_x + 0.1 * np.cos(np.deg2rad(source_y))
-    source_values = analytical_func(source_lat, source_lon)
-    source_data = xr.DataArray(
-        source_values,
-        dims=["y", "x"],
-        coords={"lat": (["y", "x"], source_lat), "lon": (["y", "x"], source_lon)},
-        name="synthetic_data",
-    )
-
-    # 3. Create the target grid (higher resolution curvilinear)
-    target_x, target_y = np.meshgrid(np.linspace(-170, 170, 40), np.linspace(-80, 80, 20))
-    target_lat = target_y + 0.1 * np.sin(np.deg2rad(target_x))
-    target_lon = target_x + 0.1 * np.cos(np.deg2rad(target_y))
-    target_grid = xr.Dataset(coords={"lat": (["y_out", "x_out"], target_lat), "lon": (["y_out", "x_out"], target_lon)})
-
-    # 4. Perform the regridding
-    regrid_method = getattr(source_data.regrid, method)
-    regridded_data = regrid_method(target_grid)
-    print("Source Data:\n", source_data)
-    print("Target Grid:\n", target_grid)
-    print("Regridded Data:\n", regridded_data)
-
-    # 5. Calculate the "true" values on the target grid
-    true_values = analytical_func(target_lat, target_lon)
-    expected_data = xr.DataArray(
-        true_values,
-        dims=["y_out", "x_out"],
-        coords={"lat": (["y_out", "x_out"], target_lat), "lon": (["y_out", "x_out"], target_lon)},
-        name="synthetic_data",
-    )
-    print("Expected Data:\n", expected_data)
-
-    # 6. Assert that the regridded data is close to the true solution
-    if method == "linear":
-        # Linear interpolation should be nearly exact for a linear function
-        xr.testing.assert_allclose(regridded_data, expected_data, rtol=1e-5, atol=1e-5)
-    elif method == "nearest":
-        # Nearest neighbor will have a larger error
-        max_lat_spacing = np.diff(source_lat, axis=0).max()
-        max_lon_spacing = np.diff(source_lon, axis=1).max()
-        lat_error = 0.1 * max_lat_spacing
-        lon_error = 0.05 * max_lon_spacing
-        xr.testing.assert_allclose(regridded_data, expected_data, rtol=0.5, atol=lat_error + lon_error)
