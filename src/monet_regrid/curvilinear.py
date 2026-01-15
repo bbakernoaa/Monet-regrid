@@ -32,6 +32,7 @@ URLs updated, and documentation adapted for new branding.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 import dask.array as da
@@ -45,6 +46,8 @@ from monet_regrid.interpolation.utils import (
     _compute_barycentric_weights_3d,
     _point_in_tetrahedron,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_interpolation_wrapper(data_slice, engine, target_shape):
@@ -361,6 +364,8 @@ class CurvilinearInterpolator:
 
         # Store as 3D points array
         self.source_points_3d = da.stack([self.source_x, self.source_y, self.source_z], axis=1)
+        logger.debug("Source lat/lon flat (first 5): %s, %s", source_lat_flat[:5].compute(), source_lon_flat[:5].compute())
+        logger.debug("Source points 3D (first 5):\n%s", self.source_points_3d[:5].compute())
 
         # Extract target coordinates
         target_lat = self.target_grid[self.target_lat_name]
@@ -394,6 +399,8 @@ class CurvilinearInterpolator:
 
         # Store as 3D points array
         self.target_points_3d = da.stack([self.target_x, self.target_y, self.target_z], axis=1)
+        logger.debug("Target lat/lon flat (first 5): %s, %s", target_lat_flat[:5].compute(), target_lon_flat[:5].compute())
+        logger.debug("Target points 3D (first 5):\n%s", self.target_points_3d[:5].compute())
 
     def _build_interpolation_structures(self) -> None:
         """Build interpolation structures based on method."""
