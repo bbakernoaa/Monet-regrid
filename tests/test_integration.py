@@ -250,6 +250,7 @@ def test_regridding_accuracy_with_synthetic_data(method: str):
     method : str
         The interpolation method to test ("linear", "nearest", "cubic").
     """
+
     # 1. Define a known, spatially-varying analytical function.
     # A linear function should be perfectly interpolated by a linear regridder.
     def analytical_func(lat, lon):
@@ -279,9 +280,7 @@ def test_regridding_accuracy_with_synthetic_data(method: str):
     # 4. Perform the regridding using the parameterized method
     regrid_method = getattr(source_data.regrid, method)
     regridded_data = regrid_method(target_grid)
-    regridded_data.attrs["history"] = (
-        f"{source_data.attrs['history']} Regridded with method '{method}'."
-    )
+    regridded_data.attrs["history"] = f"{source_data.attrs['history']} Regridded with method '{method}'."
 
     # 5. Calculate the "true" values on the target grid using the analytical function
     target_lon_mesh, target_lat_mesh = np.meshgrid(target_lon, target_lat)
@@ -310,19 +309,11 @@ def test_regridding_accuracy_with_synthetic_data(method: str):
         lat_error = 0.1 * max_lat_spacing
         lon_error = 0.05 * max_lon_spacing
         # Looser tolerance for nearest neighbor
-        xr.testing.assert_allclose(
-            regridded_data, expected_data, rtol=0.5, atol=lat_error + lon_error
-        )
+        xr.testing.assert_allclose(regridded_data, expected_data, rtol=0.5, atol=lat_error + lon_error)
 
 
-@pytest.mark.parametrize("method", ["linear", "nearest", "cubic"])
-def test_curvilinear_regridding_accuracy_with_synthetic_data(method: str):
-    """Test the numerical accuracy of curvilinear regridding.
-    Parameters
-    ----------
-    method : str
-        The interpolation method to test ("linear", "nearest", "cubic").
-    """
+def test_curvilinear_regridding_accuracy_with_synthetic_data():
+    """Test the numerical accuracy of curvilinear regridding."""
     pytest.skip(
         "Accuracy tests for the in-house CurvilinearInterpolator are currently disabled. "
         "The algorithm produces NaN values on various synthetic grids, indicating a "
