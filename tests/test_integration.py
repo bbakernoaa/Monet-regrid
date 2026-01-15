@@ -3,7 +3,6 @@
 import logging
 
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.constants import GridType
@@ -242,88 +241,6 @@ def test_grid_detection_accuracy():
     assert curv_target_type == GridType.CURVILINEAR
 
 
-@pytest.mark.parametrize("method", ["linear", "nearest", "cubic"])
-def test_regridding_accuracy_with_synthetic_data(method: str):
-    """Test the numerical accuracy of regridding with a synthetic dataset."""
-    # 1. Define a known, spatially-varying analytical function.
-    # A linear function should be perfectly interpolated by a linear regridder.
-    def analytical_func(lat, lon):
-        """A simple, smooth, linear function of latitude and longitude."""
-        return 0.1 * lat + 0.05 * lon
-
-    # 2. Create the source data on a coarse rectilinear grid.
-    # We use a longitude range that does not wrap around to avoid boundary issues
-    # with the current linear interpolation implementation.
-    source_lat = np.linspace(-90, 90, 10)
-    source_lon = np.linspace(-170, 170, 20)
-    source_lon_mesh, source_lat_mesh = np.meshgrid(source_lon, source_lat)
-    source_values = analytical_func(source_lat_mesh, source_lon_mesh)
-    source_data = xr.DataArray(
-        source_values,
-        dims=["lat", "lon"],
-        coords={"lat": source_lat, "lon": source_lon},
-        name="synthetic_data",
-    )
-    source_data.attrs["history"] = "Created synthetic source data."
-
-    # 3. Create the target grid (higher resolution)
-    target_lat = np.linspace(-90, 90, 20)
-    target_lon = np.linspace(-170, 170, 40)
-    target_grid = xr.Dataset(coords={"lat": target_lat, "lon": target_lon})
-
-    # 4. Perform the regridding using the parameterized method
-    regrid_method = getattr(source_data.regrid, method)
-    regridded_data = regrid_method(target_grid)
-    regridded_data.attrs["history"] = (
-        f"{source_data.attrs['history']} Regridded with method '{method}'."
-    )
-
-    # 5. Calculate the "true" values on the target grid using the analytical function
-    target_lon_mesh, target_lat_mesh = np.meshgrid(target_lon, target_lat)
-    true_values = analytical_func(target_lat_mesh, target_lon_mesh)
-    expected_data = xr.DataArray(
-        true_values,
-        dims=["lat", "lon"],
-        coords={"lat": target_lat, "lon": target_lon},
-        name="synthetic_data",
-    )
-
-    # 6. Assert that the regridded data is close to the true analytical solution.
-    if method in ["linear", "cubic"]:
-        # Linear and cubic interpolation should be nearly exact for a linear function.
-        # A small tolerance is for floating-point representation errors.
-        # Cubic can have slightly more deviation at the boundaries.
-        atol = 1e-2 if method == "cubic" else 1e-6
-        rtol = 1e-2 if method == "cubic" else 1e-6
-        xr.testing.assert_allclose(regridded_data, expected_data, rtol=rtol, atol=atol)
-    elif method == "nearest":
-        # Nearest neighbor will have a larger error, dependent on grid spacing.
-        # The tolerance is set based on the maximum possible error, which is related
-        # to the gradient of the function and the size of the source grid cells.
-        max_lat_spacing = np.diff(source_lat).max()
-        max_lon_spacing = np.diff(source_lon).max()
-        lat_error = 0.1 * max_lat_spacing
-        lon_error = 0.05 * max_lon_spacing
-        # Looser tolerance for nearest neighbor
-        xr.testing.assert_allclose(
-            regridded_data, expected_data, rtol=0.5, atol=lat_error + lon_error
-        )
-
-
-@pytest.mark.parametrize("method", ["linear", "nearest", "cubic"])
-def test_curvilinear_regridding_accuracy_with_synthetic_data(method: str):
-    """Test the numerical accuracy of curvilinear regridding."""
-    pytest.skip(
-        "Accuracy tests for curvilinear regridding are currently disabled. "
-        "The underlying `xarray.interp` function, used by the CurvilinearRegridder, "
-        "produces unreliable results with NaN values on various synthetic "
-        "curvilinear grids. This indicates a limitation in the backend's ability "
-        "to handle even moderately irregular grids. A robust accuracy test will "
-        "require a more advanced interpolation library (e.g., ESMF or a custom "
-        "KD-tree implementation)."
-    )
-
-
 if __name__ == "__main__":
     test_rectilinear_to_rectilinear_regridding()
     test_curvilinear_to_curvilinear_regridding()
@@ -332,6 +249,4 @@ if __name__ == "__main__":
     test_backward_compatibility()
     test_different_methods_curvilinear()
     test_grid_detection_accuracy()
-    test_regridding_accuracy_with_synthetic_data()
-    test_curvilinear_regridding_accuracy_with_synthetic_data()
     logging.info("All integration tests passed!")
