@@ -773,8 +773,8 @@ class CurvilinearRegridder(BaseRegridder):
                     dim_list = list(data.dims)
                     y_chunks = data.chunks[dim_list.index(y_dim)]
                     x_chunks = data.chunks[dim_list.index(x_dim)]
-                    y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
-                    x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
+                    y_coords_array = da.arange(0, y_size, chunks=y_chunks)
+                    x_coords_array = da.arange(0, x_size, chunks=x_chunks)
                 else:
                     y_coords_array = np.arange(y_size)
                     x_coords_array = np.arange(x_size)
