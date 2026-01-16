@@ -36,8 +36,7 @@ def interp_regrid(
     data: xr.DataArray,
     target_ds: xr.Dataset,
     method: Literal["linear", "nearest", "cubic", "bilinear"],
-) -> xr.DataArray:
-    ...
+) -> xr.DataArray: ...
 
 
 @overload
@@ -45,8 +44,7 @@ def interp_regrid(
     data: xr.Dataset,
     target_ds: xr.Dataset,
     method: Literal["linear", "nearest", "cubic", "bilinear"],
-) -> xr.Dataset:
-    ...
+) -> xr.Dataset: ...
 
 
 def interp_regrid(

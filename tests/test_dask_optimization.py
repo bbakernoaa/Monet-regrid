@@ -52,12 +52,12 @@ def test_lazy_coordinate_generation():
     assert source_grid["longitude"].ndim == 2, "Longitude should be 2D"
 
     # Assert that the underlying data is a dask array
-    assert isinstance(
-        source_grid["latitude"].data, da.Array
-    ), f"Expected dask.array.Array, got {type(source_grid['latitude'].data)}"
-    assert isinstance(
-        source_grid["longitude"].data, da.Array
-    ), f"Expected dask.array.Array, got {type(source_grid['longitude'].data)}"
+    assert isinstance(source_grid["latitude"].data, da.Array), (
+        f"Expected dask.array.Array, got {type(source_grid['latitude'].data)}"
+    )
+    assert isinstance(source_grid["longitude"].data, da.Array), (
+        f"Expected dask.array.Array, got {type(source_grid['longitude'].data)}"
+    )
 
     # 3. The UI (CLI Command)
     # The command to run this test would be:

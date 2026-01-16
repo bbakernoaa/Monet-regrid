@@ -165,7 +165,7 @@ class BaseRegridder(abc.ABC):
                 msg = f"Unknown regridder type: {regridder_type}"
                 raise ValueError(msg)
         else:
-            msg = "Could not determine regridder type from file. Missing 'regridder_type' " "or 'module'/'class' from config."
+            msg = "Could not determine regridder type from file. Missing 'regridder_type' or 'module'/'class' from config."
             raise ValueError(msg)
 
         if not issubclass(regridder_class, cls):
@@ -735,9 +735,7 @@ class CurvilinearRegridder(BaseRegridder):
         try:
             lat_coord = data.cf["latitude"]
             lon_coord = data.cf["longitude"]
-            source_grid = xr.Dataset(
-                coords={lat_coord.name: lat_coord, lon_coord.name: lon_coord}
-            )
+            source_grid = xr.Dataset(coords={lat_coord.name: lat_coord, lon_coord.name: lon_coord})
             return source_grid
         except (KeyError, AttributeError):
             # Fallback to manual search
@@ -747,14 +745,12 @@ class CurvilinearRegridder(BaseRegridder):
             if lat_coords and lon_coords:
                 lat_name = lat_coords[0]
                 lon_name = lon_coords[0]
-                source_grid = xr.Dataset(
-                    coords={lat_name: data[lat_name], lon_name: data[lon_name]}
-                )
+                source_grid = xr.Dataset(coords={lat_name: data[lat_name], lon_name: data[lon_name]})
                 return source_grid
 
             if len(data.dims) < 2:
                 msg = "Source data must have at least 2 dimensions for curvilinear regridding"
-                raise ValueError(msg)
+                raise ValueError(msg) from None
 
             dims = tuple(data.dims)
             y_dim, x_dim = dims[-2], dims[-1]

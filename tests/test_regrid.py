@@ -16,6 +16,14 @@ except ImportError:
 
 import pandas as pd
 
+try:
+    from dask.array.core import PerformanceWarning
+except ImportError:
+
+    class PerformanceWarning(Warning):
+        pass
+
+
 # REBRAND NOTICE: This test file has been updated to use the new monet_regrid package.
 
 
@@ -164,13 +172,7 @@ def test_regrid_rectilinear_to_rectilinear_conservative_nan_robust():
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
-            # Filter PerformanceWarning specifically if available from dask
-            try:
-                from dask.array.core import PerformanceWarning
-
-                warnings.filterwarnings("ignore", category=PerformanceWarning)
-            except ImportError:
-                pass
+            warnings.filterwarnings("ignore", category=PerformanceWarning)
 
             da_rechunk.regrid.conservative(ds_target, nan_threshold=0.0 if nan_threshold is None else nan_threshold)
 
