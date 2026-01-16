@@ -324,13 +324,19 @@ class InterpolationEngine:
 
         # For each target point, compute barycentric weights
         # Note: This loop is still Python but it runs only once during setup
-        for target_idx, target_point in enumerate(points_to_use):
+        for target_idx, _ in enumerate(points_to_use):
             simplex_idx = simplex_indices[target_idx]
 
             if simplex_idx != -1:
                 # Point is inside a tetrahedron
                 simplex_vertices = source_points_3d[self.triangles.simplices[simplex_idx]]
-                weights = _compute_barycentric_weights_3d(target_point, simplex_vertices)
+
+                # CRITICAL FIX: Use the original target point for weight calculation,
+                # even if a scaled point was used to find the simplex. This avoids
+                # numerical errors from the scaling hack.
+                original_target_point = target_points_3d[target_idx]
+                weights = _compute_barycentric_weights_3d(original_target_point, simplex_vertices)
+
                 if weights is not None:
                     self.precomputed_weights["simplex_indices"][target_idx] = simplex_idx
                     self.precomputed_weights["barycentric_weights"][target_idx] = weights
