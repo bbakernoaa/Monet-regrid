@@ -310,3 +310,72 @@ def test_curvilinear_regridder_lazy_arange_creation():
 
     expected_lon = np.broadcast_to(np.arange(200), (100, 200))
     assert_array_equal(source_grid["longitude"].data.compute(), expected_lon)
+
+
+def test_curvilinear_regridder_lazy_linspace_creation():
+    """Verify that fallback coordinates are created lazily using da.linspace."""
+    # 1. Create a Dask-chunked DataArray without explicit coordinates
+    y_size, x_size = 100, 200
+    source_data = xr.DataArray(
+        da.random.random((y_size, x_size), chunks=(50, 50)),
+        dims=["y", "x"],
+    )
+
+    # 2. Create a simple target grid
+    target_grid = xr.Dataset(
+        coords={
+            "lat": (("y_new",), np.arange(0, 10)),
+            "lon": (("x_new",), np.arange(0, 20)),
+        }
+    )
+
+    # 3. Instantiate the regridder
+    regridder = CurvilinearRegridder(source_data=source_data, target_grid=target_grid)
+
+    # 4. Call the internal method to generate the source grid
+    source_grid = regridder._create_source_grid_from_data(source_data)
+
+    # 5. Assert that the coordinates are Dask arrays
+    assert isinstance(source_grid["latitude"].data, da.Array)
+    assert isinstance(source_grid["longitude"].data, da.Array)
+
+    # 6. Verify the computed values are correct
+    expected_lat_vals = np.linspace(0, y_size - 1, y_size)
+    expected_lon_vals = np.linspace(0, x_size - 1, x_size)
+    expected_lat_2d = np.broadcast_to(expected_lat_vals[:, np.newaxis], (y_size, x_size))
+    expected_lon_2d = np.broadcast_to(expected_lon_vals, (y_size, x_size))
+
+    assert_array_equal(source_grid["latitude"].data.compute(), expected_lat_2d)
+    assert_array_equal(source_grid["longitude"].data.compute(), expected_lon_2d)
+
+
+def test_curvilinear_regridder_name_based_coord_detection():
+    """Verify fallback to name-based ('lat'/'lon') coordinate detection."""
+    # 1. Create a DataArray with non-CF-compliant coordinates
+    lat_vals = np.arange(10)
+    lon_vals = np.arange(20)
+    source_data = xr.DataArray(
+        np.random.rand(10, 20),
+        dims=["y", "x"],
+        coords={"lat": (("y",), lat_vals), "lon": (("x",), lon_vals)},
+    )
+
+    # 2. Create a simple target grid
+    target_grid = xr.Dataset(
+        coords={
+            "latitude": (("y_new",), np.arange(0, 10)),
+            "longitude": (("x_new",), np.arange(0, 20)),
+        }
+    )
+
+    # 3. Instantiate the regridder
+    regridder = CurvilinearRegridder(source_data=source_data, target_grid=target_grid)
+
+    # 4. Call the internal method to generate the source grid
+    source_grid = regridder._create_source_grid_from_data(source_data)
+
+    # 5. Assert that the original 'lat' and 'lon' coordinates were found
+    assert "lat" in source_grid.coords
+    assert "lon" in source_grid.coords
+    xr.testing.assert_allclose(source_grid["lat"], source_data["lat"])
+    xr.testing.assert_allclose(source_grid["lon"], source_data["lon"])
