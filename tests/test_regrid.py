@@ -1,5 +1,10 @@
 import warnings
 
+try:
+    from dask.array.core import PerformanceWarning
+except ImportError:
+    PerformanceWarning = None
+
 import dask.array as da
 import numpy as np
 import pytest
@@ -164,13 +169,8 @@ def test_regrid_rectilinear_to_rectilinear_conservative_nan_robust():
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
-            # Filter PerformanceWarning specifically if available from dask
-            try:
-                from dask.array.core import PerformanceWarning
-
+            if PerformanceWarning:
                 warnings.filterwarnings("ignore", category=PerformanceWarning)
-            except ImportError:
-                pass
 
             da_rechunk.regrid.conservative(ds_target, nan_threshold=0.0 if nan_threshold is None else nan_threshold)
 
