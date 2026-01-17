@@ -34,7 +34,8 @@ URLs updated, and documentation adapted for new branding.
 """
 
 
-class InvalidBoundsError(Exception): ...
+class InvalidBoundsError(Exception):
+    ...
 
 
 class CoordHandler(TypedDict):
@@ -258,7 +259,8 @@ def format_for_regrid(
     obj: xr.Dataset,
     target: xr.Dataset,
     stats: bool = False,
-) -> xr.Dataset: ...
+) -> xr.Dataset:
+    ...
 
 
 @overload
@@ -266,7 +268,8 @@ def format_for_regrid(
     obj: xr.DataArray,
     target: xr.Dataset,
     stats: bool = False,
-) -> xr.DataArray: ...
+) -> xr.DataArray:
+    ...
 
 
 def format_for_regrid(
@@ -473,11 +476,13 @@ def coord_is_covered(obj: xr.DataArray | xr.Dataset, target: xr.Dataset, coord: 
 
 
 @overload
-def ensure_monotonic(obj: xr.DataArray, coord: Hashable) -> xr.DataArray: ...
+def ensure_monotonic(obj: xr.DataArray, coord: Hashable) -> xr.DataArray:
+    ...
 
 
 @overload
-def ensure_monotonic(obj: xr.Dataset, coord: Hashable) -> xr.Dataset: ...
+def ensure_monotonic(obj: xr.Dataset, coord: Hashable) -> xr.Dataset:
+    ...
 
 
 def ensure_monotonic(obj: xr.DataArray | xr.Dataset, coord: Hashable) -> xr.DataArray | xr.Dataset:
@@ -494,11 +499,13 @@ def ensure_monotonic(obj: xr.DataArray | xr.Dataset, coord: Hashable) -> xr.Data
 
 
 @overload
-def update_coord(obj: xr.DataArray, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray: ...
+def update_coord(obj: xr.DataArray, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray:
+    ...
 
 
 @overload
-def update_coord(obj: xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.Dataset: ...
+def update_coord(obj: xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.Dataset:
+    ...
 
 
 def update_coord(obj: xr.DataArray | xr.Dataset, coord: Hashable, coord_vals: np.ndarray) -> xr.DataArray | xr.Dataset:
@@ -708,7 +715,8 @@ def validate_input(
     data: xr.Dataset,
     ds_target_grid: xr.Dataset,
     time_dim: str | None,
-) -> xr.Dataset: ...
+) -> xr.Dataset:
+    ...
 
 
 @overload
@@ -716,7 +724,8 @@ def validate_input(
     data: xr.DataArray,
     ds_target_grid: xr.Dataset,
     time_dim: str | None,
-) -> xr.Dataset: ...
+) -> xr.Dataset:
+    ...
 
 
 def validate_input(
