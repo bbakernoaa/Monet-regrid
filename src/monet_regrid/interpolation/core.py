@@ -239,7 +239,7 @@ class InterpolationEngine:
         except Exception as e:
             if len(source_points_3d) > 4:
                 warnings.warn(
-                    "Could not build Delaunay triangulation for linear interpolation:" f" {e}. Falling back to nearest neighbor.",
+                    f"Could not build Delaunay triangulation for linear interpolation: {e}. Falling back to nearest neighbor.",
                     stacklevel=2,
                 )
             self.method = "nearest"
@@ -636,7 +636,6 @@ class InterpolationEngine:
         # This is a fallback implementation if precomputed weights are not available
         # In practice, we should always have precomputed weights
         msg = (
-            "Direct linear interpolation computation is not implemented. "
-            "Use precomputed weights by calling build_structures first."
+            "Direct linear interpolation computation is not implemented. Use precomputed weights by calling build_structures first."
         )
         raise NotImplementedError(msg)

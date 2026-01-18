@@ -375,3 +375,49 @@ def test_curvilinear_interpolator_dask_lazy_evaluation():
     # 7. Verify the computed shape to ensure the Dask graph is valid
     computed_result = result.compute()
     assert computed_result.shape == target_lat_da.shape
+
+
+def test_curvilinear_regridder_lazy_coordinate_generation():
+    """Test lazy coordinate generation for Dask-backed data without explicit coordinates."""
+    # 1. Create a Dask-backed DataArray without coordinates
+    data_values = da.random.random((10, 20), chunks=(5, 10))
+    source_da = xr.DataArray(data_values, dims=["y", "x"])
+
+    # A minimal target grid is needed for the regridder's constructor
+    target_ds = xr.Dataset(
+        coords={
+            "latitude": (("y_new",), np.arange(2)),
+            "longitude": (("x_new",), np.arange(2)),
+        }
+    )
+
+    # 2. Instantiate a mock regridder to test the internal method
+    regridder = CurvilinearRegridder(source_data=None, target_grid=target_ds)
+
+    # 3. Call the internal method to generate the source grid
+    source_grid = regridder._create_source_grid_from_data(source_da)
+
+    # 4. Assert that the generated coordinates are Dask arrays
+    assert "latitude" in source_grid.coords
+    assert "longitude" in source_grid.coords
+    assert isinstance(source_grid["latitude"].data, da.Array)
+    assert isinstance(source_grid["longitude"].data, da.Array)
+
+    # 5. Assert correct shape
+    assert source_grid["latitude"].shape == (10, 20)
+    assert source_grid["longitude"].shape == (10, 20)
+
+    # 6. Assert correct dimension names
+    assert source_grid["latitude"].dims == ("y", "x")
+    assert source_grid["longitude"].dims == ("y", "x")
+
+    # 7. Verify the computed values to ensure linspace and broadcasting are correct
+    computed_lat = source_grid["latitude"].compute()
+    computed_lon = source_grid["longitude"].compute()
+
+    expected_y = np.linspace(0, 9, 10)
+    expected_x = np.linspace(0, 19, 20)
+    expected_lat_2d, expected_lon_2d = np.meshgrid(expected_y, expected_x, indexing="ij")
+
+    np.testing.assert_allclose(computed_lat, expected_lat_2d)
+    np.testing.assert_allclose(computed_lon, expected_lon_2d)

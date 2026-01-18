@@ -55,6 +55,7 @@ benchmarking = [
   "matplotlib",
   "zarr",
   "h5netcdf",
+  "h5py",
   "requests",
   "aiohttp",
   "pooch",

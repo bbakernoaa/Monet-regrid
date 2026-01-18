@@ -1,5 +1,10 @@
 """High-resolution stress test using Dask."""
 
+try:
+    from dask.distributed import Client
+except ImportError:
+    Client = None
+
 import dask.array as da
 import numpy as np
 import xarray as xr
@@ -8,12 +13,10 @@ import xarray as xr
 def test_high_resolution_stress_dask():
     """Test high-resolution interpolation with Dask arrays."""
     # Try to use distributed client if available to simulate cluster behavior
-    try:
-        from dask.distributed import Client
-
+    if Client:
         # Start a local cluster
         client = Client(dashboard_address=None)
-    except ImportError:
+    else:
         client = None
 
     # Create large source grid (e.g., 500x500)
