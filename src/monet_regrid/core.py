@@ -681,40 +681,51 @@ class CurvilinearRegridder(BaseRegridder):
         return result
 
     def _create_source_grid_from_data(self, source_data: xr.DataArray | xr.Dataset | None = None) -> xr.Dataset:
-        """
-        Create a grid specification from source data, with lazy-loading support.
+        """Create a grid specification from source data, with lazy-loading support.
 
         This method extracts or generates coordinate information from the source data.
-        It first attempts to find explicit CF-compliant latitude/longitude coordinates.
-        If none are found, it falls back to generating a lazy coordinate grid based
-        on the spatial dimensions of the data. This fallback is Dask-aware, using
-        `dask.array.linspace` for Dask-backed data to prevent eager loading.
+        It follows a three-step fallback process:
+        1.  **CF-Compliant Coordinates:** Attempts to find latitude/longitude
+            coordinates that adhere to Climate and Forecast (CF) conventions
+            using `cf-xarray`. Also includes any associated coordinate bounds.
+        2.  **Name-Based Search:** If CF-compliant coordinates are not found, it
+            searches for coordinate names containing 'lat' or 'lon' (case-insensitive).
+        3.  **Lazy Generation:** If no coordinates are found, it generates a
+            lazy coordinate grid based on the spatial dimensions of the data.
+            This fallback is Dask-aware, using `dask.array.linspace` for
+            Dask-backed data to prevent eager loading.
 
         Parameters
         ----------
         source_data : xr.DataArray | xr.Dataset | None, optional
-            The source data to process. If ``None``, the data from initialization is used.
+            The source data from which to extract or generate coordinates.
+            If `None`, the `source_data` from the class constructor is used.
+            Defaults to None.
 
         Returns
         -------
         xr.Dataset
-            A dataset containing the latitude and longitude coordinates.
+            A dataset containing the latitude and longitude coordinates. This
+            dataset may also include coordinate bounds if they were found.
 
         Raises
         ------
         ValueError
-            If the source data has fewer than two dimensions for fallback generation.
+            If the source data has fewer than two dimensions when the lazy
+            generation fallback is triggered.
 
         Examples
         --------
+        Create a lazy Dask-backed DataArray without explicit coordinates and
+        see the generated grid.
+
         >>> import dask.array as da
         >>> import xarray as xr
+        >>> from monet_regrid.core import CurvilinearRegridder
         >>>
-        >>> # Example with a Dask-backed DataArray without explicit coordinates
         >>> data = da.random.random((10, 20), chunks=(5, 5))
         >>> source_da = xr.DataArray(data, dims=["y", "x"])
         >>>
-        >>> # Mock regridder to test the method
         >>> class MockRegridder(CurvilinearRegridder):
         ...     def __init__(self):
         ...         self.source_data = source_da
