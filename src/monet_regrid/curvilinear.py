@@ -47,23 +47,6 @@ from monet_regrid.interpolation.utils import (
 )
 
 
-def _apply_interpolation_wrapper(data_slice, engine, target_shape):
-    """Wrapper for interpolation to be used with apply_ufunc (picklable)."""
-    # Reshape to 1D for interpolation (flatten the spatial dimensions)
-    # The input will be (..., source_lat, source_lon)
-    # We reshape to (..., source_points_flat)
-    reshaped_data = data_slice.reshape(*data_slice.shape[:-2], -1)
-
-    # Use interpolation engine
-    interpolated = engine.interpolate(reshaped_data)
-
-    # Reshape back to target grid shape
-    # The output of interpolate is (..., target_points_flat)
-    # We reshape to (..., target_lat, target_lon)
-    final_shape = (*data_slice.shape[:-2], *target_shape)
-    return interpolated.reshape(final_shape)
-
-
 def _check_and_raise_on_non_finite(
     x: np.ndarray | da.Array,
     y: np.ndarray | da.Array,
@@ -401,61 +384,9 @@ class CurvilinearInterpolator:
 
     def _precompute_interpolation_weights(self) -> None:
         """Precompute interpolation weights for build-once/apply-many pattern."""
-        # SciPy-based interpolation engines require numpy arrays, so we compute them
-        # only when needed. This preserves lazy evaluation for coordinate transformations
-        # while ensuring compatibility with the underlying interpolation libraries.
-        self.source_points_3d_np = self.source_points_3d.compute()
-        self.target_points_3d_np = self.target_points_3d.compute()
-
-        if self.method == "conservative":
-            # Extract boundaries (code omitted for brevity, same as previous)
-            # Helper to get bounds
-            def get_bounds(ds, lat_name, lon_name):
-                # Try to find bounds attribute
-                try:
-                    lat_bounds_name = ds[lat_name].attrs.get("bounds", f"{lat_name}_bnds")
-                    lon_bounds_name = ds[lon_name].attrs.get("bounds", f"{lon_name}_bnds")
-
-                    if lat_bounds_name in ds and lon_bounds_name in ds:
-                        # Reshape to (N, 4, 2) format
-                        lat_b = ds[lat_bounds_name].values
-                        lon_b = ds[lon_bounds_name].values
-
-                        if lat_b.ndim == 3 and lat_b.shape[-1] == 4:
-                            n_cells = lat_b.shape[0] * lat_b.shape[1]
-                            lat_b_flat = lat_b.reshape(n_cells, 4)
-                            lon_b_flat = lon_b.reshape(n_cells, 4)
-                            return np.stack([lon_b_flat, lat_b_flat], axis=2)
-                except Exception:  # noqa: S110
-                    pass
-
-                msg = (
-                    f"Conservative regridding requires explicit bounds for {lat_name} and {lon_name}. "
-                    "Please ensure 'bounds' attribute is set and variables exist with shape (y, x, 4)."
-                )
-                raise ValueError(msg)
-
-            source_vertices = get_bounds(self.source_grid, self.source_lat_name, self.source_lon_name)
-            target_vertices = get_bounds(self.target_grid, self.target_lat_name, self.target_lon_name)
-
-            self.interpolation_engine.build_conservative_structures(
-                self.source_points_3d_np,
-                self.target_points_3d_np,
-                source_vertices,
-                target_vertices,
-                radius_of_influence=self.radius_of_influence,
-            )
-        elif self.method in ["bilinear", "cubic"]:
-            # Structured interpolation requires source shape
-            self.interpolation_engine.build_structures(
-                self.source_points_3d_np,
-                self.target_points_3d_np,
-                self.radius_of_influence,
-                source_shape=self.source_shape,  # type: ignore[arg-type]
-            )
-        else:
-            # Standard interpolation
-            self.interpolation_engine.build_structures(self.source_points_3d_np, self.target_points_3d_np, self.radius_of_influence)
+        # This method is now a placeholder. The actual building of interpolation
+        # structures is deferred to the block-wise processing in __call__.
+        pass
 
     def __call__(self, data: xr.DataArray | xr.Dataset) -> xr.DataArray | xr.Dataset:
         """Apply interpolation to data.
@@ -474,72 +405,60 @@ class CurvilinearInterpolator:
             msg = "Input must be xarray DataArray or Dataset"
             raise TypeError(msg)
 
+    def _interpolate_block(
+        self, data_block: xr.DataArray, source_points_3d: xr.DataArray, target_points_3d: xr.DataArray
+    ) -> xr.DataArray:
+        """Interpolate a single Dask block."""
+        source_points_3d_np = source_points_3d.data
+        target_points_3d_np = target_points_3d.data
+
+        engine = InterpolationEngine(
+            method=self.method, spherical=self.spherical, fill_method=self.fill_method, extrapolate=self.extrapolate
+        )
+        engine.build_structures(source_points_3d_np, target_points_3d_np, self.radius_of_influence)
+
+        reshaped_data = data_block.data.reshape(*data_block.shape[:-2], -1)
+        interpolated = engine.interpolate(reshaped_data)
+        final_shape = (*data_block.shape[:-2], *self.target_shape)
+
+        target_lat_coord = self.target_grid[self.target_lat_name]
+        if target_lat_coord.ndim == 2:
+            target_dims = list(target_lat_coord.dims)
+        else:
+            target_dims = [target_lat_coord.dims[0], self.target_grid[self.target_lon_name].dims[0]]
+
+        return xr.DataArray(interpolated.reshape(final_shape), dims=data_block.dims[:-2] + tuple(target_dims))
+
     def _interpolate_dataarray(self, data: xr.DataArray) -> xr.DataArray:
         """Interpolate a single DataArray."""
-        # Validate that data coordinates match source grid
         if not self._validate_data_coordinates(data):
             msg = "Data coordinates do not match source grid"
             raise ValueError(msg)
 
-        # Find spatial dimensions in the data that match the source grid shape
-        # The data should have the same spatial dimensions as the source grid
-        source_lat_dims = self.source_grid[self.source_lat_name].dims
-
-        # If the data has the same dimensions as the source grid coordinates, use those
-        if all(dim in data.dims for dim in source_lat_dims):
-            spatial_dims = source_lat_dims
-        else:
-            # Otherwise, find dimensions that match the source grid shape
-            spatial_dims = []
-            for dim in data.dims:
-                if data.sizes[dim] in self.source_shape:
-                    spatial_dims.append(dim)
-            spatial_dims = tuple(spatial_dims[:2])  # Take first two matching dimensions that match source shape
-
-        # If we still don't have 2 spatial dimensions, use the last two dimensions as a fallback
-        if len(spatial_dims) != 2:
-            spatial_dims = tuple(data.dims[-2:])  # Use last two dimensions as spatial
-
-        # Determine target dims and shape
         target_lat_coord = self.target_grid[self.target_lat_name]
         target_lon_coord = self.target_grid[self.target_lon_name]
 
         if target_lat_coord.ndim == 2:
             target_dims = list(target_lat_coord.dims)
-            target_shape = target_lat_coord.shape
         else:
             target_dims = [target_lat_coord.dims[0], target_lon_coord.dims[0]]
-            target_shape = (target_lat_coord.size, target_lon_coord.size)
 
-        # Create dictionary mapping target dim names to sizes for apply_ufunc
-        output_sizes = dict(zip(target_dims, target_shape, strict=False))
-
-        # Use xr.apply_ufunc to handle Dask arrays lazily
-        result = xr.apply_ufunc(
-            _apply_interpolation_wrapper,
-            data,
-            kwargs={"engine": self.interpolation_engine, "target_shape": target_shape},
-            input_core_dims=[list(spatial_dims)],
-            output_core_dims=[target_dims],
-            exclude_dims=set(spatial_dims),  # These dimensions change size
-            vectorize=False,  # Handle extra dims manually in _apply_interpolation
-            dask="parallelized",  # Enable Dask parallel execution
-            output_dtypes=[data.dtype],
-            dask_gufunc_kwargs={"allow_rechunk": True, "output_sizes": output_sizes},
-            keep_attrs=True,
+        template = xr.DataArray(
+            da.empty(self.target_shape, chunks=-1, dtype=data.dtype),
+            dims=target_dims,
         )
 
-        # Manually ensure attributes are preserved if apply_ufunc didn't do it
+        source_points_da = xr.DataArray(self.source_points_3d, dims=["n_points", "three"])
+        target_points_da = xr.DataArray(self.target_points_3d, dims=["n_points_target", "three"])
+
+        result = data.map_blocks(
+            self._interpolate_block,
+            args=[source_points_da, target_points_da],
+            template=template,
+        )
+
         if not result.attrs and data.attrs:
             result.attrs = data.attrs.copy()
-
-        # DEBUG
-        if not result.attrs:
-            pass
-
-        # Attach coordinates to result
-        # Coordinates from data (non-spatial) are preserved by apply_ufunc
-        # We need to add target spatial coordinates
 
         if target_lat_coord.ndim == 2:
             result.coords[self.target_lat_name] = target_lat_coord
@@ -548,16 +467,11 @@ class CurvilinearInterpolator:
             result.coords[self.target_lat_name] = target_lat_coord
             result.coords[self.target_lon_name] = target_lon_coord
 
-        # Also ensure dimension coordinates exist
         for dim in target_dims:
             if dim in self.target_grid.coords:
                 result.coords[dim] = self.target_grid.coords[dim]
 
-        # DEBUG
-        if not result.attrs:
-            pass
-
-        return result  # type: ignore[no-any-return]
+        return result
 
     def _interpolate_dataset(self, dataset: xr.Dataset) -> xr.Dataset:
         """Interpolate an entire Dataset."""
