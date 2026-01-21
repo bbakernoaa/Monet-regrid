@@ -153,6 +153,11 @@ def _interp_regrid_fast(
 
     # Create interpolator
     # Note: fill_value=np.nan is safer but might be slower; xarray default is usually nan
+    # We must be careful not to trigger eager loading if data is dask-backed
+    if data.chunks is not None:
+        msg = "Dask-backed data not supported in fast path; falling back to xarray.interp"
+        raise NotImplementedError(msg)
+
     interpolator = RegularGridInterpolator(
         tuple(src_coords), data.values, method=scipy_method, bounds_error=False, fill_value=np.nan
     )
