@@ -38,8 +38,10 @@ def test_clip_polygon():
     """Test the clip_polygon function."""
     subject_polygon = np.array([[0.5, -0.5], [1.5, 0.5], [0.5, 1.5], [-0.5, 0.5]], dtype=np.float64)
     clip_polygon = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=np.float64)
-    clipped_polygon = _polygon_clipping.clip_polygon(subject_polygon, clip_polygon)
-    area = _polygon_clipping.polygon_area(clipped_polygon)
+    buf1 = np.zeros((20, 2))
+    buf2 = np.zeros((20, 2))
+    clipped_polygon_buf, length = _polygon_clipping.clip_polygon(subject_polygon, clip_polygon, buf1, buf2)
+    area = _polygon_clipping.polygon_area(clipped_polygon_buf[:length])
     np.testing.assert_allclose(area, 1.0, atol=1e-7)
 
 
@@ -47,7 +49,9 @@ def test_calculate_overlap_area():
     """Test the calculate_overlap_area function."""
     source_cell = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], dtype=np.float64)
     target_cell = np.array([[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]], dtype=np.float64)
-    overlap_area = _polygon_clipping.calculate_overlap_area(source_cell, target_cell)
+    buf1 = np.zeros((20, 2))
+    buf2 = np.zeros((20, 2))
+    overlap_area = _polygon_clipping.calculate_overlap_area(source_cell, target_cell, buf1, buf2)
     np.testing.assert_allclose(overlap_area, 0.25)
 
 

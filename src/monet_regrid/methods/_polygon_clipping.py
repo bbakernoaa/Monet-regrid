@@ -61,78 +61,89 @@ def intersection(p1, p2, p3, p4):
 
 
 @jit(nopython=True, nogil=True)
-def clip_polygon(subject_polygon, clip_polygon):
+def clip_polygon(subject_polygon, clip_polygon, temp_buffer1, temp_buffer2):
     """
     Clip subject_polygon against clip_polygon using Sutherland-Hodgman algorithm.
+    Uses pre-allocated buffers to avoid repeated allocations.
 
     Args:
         subject_polygon: (N, 2) array of vertices
         clip_polygon: (M, 2) array of vertices (must be convex)
+        temp_buffer1: (max_v, 2) temporary buffer
+        temp_buffer2: (max_v, 2) temporary buffer
 
     Returns:
-        (K, 2) array of vertices of the intersection polygon
+        tuple(np.ndarray, int): (buffer, length) of the intersection polygon vertices
     """
-    output_list = subject_polygon.copy()
+    # Initialize output list from subject_polygon
+    n_subj = subject_polygon.shape[0]
+    for i in range(n_subj):
+        temp_buffer1[i] = subject_polygon[i]
+    output_len = n_subj
+    current_out = temp_buffer1
+    current_in = temp_buffer2
 
     # Iterate over each edge of the clip polygon
     for i in range(clip_polygon.shape[0]):
+        # Swap buffers
+        if i % 2 == 0:
+            current_in = temp_buffer1
+            current_out = temp_buffer2
+        else:
+            current_in = temp_buffer2
+            current_out = temp_buffer1
+
+        input_len = output_len
+        if input_len == 0:
+            return current_out, 0
+
         # Define the clip edge
         c1 = clip_polygon[i]
         c2 = clip_polygon[(i + 1) % clip_polygon.shape[0]]
 
-        input_list = output_list
-        output_list_len = 0
+        output_len = 0
+        s = current_in[input_len - 1]
 
-        # We need a temporary buffer because we can't dynamic append in nopython mode easily
-        # Max vertices usually < N+M. Let's preallocate safe buffer.
-        # For grids, cells are quads (4), intersection usually max 8-10 vertices.
-        temp_output = np.zeros((20, 2), dtype=subject_polygon.dtype)
-
-        if len(input_list) == 0:
-            break
-
-        s = input_list[-1]
-
-        for j in range(len(input_list)):
-            e = input_list[j]
+        for j in range(input_len):
+            e = current_in[j]
 
             if is_inside(c1, c2, e):
                 if not is_inside(c1, c2, s):
                     inter = intersection(c1, c2, s, e)
                     if inter is not None:
-                        temp_output[output_list_len] = inter
-                        output_list_len += 1
-                temp_output[output_list_len] = e
-                output_list_len += 1
+                        current_out[output_len] = inter
+                        output_len += 1
+                current_out[output_len] = e
+                output_len += 1
             elif is_inside(c1, c2, s):
                 inter = intersection(c1, c2, s, e)
                 if inter is not None:
-                    temp_output[output_list_len] = inter
-                    output_list_len += 1
+                    current_out[output_len] = inter
+                    output_len += 1
 
             s = e
 
-        output_list = temp_output[:output_list_len].copy()
-
-    return output_list
+    return current_out, output_len
 
 
 @jit(nopython=True, nogil=True)
-def calculate_overlap_area(source_cell, target_cell):
+def calculate_overlap_area(source_cell, target_cell, buffer1, buffer2):
     """
     Calculate the intersection area between two quadrilateral cells.
 
     Args:
         source_cell: (4, 2) vertices
         target_cell: (4, 2) vertices
+        buffer1: (max_v, 2) temporary buffer
+        buffer2: (max_v, 2) temporary buffer
 
     Returns:
         float: Intersection area
     """
-    clipped_poly = clip_polygon(source_cell, target_cell)
-    if len(clipped_poly) < 3:
+    clipped_poly, length = clip_polygon(source_cell, target_cell, buffer1, buffer2)
+    if length < 3:
         return 0.0
-    return polygon_area(clipped_poly)
+    return polygon_area(clipped_poly[:length])
 
 
 @jit(nopython=True, nogil=True, parallel=True)
@@ -181,10 +192,21 @@ def compute_conservative_weights(
     # Return 1D flattened arrays with counts to save memory
     # We first compute counts in a parallel loop, then allocate, then fill
 
-    # Pass 1: Count overlaps per target
+    # Max candidates per target to use for caching weights to avoid second pass
+    # of expensive clipping algorithm.
+    max_candidates_total = candidate_indices.shape[1]
+
+    # Cache for weights found in first pass
+    # (n_targets, max_candidates)
+    cached_weights = np.zeros((n_targets, max_candidates_total), dtype=np.float64)
     overlap_counts = np.zeros(n_targets, dtype=np.int32)
 
+    # Pass 1: Compute weights and count overlaps per target
     for t_idx in prange(n_targets):
+        # Thread-local buffers
+        buf1 = np.zeros((20, 2), dtype=source_vertices.dtype)
+        buf2 = np.zeros((20, 2), dtype=source_vertices.dtype)
+
         t_poly = target_vertices[t_idx]
         t_area = polygon_area(t_poly)
 
@@ -199,16 +221,15 @@ def compute_conservative_weights(
                 break
 
             s_poly = source_vertices[s_idx]
-            overlap = calculate_overlap_area(s_poly, t_poly)
+            overlap = calculate_overlap_area(s_poly, t_poly, buf1, buf2)
 
             if overlap > 1e-12:
+                weight = overlap / t_area
+                cached_weights[t_idx, k] = weight
                 overlap_counts[t_idx] += 1
 
     # Compute offsets for flattened arrays
     offsets = np.zeros(n_targets + 1, dtype=np.int32)
-    # Numba doesn't support cumsum well on arrays in nopython mode sometimes, but let's try manual loop or objmode
-    # For parallel safety we need prefix sum. Sequential prefix sum is fast enough for 1D array.
-
     total_overlaps = 0
     for i in range(n_targets):
         offsets[i] = total_overlaps
@@ -220,7 +241,7 @@ def compute_conservative_weights(
     out_weights = np.zeros(total_overlaps, dtype=np.float64)
     out_target_indices = np.zeros(total_overlaps, dtype=np.int32)
 
-    # Pass 2: Fill arrays
+    # Pass 2: Fill arrays from cache
     for t_idx in prange(n_targets):
         count = overlap_counts[t_idx]
         if count == 0:
@@ -228,25 +249,17 @@ def compute_conservative_weights(
 
         start_idx = offsets[t_idx]
         current_idx = start_idx
-
-        t_poly = target_vertices[t_idx]
-        t_area = polygon_area(t_poly)
-
         n_candidates = candidate_counts[t_idx]
 
         for k in range(n_candidates):
-            s_idx = candidate_indices[t_idx, k]
-            if s_idx == -1:
-                break
-
-            s_poly = source_vertices[s_idx]
-            overlap = calculate_overlap_area(s_poly, t_poly)
-
-            if overlap > 1e-12:
-                weight = overlap / t_area
+            weight = cached_weights[t_idx, k]
+            if weight > 0:
+                s_idx = candidate_indices[t_idx, k]
                 out_source_indices[current_idx] = s_idx
                 out_weights[current_idx] = weight
                 out_target_indices[current_idx] = t_idx
                 current_idx += 1
+                if current_idx - start_idx == count:
+                    break
 
     return out_source_indices, out_weights, out_target_indices

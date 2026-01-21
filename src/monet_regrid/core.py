@@ -737,9 +737,23 @@ class CurvilinearRegridder(BaseRegridder):
 
         # 1. Try to find coordinates using cf-xarray (standard-compliant)
         try:
-            lat_coord, lon_coord = data.cf["latitude"], data.cf["longitude"]
-            return xr.Dataset(coords={lat_coord.name: lat_coord, lon_coord.name: lon_coord})
-        except (KeyError, AttributeError):
+            # We want to keep the original coordinate DataArrays to preserve attributes
+            lat_name, lon_name = identify_cf_coordinates(data)
+            lat_coord, lon_coord = data[lat_name], data[lon_name]
+
+            # Also identify any associated bounds to support conservative regridding
+            coords = {lat_name: lat_coord, lon_name: lon_coord}
+            for name in [lat_name, lon_name]:
+                coord_obj = data[name]
+                bounds_name = coord_obj.attrs.get("bounds")
+                if bounds_name:
+                    if bounds_name in data.coords:
+                        coords[bounds_name] = data.coords[bounds_name]
+                    elif bounds_name in data:
+                        coords[bounds_name] = data[bounds_name]
+
+            return xr.Dataset(coords=coords)
+        except (KeyError, AttributeError, ValueError):
             pass  # Fallback to name-based search
 
         # 2. Fallback to name-based search

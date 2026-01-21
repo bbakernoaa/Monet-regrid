@@ -773,6 +773,7 @@ def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = No
 
     This key is based on the coordinates and dimensions, making it suitable for
     caching operations that depend on the grid structure rather than the data values.
+    It uses a sampling strategy for large coordinates to avoid breaking laziness.
 
     Args:
         data: The xarray DataArray or Dataset.
@@ -781,11 +782,35 @@ def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = No
     Returns:
         A hashable tuple that serves as a cache key.
     """
-    # Create a hashable representation of the coordinates
-    # Includes name, shape, dtype, and the raw values as bytes
-    coords_key = frozenset((name, coord.shape, coord.dtype, coord.values.tobytes()) for name, coord in data.coords.items())
+    coord_infos = []
+    for name, coord in data.coords.items():
+        # For small coordinates, using tobytes() is safe and very accurate
+        # For large coordinates, it triggers computation and is slow
+        if coord.size < 1000:
+            coord_val = coord.values.tobytes()
+        else:
+            # Use sampling for large coordinates to maintain laziness
+            # We take a few points from the start, middle, and end
+            n = coord.size
+            if coord.chunks is not None:
+                # If dask-backed, use a strategy that doesn't trigger full compute
+                indices = [0, n // 2, n - 1]
+                sample = []
+                # Flatten the data array to 1D for consistent indexing
+                flat_coord = coord.data.ravel()
+                for idx in indices:
+                    # Use a small slice and compute only that
+                    sample.append(float(flat_coord[idx : idx + 1].compute()[0]))
+                coord_val = tuple(sample)
+            else:
+                # If numpy-backed, we can sample easily
+                flat_vals = coord.values.ravel()
+                indices = [0, n // 4, n // 2, 3 * n // 4, n - 1]
+                coord_val = tuple(float(flat_vals[idx]) for idx in indices)
 
-    # The dimensions are also important
+        coord_infos.append((name, coord.shape, coord.dtype, coord_val))
+
+    coords_key = frozenset(coord_infos)
     dims_key = tuple(sorted(data.dims))
 
     return (coords_key, dims_key, time_dim)
