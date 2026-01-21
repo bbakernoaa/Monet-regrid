@@ -65,6 +65,7 @@ try:
         apply_weights_linear,
         apply_weights_nearest,
         apply_weights_structured,
+        compute_linear_weights_grid,
         compute_structured_weights,
     )
 
@@ -96,5 +97,6 @@ __all__ = [
     "apply_weights_structured",
     "cKDTree",
     "compute_conservative_weights",
+    "compute_linear_weights_grid",
     "compute_structured_weights",
 ]

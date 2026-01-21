@@ -254,6 +254,127 @@ def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
     return u, v
 
 
+@jit(nopython=True, nogil=True)
+def _det3x3(a, b, c):
+    """Determinant of 3x3 matrix formed by 3 vectors (scalar triple product)."""
+    return a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])
+
+
+@jit(nopython=True, nogil=True, parallel=True)
+def compute_linear_weights_grid(
+    target_points,
+    source_points,
+    nearest_indices,
+    source_shape,
+):
+    """
+    Compute linear interpolation weights using grid-based search.
+
+    Splits each quad into 2 triangles and uses 3D barycentric weights for
+    accurate surface interpolation on a sphere.
+
+    Parameters
+    ----------
+    target_points : np.ndarray
+        Array of 3D target points (n_targets, 3).
+    source_points : np.ndarray
+        Flattened array of 3D source points (n_source, 3).
+    nearest_indices : np.ndarray
+        Indices of nearest source neighbors for each target point (n_targets,).
+    source_shape : tuple[int, int]
+        Original shape of the source grid (ny, nx).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+        Indices, weights, and valid mask.
+    """
+    n_targets = target_points.shape[0]
+    ny, nx = source_shape
+
+    out_indices = np.full((n_targets, 4), -1, dtype=np.int32)
+    out_weights = np.zeros((n_targets, 4), dtype=np.float64)
+    out_valid = np.zeros(n_targets, dtype=np.bool_)
+
+    for k in prange(n_targets):
+        nearest_idx = nearest_indices[k]
+        j_n = nearest_idx // nx
+        i_n = nearest_idx % nx
+
+        p = target_points[k]
+        best_sum_pos_w = -1.0
+        best_indices = np.array([-1, -1, -1])
+        best_weights = np.array([0.0, 0.0, 0.0])
+
+        # Search neighborhood
+        for dj in range(-1, 1):
+            for di in range(-1, 1):
+                j = j_n + dj
+                i = i_n + di
+
+                if j < 0 or j >= ny - 1 or i < 0 or i >= nx - 1:
+                    continue
+
+                # Quad indices: (j,i), (j,i+1), (j+1,i+1), (j+1,i)
+                idx0 = j * nx + i
+                idx1 = j * nx + i + 1
+                idx2 = (j + 1) * nx + i + 1
+                idx3 = (j + 1) * nx + i
+
+                # Split into 2 triangles: (0,1,2) and (0,2,3)
+                for t_idxs in [(idx0, idx1, idx2), (idx0, idx2, idx3)]:
+                    v0 = source_points[t_idxs[0]]
+                    v1 = source_points[t_idxs[1]]
+                    v2 = source_points[t_idxs[2]]
+
+                    # Compute barycentric weights for P in tetrahedron O-V0-V1-V2
+                    # using scalar triple products
+                    det_total = _det3x3(v0, v1, v2)
+                    if abs(det_total) < 1e-15:
+                        continue
+
+                    w0 = _det3x3(p, v1, v2) / det_total
+                    w1 = _det3x3(v0, p, v2) / det_total
+                    w2 = _det3x3(v0, v1, p) / det_total
+                    w3 = 1.0 - (w0 + w1 + w2)  # Weight for Earth center
+
+                    # Point is inside if all surface weights >= 0
+                    # w3 is for Earth center and should be near 0 for surface points
+                    # (slightly negative since surface is above the flat triangle)
+                    if w0 >= -1e-9 and w1 >= -1e-9 and w2 >= -1e-9 and w3 >= -0.1:
+                        sum_surface = w0 + w1 + w2
+                        out_indices[k, 0] = t_idxs[0]
+                        out_indices[k, 1] = t_idxs[1]
+                        out_indices[k, 2] = t_idxs[2]
+                        out_weights[k, 0] = w0 / sum_surface
+                        out_weights[k, 1] = w1 / sum_surface
+                        out_weights[k, 2] = w2 / sum_surface
+                        out_valid[k] = True
+                        best_sum_pos_w = 2.0  # Force exit
+                        break
+
+                    # If not strictly inside, keep track of "best" candidate
+                    min_w = min(w0, w1, w2, w3)
+                    if min_w > best_sum_pos_w:
+                        best_sum_pos_w = min_w
+                        best_indices = np.array([t_idxs[0], t_idxs[1], t_idxs[2]])
+                        sum_surface = w0 + w1 + w2
+                        best_weights = np.array([w0 / sum_surface, w1 / sum_surface, w2 / sum_surface])
+
+                if best_sum_pos_w >= 2.0:
+                    break
+            if best_sum_pos_w >= 2.0:
+                break
+
+        # If no triangle strictly contained the point, use the best candidate if it's close enough
+        if not out_valid[k] and best_sum_pos_w > -1e-5:
+            out_indices[k, 0:3] = best_indices
+            out_weights[k, 0:3] = best_weights
+            out_valid[k] = True
+
+    return out_indices, out_weights, out_valid
+
+
 @jit(nopython=True, nogil=True, parallel=True)
 def compute_structured_weights(
     target_points,  # (n_targets, 3) or (n_targets, 2)
