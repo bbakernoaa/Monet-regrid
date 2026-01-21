@@ -29,7 +29,7 @@ URLs updated, and documentation adapted for new branding.
 from __future__ import annotations
 
 import hashlib
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pyproj
