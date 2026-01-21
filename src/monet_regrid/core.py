@@ -738,7 +738,7 @@ class CurvilinearRegridder(BaseRegridder):
         # 1. Try to find coordinates using cf-xarray (standard-compliant)
         try:
             lat_coord, lon_coord = data.cf["latitude"], data.cf["longitude"]
-            return xr.Dataset({lat_coord.name: lat_coord, lon_coord.name: lon_coord})
+            return xr.Dataset(coords={lat_coord.name: lat_coord, lon_coord.name: lon_coord})
         except (KeyError, AttributeError):
             pass  # Fallback to name-based search
 
@@ -747,7 +747,7 @@ class CurvilinearRegridder(BaseRegridder):
         lon_names = [name for name in data.coords if "lon" in str(name).lower()]
         if lat_names and lon_names:
             lat_name, lon_name = lat_names[0], lon_names[0]
-            return xr.Dataset({lat_name: data[lat_name], lon_name: data[lon_name]})
+            return xr.Dataset(coords={lat_name: data[lat_name], lon_name: data[lon_name]})
 
         # 3. If no coordinates found, generate a lazy grid from dimensions
         if len(data.dims) < 2:
