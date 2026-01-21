@@ -558,11 +558,6 @@ class CurvilinearInterpolator:
             if dim in self.target_grid.coords:
                 result.coords[dim] = self.target_grid.coords[dim]
 
-        # Update history attribute for provenance
-        history_message = f"Interpolated using CurvilinearInterpolator with method='{self.method}'"
-        existing_history = result.attrs.get("history", "")
-        result.attrs["history"] = f"{existing_history}\n{history_message}" if existing_history else history_message
-
         return result  # type: ignore[no-any-return]
 
     def _interpolate_dataset(self, dataset: xr.Dataset) -> xr.Dataset:
