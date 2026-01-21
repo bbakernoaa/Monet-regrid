@@ -29,10 +29,16 @@ URLs updated, and documentation adapted for new branding.
 from __future__ import annotations
 
 import hashlib
-import pickle
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyproj
+
+try:
+    import dask.array as da
+except ImportError:
+    da = None  # type: ignore
+
 from scipy.spatial.distance import pdist  # type: ignore
 
 
@@ -53,8 +59,12 @@ class CoordinateTransformer:
         self._max_cache_size = 100  # Maximum number of cached transformations
 
     def transform_coordinates(
-        self, lon: np.ndarray, lat: np.ndarray, height: np.ndarray | None = None, use_cache: bool = True
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        self,
+        lon: Any,
+        lat: Any,
+        height: Any | None = None,
+        use_cache: bool = True,
+    ) -> tuple[Any, Any, Any]:
         """Transform coordinates from geographic to 3D geocentric.
 
         Args:
@@ -66,6 +76,39 @@ class CoordinateTransformer:
         Returns:
             Tuple of (x, y, z) coordinates in target CRS
         """
+        # Handle Dask arrays lazily
+        if da is not None:
+            if isinstance(lon, da.Array) or isinstance(lat, da.Array) or isinstance(height, da.Array):
+                return self._transform_coordinates_dask(lon, lat, height)
+
+        # Create cache key based on input coordinates before flattening/asarray
+        cache_key = None
+        if use_cache:
+            # Use a fast cache key based on object ID, shape, and dtype
+            # This avoids expensive tobytes() and hashing for large arrays
+            # We also include a small sample of the data for better collision resistance
+            try:
+                # Get a small sample of the data for the hash
+                n = lon.size
+                indices = [0, n // 4, n // 2, 3 * n // 4, n - 1] if n > 5 else range(n)
+                sample = []
+                lon_flat_view = lon.ravel()
+                lat_flat_view = lat.ravel()
+                height_flat_view = height.ravel() if height is not None else None
+                for idx in indices:
+                    sample.append(float(lon_flat_view[idx]))
+                    sample.append(float(lat_flat_view[idx]))
+                    if height_flat_view is not None:
+                        sample.append(float(height_flat_view[idx]))
+
+                key_data = (id(lon), id(lat), id(height), lon.shape, lon.dtype, tuple(sample))
+                cache_key = hashlib.md5(str(key_data).encode()).hexdigest()  # noqa: S324
+
+                if cache_key in self._cache:
+                    return self._cache[cache_key]
+            except (AttributeError, TypeError, IndexError):
+                pass
+
         # Flatten arrays for consistent processing
         lon_flat = np.asarray(lon).flatten()
         lat_flat = np.asarray(lat).flatten()
@@ -74,16 +117,6 @@ class CoordinateTransformer:
             height_flat = np.zeros_like(lon_flat)
         else:
             height_flat = np.asarray(height).flatten()
-
-        # Create cache key based on input coordinates
-        cache_key = None
-        if use_cache:
-            # Use hash of coordinate values as cache key (for approximate matches)
-            coords_tuple = (lon_flat.tobytes(), lat_flat.tobytes(), height_flat.tobytes())
-            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()  # noqa: S324
-
-            if cache_key in self._cache:
-                return self._cache[cache_key]
 
         # Perform transformation
         x, y, z = self.transformer.transform(lon_flat, lat_flat, height_flat)
@@ -106,8 +139,12 @@ class CoordinateTransformer:
         return x, y, z
 
     def inverse_transform_coordinates(
-        self, x: np.ndarray, y: np.ndarray, z: np.ndarray, use_cache: bool = True
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        self,
+        x: Any,
+        y: Any,
+        z: Any,
+        use_cache: bool = True,
+    ) -> tuple[Any, Any, Any]:
         """Transform coordinates from 3D geocentric back to geographic.
 
         Args:
@@ -119,19 +156,38 @@ class CoordinateTransformer:
         Returns:
             Tuple of (lon, lat, height) coordinates in source CRS
         """
-        # Flatten arrays for consistent processing
-        x_flat = np.asarray(x).flatten()
-        y_flat = np.asarray(y).flatten()
-        z_flat = np.asarray(z).flatten()
+        # Handle Dask arrays lazily
+        if da is not None:
+            if isinstance(x, da.Array) or isinstance(y, da.Array) or isinstance(z, da.Array):
+                return self._inverse_transform_coordinates_dask(x, y, z)
 
         # Create cache key based on input coordinates
         cache_key = None
         if use_cache:
-            coords_tuple = (x_flat.tobytes(), y_flat.tobytes(), z_flat.tobytes())
-            cache_key = hashlib.md5(pickle.dumps(coords_tuple)).hexdigest()  # noqa: S324
+            try:
+                n = x.size
+                indices = [0, n // 4, n // 2, 3 * n // 4, n - 1] if n > 5 else range(n)
+                sample = []
+                x_flat_view = x.ravel()
+                y_flat_view = y.ravel()
+                z_flat_view = z.ravel()
+                for idx in indices:
+                    sample.append(float(x_flat_view[idx]))
+                    sample.append(float(y_flat_view[idx]))
+                    sample.append(float(z_flat_view[idx]))
 
-            if cache_key in self._cache:
-                return self._cache[cache_key]
+                key_data = (id(x), id(y), id(z), x.shape, x.dtype, tuple(sample))
+                cache_key = hashlib.md5(str(key_data).encode()).hexdigest()  # noqa: S324
+
+                if cache_key in self._cache:
+                    return self._cache[cache_key]
+            except (AttributeError, TypeError, IndexError):
+                pass
+
+        # Flatten arrays for consistent processing
+        x_flat = np.asarray(x).flatten()
+        y_flat = np.asarray(y).flatten()
+        z_flat = np.asarray(z).flatten()
 
         # Perform inverse transformation
         lon, lat, height = self.transformer.transform(x_flat, y_flat, z_flat, direction="INVERSE")
@@ -205,6 +261,96 @@ class CoordinateTransformer:
     def get_cache_stats(self) -> dict:
         """Get cache statistics."""
         return {"size": len(self._cache), "max_size": self._max_cache_size}
+
+    def _transform_coordinates_dask(
+        self,
+        lon: Any,
+        lat: Any,
+        height: Any | None = None,
+    ) -> tuple[Any, Any, Any]:
+        """Lazy Dask implementation of transform_coordinates.
+
+        Parameters
+        ----------
+        lon : dask.array.Array
+            Longitude array.
+        lat : dask.array.Array
+            Latitude array.
+        height : dask.array.Array, optional
+            Height array.
+
+        Returns
+        -------
+        tuple[dask.array.Array, dask.array.Array, dask.array.Array]
+            X, Y, Z coordinates.
+        """
+        if height is None:
+            height = da.zeros_like(lon)
+
+        # Ensure all arrays have the same chunking
+        lat = da.rechunk(lat, chunks=lon.chunks)
+        height = da.rechunk(height, chunks=lon.chunks)
+
+        def _transform_block(lon_b, lat_b, height_b):
+            x, y, z = self.transformer.transform(lon_b, lat_b, height_b)
+            # Combine into a single array for dask.map_blocks (which expects one output per block)
+            return np.stack([x, y, z])
+
+        # We want to return 3 separate dask arrays.
+        # Use map_blocks with a new dimension for the 3 components.
+        combined = da.map_blocks(
+            _transform_block,
+            lon,
+            lat,
+            height,
+            dtype=lon.dtype,
+            new_axis=0,
+            chunks=(3, *lon.chunks),
+        )
+
+        return combined[0], combined[1], combined[2]
+
+    def _inverse_transform_coordinates_dask(
+        self,
+        x: Any,
+        y: Any,
+        z: Any,
+    ) -> tuple[Any, Any, Any]:
+        """Lazy Dask implementation of inverse_transform_coordinates.
+
+        Parameters
+        ----------
+        x : dask.array.Array
+            X coordinate.
+        y : dask.array.Array
+            Y coordinate.
+        z : dask.array.Array
+            Z coordinate.
+
+        Returns
+        -------
+        tuple[dask.array.Array, dask.array.Array, dask.array.Array]
+            Longitude, Latitude, Height coordinates.
+        """
+        # Ensure all arrays have the same chunking
+        y = da.rechunk(y, chunks=x.chunks)
+        z = da.rechunk(z, chunks=x.chunks)
+
+        def _inverse_transform_block(x_b, y_b, z_b):
+            lon, lat, h = self.transformer.transform(x_b, y_b, z_b, direction="INVERSE")
+            return np.stack([lon, lat, h])
+
+        combined = da.map_blocks(
+            _inverse_transform_block,
+            x,
+            y,
+            z,
+            dtype=x.dtype,
+            new_axis=0,
+            chunks=(3, *x.chunks),
+        )
+
+        return combined[0], combined[1], combined[2]
 
 
 # Pre-configured transformer instance for common use cases

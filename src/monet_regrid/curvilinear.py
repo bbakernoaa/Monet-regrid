@@ -455,7 +455,12 @@ class CurvilinearInterpolator:
             )
         else:
             # Standard interpolation
-            self.interpolation_engine.build_structures(self.source_points_3d_np, self.target_points_3d_np, self.radius_of_influence)
+            self.interpolation_engine.build_structures(
+                self.source_points_3d_np,
+                self.target_points_3d_np,
+                self.radius_of_influence,
+                source_shape=self.source_shape,  # type: ignore[arg-type]
+            )
 
     def __call__(self, data: xr.DataArray | xr.Dataset) -> xr.DataArray | xr.Dataset:
         """Apply interpolation to data.
@@ -553,9 +558,10 @@ class CurvilinearInterpolator:
             if dim in self.target_grid.coords:
                 result.coords[dim] = self.target_grid.coords[dim]
 
-        # DEBUG
-        if not result.attrs:
-            pass
+        # Update history attribute for provenance
+        history_message = f"Interpolated using CurvilinearInterpolator with method='{self.method}'"
+        existing_history = result.attrs.get("history", "")
+        result.attrs["history"] = f"{existing_history}\n{history_message}" if existing_history else history_message
 
         return result  # type: ignore[no-any-return]
 
