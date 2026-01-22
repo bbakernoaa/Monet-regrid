@@ -11,7 +11,7 @@ repos:
     hooks:
     -   id: pytest
         name: pytest
-        entry: pytest
+        entry: pytest tests/
         language: system
         types: [python]
         exclude: ^(backup|docs)/
