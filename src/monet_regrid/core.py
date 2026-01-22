@@ -243,15 +243,20 @@ class RectilinearRegridder(BaseRegridder):
         Parameters
         ----------
         source_data : xr.DataArray | xr.Dataset | None
-            The source data to be regridded.
+            The source data to be regridded. If None, a data-agnostic regridder
+            is created which can be applied to data later.
         target_grid : xr.Dataset
             The target grid specification.
         method : str, optional
-            Interpolation method. Defaults to "linear".
+            Interpolation method to use. Supported methods include:
+            'linear', 'nearest', 'cubic', 'bilinear', and 'conservative'.
+            Defaults to "linear".
         time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
+            Name of the time dimension, if present. This dimension is ignored
+            during regridding. Defaults to "time".
         **kwargs : Any
-            Additional method-specific arguments.
+            Additional keyword arguments passed to the underlying interpolation
+            or regridding function.
         """
         self.method = method
         self.time_dim = time_dim
@@ -563,13 +568,16 @@ class CurvilinearRegridder(BaseRegridder):
         Parameters
         ----------
         source_data : xr.DataArray | xr.Dataset | None
-            The source data to be regridded.
+            The source data to be regridded. If None, a data-agnostic regridder
+            is created which can be applied to data later.
         target_grid : xr.Dataset
             The target grid specification.
         method : str, optional
-            Interpolation method. Defaults to "linear".
+            Interpolation method to use. Supported methods are 'linear' and
+            'nearest'. Defaults to "linear".
         **kwargs : Any
-            Additional method-specific arguments.
+            Additional keyword arguments passed to the underlying
+            :class:`~monet_regrid.curvilinear.CurvilinearInterpolator`.
         """
         self.method = method
         self.method_kwargs = kwargs
