@@ -72,12 +72,10 @@ def _check_and_raise_on_non_finite(
     lons: np.ndarray | da.Array,
 ) -> None:
     """Check for non-finite values and raise a detailed ValueError.
-
     This function inspects the transformed 3D coordinates (x, y, z) for any
     non-finite values (NaN, inf). It handles both NumPy and Dask arrays by
     branching its logic. If non-finite values are found, it raises a
     `ValueError` with the coordinates of the first few problematic points.
-
     Parameters
     ----------
     x : np.ndarray | da.Array
@@ -90,7 +88,6 @@ def _check_and_raise_on_non_finite(
         The original latitude values, used for error reporting.
     lons : np.ndarray | da.Array
         The original longitude values, used for error reporting.
-
     Raises
     ------
     ValueError
@@ -218,7 +215,7 @@ class CurvilinearInterpolator:
             if not hasattr(self, "_triangle_centroids"):
                 # Get the triangles (simplices) and compute centroids
                 simplices = self.triangles
-                self._triangle_centroids = np.mean(self.source_points_3d[simplices], axis=1)
+                self._triangle_centroids = np.mean(self.source_points_3d_np[simplices], axis=1)
             return self._triangle_centroids  # type: ignore
         msg = f"'{self.__class__.__name__}' object has no attribute 'triangle_centroids'"
         raise AttributeError(msg)
@@ -402,11 +399,13 @@ class CurvilinearInterpolator:
             method=self.method, spherical=self.spherical, fill_method=self.fill_method, extrapolate=self.extrapolate
         )
 
+    def _precompute_interpolation_weights(self) -> None:
+        """Precompute interpolation weights for build-once/apply-many pattern."""
         # SciPy-based interpolation engines require numpy arrays, so we compute them
         # only when needed. This preserves lazy evaluation for coordinate transformations
         # while ensuring compatibility with the underlying interpolation libraries.
-        source_points_3d_np = self.source_points_3d.compute()
-        target_points_3d_np = self.target_points_3d.compute()
+        self.source_points_3d_np = self.source_points_3d.compute()
+        self.target_points_3d_np = self.target_points_3d.compute()
 
         if self.method == "conservative":
             # Extract boundaries (code omitted for brevity, same as previous)
@@ -440,8 +439,8 @@ class CurvilinearInterpolator:
             target_vertices = get_bounds(self.target_grid, self.target_lat_name, self.target_lon_name)
 
             self.interpolation_engine.build_conservative_structures(
-                source_points_3d_np,
-                target_points_3d_np,
+                self.source_points_3d_np,
+                self.target_points_3d_np,
                 source_vertices,
                 target_vertices,
                 radius_of_influence=self.radius_of_influence,
@@ -449,19 +448,19 @@ class CurvilinearInterpolator:
         elif self.method in ["bilinear", "cubic"]:
             # Structured interpolation requires source shape
             self.interpolation_engine.build_structures(
-                source_points_3d_np,
-                target_points_3d_np,
+                self.source_points_3d_np,
+                self.target_points_3d_np,
                 self.radius_of_influence,
                 source_shape=self.source_shape,  # type: ignore[arg-type]
             )
         else:
             # Standard interpolation
-            self.interpolation_engine.build_structures(source_points_3d_np, target_points_3d_np, self.radius_of_influence)
-
-    def _precompute_interpolation_weights(self) -> None:
-        """Precompute interpolation weights for build-once/apply-many pattern."""
-        # The interpolation engine already precomputes weights during build_structures
-        pass
+            self.interpolation_engine.build_structures(
+                self.source_points_3d_np,
+                self.target_points_3d_np,
+                self.radius_of_influence,
+                source_shape=self.source_shape,  # type: ignore[arg-type]
+            )
 
     def __call__(self, data: xr.DataArray | xr.Dataset) -> xr.DataArray | xr.Dataset:
         """Apply interpolation to data.
@@ -558,10 +557,6 @@ class CurvilinearInterpolator:
         for dim in target_dims:
             if dim in self.target_grid.coords:
                 result.coords[dim] = self.target_grid.coords[dim]
-
-        # DEBUG
-        if not result.attrs:
-            pass
 
         return result  # type: ignore[no-any-return]
 

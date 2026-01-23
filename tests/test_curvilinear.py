@@ -421,3 +421,42 @@ def test_curvilinear_regridder_lazy_coordinate_generation():
 
     np.testing.assert_allclose(computed_lat, expected_lat_2d)
     np.testing.assert_allclose(computed_lon, expected_lon_2d)
+
+
+def test_curvilinear_interpolator_precomputation():
+    """Test that the interpolator precomputes NumPy arrays correctly."""
+    # 1. Create Dask-backed source and target grids
+    source_x_da, source_y_da = da.meshgrid(da.arange(5, chunks=2), da.arange(6, chunks=2))
+    source_lat_da = 30 + 0.5 * source_x_da + 0.1 * source_y_da
+    source_lon_da = -100 + 0.3 * source_x_da + 0.2 * source_y_da
+
+    target_x_da, target_y_da = da.meshgrid(da.linspace(0, 4, 3, chunks=2), da.linspace(0, 5, 4, chunks=2))
+    target_lat_da = 30 + 0.5 * target_x_da + 0.1 * target_y_da
+    target_lon_da = -100 + 0.3 * target_x_da + 0.2 * target_y_da
+
+    source_grid = xr.Dataset({"lat": (["y", "x"], source_lat_da), "lon": (["y", "x"], source_lon_da)})
+    target_grid = xr.Dataset({"lat": (["y_target", "x_target"], target_lat_da), "lon": (["y_target", "x_target"], target_lon_da)})
+
+    # 2. Manually create an instance of the interpolator
+    # We need to import it first
+    from monet_regrid.curvilinear import CurvilinearInterpolator
+
+    interpolator = CurvilinearInterpolator(
+        source_grid=source_grid,
+        target_grid=target_grid,
+        source_lat_name="lat",
+        source_lon_name="lon",
+        target_lat_name="lat",
+        target_lon_name="lon",
+        method="linear",
+    )
+
+    # 3. Assert that the `_np` arrays exist and are NumPy arrays
+    assert hasattr(interpolator, "source_points_3d_np")
+    assert hasattr(interpolator, "target_points_3d_np")
+    assert isinstance(interpolator.source_points_3d_np, np.ndarray)
+    assert isinstance(interpolator.target_points_3d_np, np.ndarray)
+
+    # 4. Assert that the original Dask arrays still exist
+    assert isinstance(interpolator.source_points_3d, da.Array)
+    assert isinstance(interpolator.target_points_3d, da.Array)

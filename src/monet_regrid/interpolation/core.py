@@ -19,9 +19,9 @@ from monet_regrid.interpolation.base import (
     apply_weights_structured,
     cKDTree,
     compute_conservative_weights,
+    compute_linear_weights_grid,
     compute_structured_weights,
 )
-from monet_regrid.interpolation.utils import _compute_barycentric_weights_3d
 
 
 class InterpolationEngine:
@@ -82,7 +82,7 @@ class InterpolationEngine:
         if self.method == "nearest":
             self._build_nearest_neighbour(source_points_3d, target_points_3d, radius_of_influence)
         elif self.method == "linear":
-            self._build_linear_interpolation(source_points_3d, target_points_3d, radius_of_influence)
+            self._build_linear_interpolation(source_points_3d, target_points_3d, radius_of_influence, source_shape)
         elif self.method in ["bilinear", "cubic"]:
             if source_shape is None:
                 msg = f"Method '{self.method}' requires source_shape to be provided."
@@ -208,7 +208,12 @@ class InterpolationEngine:
         # For nearest neighbor, we just need to query the tree
         # Find nearest source point for each target point
         if self.source_kdtree is not None:
-            distances, indices = self.source_kdtree.query(target_points_3d)
+            # Use parallel query if supported (SciPy 1.6+)
+            try:
+                distances, indices = self.source_kdtree.query(target_points_3d, workers=-1)
+            except TypeError:
+                # Fallback for older SciPy or pykdtree adapter
+                distances, indices = self.source_kdtree.query(target_points_3d)
 
             self.source_indices = indices
             self.distances = distances
@@ -222,9 +227,19 @@ class InterpolationEngine:
             pass
 
     def _build_linear_interpolation(
-        self, source_points_3d: np.ndarray, target_points_3d: np.ndarray, radius_of_influence: float | None = None
+        self,
+        source_points_3d: np.ndarray,
+        target_points_3d: np.ndarray,
+        radius_of_influence: float | None = None,
+        source_shape: tuple[int, int] | None = None,
     ) -> None:
-        """Build Delaunay triangulation and interpolation structures for linear interpolation."""
+        """Build interpolation structures for linear interpolation."""
+        # If we have a grid structure, use the faster grid-based linear interpolation
+        if source_shape is not None and HAS_NUMBA:
+            self._build_linear_interpolation_grid(source_points_3d, target_points_3d, source_shape, radius_of_influence)
+            return
+
+        # Fallback to Delaunay for unstructured or non-Numba cases
         # Delaunay requires at least N+1 points in N dimensions. For 3D, we need at least 4 points.
         if len(source_points_3d) < 4:
             self.method = "nearest"
@@ -258,6 +273,65 @@ class InterpolationEngine:
 
         # Precompute barycentric coordinates for target points
         self._precompute_barycentric_weights(target_points_3d, source_points_3d)
+
+    def _build_linear_interpolation_grid(
+        self,
+        source_points_3d: np.ndarray,
+        target_points_3d: np.ndarray,
+        source_shape: tuple[int, int],
+        radius_of_influence: float | None = None,
+    ) -> None:
+        """Build structures for grid-based linear interpolation."""
+        # 1. Build KDTree on source points
+        # Use parallel construction if supported
+        try:
+            self.source_kdtree = cKDTree(source_points_3d, workers=-1)  # type: ignore[call-overload]
+        except TypeError:
+            self.source_kdtree = cKDTree(source_points_3d)
+
+        # 2. Find nearest neighbor for each target point
+        try:
+            _, nearest_indices = self.source_kdtree.query(target_points_3d, k=1, workers=-1)
+        except TypeError:
+            _, nearest_indices = self.source_kdtree.query(target_points_3d, k=1)
+        nearest_indices = nearest_indices.astype(np.int32)
+
+        # 3. Compute weights using Numba kernel
+        res_indices, res_weights, valid_points = compute_linear_weights_grid(
+            target_points_3d, source_points_3d, nearest_indices, source_shape
+        )
+
+        # 4. Handle points outside the grid or those that failed grid search
+        # Fallback to nearest neighbor for those if requested
+        if not np.all(valid_points):
+            not_found_indices = np.where(~valid_points)[0]
+            if self.fill_method == "nearest" or radius_of_influence is not None:
+                try:
+                    distances, fallback_idxs = self.source_kdtree.query(target_points_3d[not_found_indices], workers=-1)
+                except TypeError:
+                    distances, fallback_idxs = self.source_kdtree.query(target_points_3d[not_found_indices])
+
+                for i, idx in enumerate(not_found_indices):
+                    if self.fill_method == "nearest" or (radius_of_influence is not None and distances[i] < radius_of_influence):
+                        res_indices[idx, 0] = fallback_idxs[i]
+                        res_weights[idx, 0] = 1.0
+                        res_indices[idx, 1:] = -1
+                        res_weights[idx, 1:] = 0.0
+                        valid_points[idx] = True
+
+        self.precomputed_weights = {
+            "simplex_indices": np.zeros(len(target_points_3d), dtype=np.int32),  # Dummy for compatibility
+            "barycentric_weights": res_weights,
+            "valid_points": valid_points,
+            "fallback_indices": res_indices[:, 0],  # Use first vertex as fallback if needed
+            "type": "linear",
+        }
+        # In this mode, simplex_indices is not used for Delaunay simplices, but we need
+        # to satisfy the apply_weights_linear kernel which uses simplex_vertices[simplex_idx].
+        # We'll adapt it by creating a dummy simplex_vertices.
+        self._simplex_vertices_cache = res_indices.astype(np.int32)
+        # Set simplex_indices to be the row index in res_indices
+        self.precomputed_weights["simplex_indices"] = np.arange(len(target_points_3d), dtype=np.int32)
 
     def _precompute_barycentric_weights(self, target_points_3d: np.ndarray, source_points_3d: np.ndarray) -> None:
         """Precompute barycentric weights for all target points."""
@@ -322,38 +396,68 @@ class InterpolationEngine:
                     # Use scaled points for weight computation to ensure validity
                     points_to_use[original_indices] = scaled_points[found_in_retry]
 
-        # For each target point, compute barycentric weights
-        # Note: This loop is still Python but it runs only once during setup
-        for target_idx, _ in enumerate(points_to_use):
-            simplex_idx = simplex_indices[target_idx]
+        # Vectorized weight computation
+        valid_simplex_mask = simplex_indices != -1
+        if np.any(valid_simplex_mask):
+            valid_indices = np.where(valid_simplex_mask)[0]
+            valid_simplex_indices = simplex_indices[valid_indices]
 
-            if simplex_idx != -1:
-                # Point is inside a tetrahedron
-                simplex_vertices = source_points_3d[self.triangles.simplices[simplex_idx]]
+            # Get vertices for all valid target points
+            vertices_indices = self.triangles.simplices[valid_simplex_indices]
+            vertices = source_points_3d[vertices_indices]
 
-                # CRITICAL FIX: Use the original target point for weight calculation,
-                # even if a scaled point was used to find the simplex. This avoids
-                # numerical errors from the scaling hack.
-                original_target_point = target_points_3d[target_idx]
-                weights = _compute_barycentric_weights_3d(original_target_point, simplex_vertices)
+            # Construct A matrices: (N_valid_targets, 4, 4)
+            # a_i = [ [v0_x, v1_x, v2_x, v3_x],
+            #         [v0_y, v1_y, v2_y, v3_y],
+            #         [v0_z, v1_z, v2_z, v3_z],
+            #         [1,    1,    1,    1   ] ]
+            a_batch = np.ones((len(valid_indices), 4, 4), dtype=np.float64)
+            a_batch[:, :3, :] = vertices.transpose(0, 2, 1)
 
-                if weights is not None:
-                    self.precomputed_weights["simplex_indices"][target_idx] = simplex_idx
-                    self.precomputed_weights["barycentric_weights"][target_idx] = weights
-                    self.precomputed_weights["valid_points"][target_idx] = True
-            else:
-                # Point is outside the convex hull (even after scaling attempts)
-                original_point = target_points_3d[target_idx]
-                if self.fill_method == "nearest" and self.source_kdtree is not None:
-                    self.precomputed_weights["simplex_indices"][target_idx] = -2  # Mark as nearest neighbor fallback
-                    self.precomputed_weights["valid_points"][target_idx] = True
-                    # Fallback index is already precomputed
-                elif self.distance_threshold is not None and self.source_kdtree is not None:
-                    distance, nearest_idx = self.source_kdtree.query(original_point)
-                    if distance < self.distance_threshold:
-                        self.precomputed_weights["simplex_indices"][target_idx] = -2
-                        self.precomputed_weights["valid_points"][target_idx] = True
-                        self.precomputed_weights["fallback_indices"][target_idx] = nearest_idx
+            # Construct b vectors: (N_valid_targets, 4)
+            # b_i = [p_x, p_y, p_z, 1]
+            b_batch = np.ones((len(valid_indices), 4), dtype=np.float64)
+            b_batch[:, :3] = target_points_3d[valid_indices]
+
+            # Solve A * weights = b for all points at once using vectorized np.linalg.solve
+            try:
+                # weights has shape (N_valid_targets, 4)
+                # We need to add an axis to b for vectorized solve: (N, 4, 1)
+                weights = np.linalg.solve(a_batch, b_batch[..., np.newaxis]).squeeze(-1)
+
+                self.precomputed_weights["simplex_indices"][valid_indices] = valid_simplex_indices
+                self.precomputed_weights["barycentric_weights"][valid_indices] = weights
+                self.precomputed_weights["valid_points"][valid_indices] = True
+            except np.linalg.LinAlgError:
+                # Fallback to loop if batch solve fails (singular matrices)
+                for i, idx in enumerate(valid_indices):
+                    try:
+                        w = np.linalg.solve(a_batch[i], b_batch[i])
+                        self.precomputed_weights["simplex_indices"][idx] = valid_simplex_indices[i]
+                        self.precomputed_weights["barycentric_weights"][idx] = w
+                        self.precomputed_weights["valid_points"][idx] = True
+                    except np.linalg.LinAlgError:
+                        pass
+
+        # Handle points outside the convex hull
+        not_found_mask = simplex_indices == -1
+        if np.any(not_found_mask):
+            not_found_indices = np.where(not_found_mask)[0]
+            original_points = target_points_3d[not_found_indices]
+
+            if self.fill_method == "nearest" and self.source_kdtree is not None:
+                self.precomputed_weights["simplex_indices"][not_found_indices] = -2
+                self.precomputed_weights["valid_points"][not_found_indices] = True
+            elif self.distance_threshold is not None and self.source_kdtree is not None:
+                # Vectorized KDTree query
+                distances, nearest_idxs = self.source_kdtree.query(original_points, workers=-1)
+                within_threshold = distances < self.distance_threshold
+
+                if np.any(within_threshold):
+                    actual_indices = not_found_indices[within_threshold]
+                    self.precomputed_weights["simplex_indices"][actual_indices] = -2
+                    self.precomputed_weights["valid_points"][actual_indices] = True
+                    self.precomputed_weights["fallback_indices"][actual_indices] = nearest_idxs[within_threshold]
 
     def interpolate(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
         """Apply interpolation to source data.
@@ -569,7 +673,7 @@ class InterpolationEngine:
 
         # Check for Numba acceleration availability
         if HAS_NUMBA:
-            if self.triangles is None:
+            if self.triangles is None and self._simplex_vertices_cache is None:
                 # Should not happen if build_structures succeeded
                 msg = "Triangulation not initialized"
                 raise RuntimeError(msg)

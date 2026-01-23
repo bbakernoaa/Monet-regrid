@@ -710,81 +710,122 @@ class CurvilinearRegridder(BaseRegridder):
         """Create a grid specification from source data, with lazy-loading support.
 
         This method extracts or generates coordinate information from the source data.
-        It first attempts to find explicit CF-compliant latitude/longitude coordinates.
-        If none are found, it falls back to a name-based search. If that also fails,
-        it generates a lazy coordinate grid based on the spatial dimensions of the data.
-        This fallback is Dask-aware, using `dask.array.linspace` for Dask-backed
-        data to prevent eager loading.
+        It follows a three-step fallback process:
+        1.  **CF-Compliant Coordinates:** Attempts to find latitude/longitude
+            coordinates that adhere to Climate and Forecast (CF) conventions
+            using `cf-xarray`. Also includes any associated coordinate bounds.
+        2.  **Name-Based Search:** If CF-compliant coordinates are not found, it
+            searches for coordinate names containing 'lat' or 'lon' (case-insensitive).
+        3.  **Lazy Generation:** If no coordinates are found, it generates a
+            lazy coordinate grid based on the spatial dimensions of the data.
+            This fallback is Dask-aware, using `dask.array.linspace` for
+            Dask-backed data to prevent eager loading.
 
         Parameters
         ----------
         source_data : xr.DataArray | xr.Dataset | None, optional
-            The source data to process. If `None`, the data from initialization is used.
+            The source data from which to extract or generate coordinates.
+            If `None`, the `source_data` from the class constructor is used.
+            Defaults to None.
 
         Returns
         -------
         xr.Dataset
-            A dataset containing the latitude and longitude coordinates.
+            A dataset containing the latitude and longitude coordinates. This
+            dataset may also include coordinate bounds if they were found.
 
         Raises
         ------
         ValueError
-            If the source data has fewer than two dimensions for fallback generation.
+            If the source data has fewer than two dimensions when the lazy
+            generation fallback is triggered.
+
+        Examples
+        --------
+        Create a lazy Dask-backed DataArray without explicit coordinates and
+        see the generated grid.
+
+        >>> import dask.array as da
+        >>> import xarray as xr
+        >>> from monet_regrid.core import CurvilinearRegridder
+        >>>
+        >>> data = da.random.random((10, 20), chunks=(5, 5))
+        >>> source_da = xr.DataArray(data, dims=["y", "x"])
+        >>>
+        >>> class MockRegridder(CurvilinearRegridder):
+        ...     def __init__(self):
+        ...         self.source_data = source_da
+        ...
+        >>> regridder = MockRegridder()
+        >>> source_grid = regridder._create_source_grid_from_data(source_da)
+        >>>
+        >>> "latitude" in source_grid.coords
+        True
+        >>> "longitude" in source_grid.coords
+        True
+        >>> isinstance(source_grid["latitude"].data, da.Array)
+        True
+        >>> source_grid["latitude"].shape
+        (10, 20)
+        >>> source_grid["latitude"].dims
+        ('y', 'x')
         """
         data = source_data if source_data is not None else self.source_data
 
-        # 1. Attempt to find coordinates using cf-xarray
+        # 1. Try to find coordinates using cf-xarray (standard-compliant)
         try:
-            lat_coord = data.cf["latitude"]
-            lon_coord = data.cf["longitude"]
-            return xr.Dataset({lat_coord.name: lat_coord, lon_coord.name: lon_coord})
-        except (KeyError, AttributeError):
-            pass  # Fallback to next method
+            # We want to keep the original coordinate DataArrays to preserve attributes
+            lat_name, lon_name = identify_cf_coordinates(data)
+            lat_coord, lon_coord = data[lat_name], data[lon_name]
 
-        # 2. Fallback to manual name-based search
-        lat_coords = [name for name in data.coords if "lat" in str(name).lower() or "latitude" in str(name).lower()]
-        lon_coords = [name for name in data.coords if "lon" in str(name).lower() or "longitude" in str(name).lower()]
+            # Also identify any associated bounds to support conservative regridding
+            coords = {lat_name: lat_coord, lon_name: lon_coord}
+            for name in [lat_name, lon_name]:
+                coord_obj = data[name]
+                bounds_name = coord_obj.attrs.get("bounds")
+                if bounds_name:
+                    if bounds_name in data.coords:
+                        coords[bounds_name] = data.coords[bounds_name]
+                    elif bounds_name in data:
+                        coords[bounds_name] = data[bounds_name]
 
-        if lat_coords and lon_coords:
-            lat_name = lat_coords[0]
-            lon_name = lon_coords[0]
-            return xr.Dataset({lat_name: data[lat_name], lon_name: data[lon_name]})
+            return xr.Dataset(coords=coords)
+        except (KeyError, AttributeError, ValueError):
+            pass  # Fallback to name-based search
 
-        # 3. Fallback to generating lazy coordinates from dimensions
-        if len(data.dims) >= 2:
-            dims = tuple(data.dims)
-            y_dim, x_dim = dims[-2], dims[-1]
-            y_size, x_size = data.sizes[y_dim], data.sizes[x_dim]
+        # 2. Fallback to name-based search
+        lat_names = [name for name in data.coords if "lat" in str(name).lower()]
+        lon_names = [name for name in data.coords if "lon" in str(name).lower()]
+        if lat_names and lon_names:
+            lat_name, lon_name = lat_names[0], lon_names[0]
+            return xr.Dataset(coords={lat_name: data[lat_name], lon_name: data[lon_name]})
 
-            # Check if the data is Dask-backed
-            if isinstance(data, xr.DataArray):
-                is_dask = data.chunks is not None
-            else:  # It's a Dataset
-                is_dask = bool(data.chunks)
+        # 3. If no coordinates found, generate a lazy grid from dimensions
+        if len(data.dims) < 2:
+            msg = "Source data must have at least 2 dimensions for curvilinear regridding."
+            raise ValueError(msg)
 
-            if is_dask:
-                dim_list = list(data.dims)
-                y_chunks = data.chunks[dim_list.index(y_dim)]
-                x_chunks = data.chunks[dim_list.index(x_dim)]
-                y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
-                x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
-            else:
-                y_coords_array = np.linspace(0, y_size - 1, y_size)
-                x_coords_array = np.linspace(0, x_size - 1, x_size)
+        y_dim, x_dim = data.dims[-2], data.dims[-1]
+        y_size, x_size = data.sizes[y_dim], data.sizes[x_dim]
 
-            # Wrap in DataArrays for broadcasting
-            y_coords = xr.DataArray(y_coords_array, dims=[y_dim])
-            x_coords = xr.DataArray(x_coords_array, dims=[x_dim])
+        # Use Dask for lazy coordinate generation if input is Dask-backed
+        if isinstance(data.data, da.Array):
+            y_chunks = data.chunks[list(data.dims).index(y_dim)]
+            x_chunks = data.chunks[list(data.dims).index(x_dim)]
+            y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
+            x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
+        else:
+            y_coords_array = np.linspace(0, y_size - 1, y_size)
+            x_coords_array = np.linspace(0, x_size - 1, x_size)
 
-            # Create lazy 2D coordinate grids
-            lat_2d, lon_2d = xr.broadcast(y_coords, x_coords)
+        # Wrap in DataArrays for broadcasting
+        y_coords = xr.DataArray(y_coords_array, dims=[y_dim])
+        x_coords = xr.DataArray(x_coords_array, dims=[x_dim])
 
-            # Create a coordinate dataset, ensuring data remains lazy
-            return xr.Dataset(coords={"latitude": lat_2d, "longitude": lon_2d})
+        # Create lazy 2D coordinate grids
+        lat_2d, lon_2d = xr.broadcast(y_coords, x_coords)
 
-        # 4. If all else fails, raise an error
-        msg = "Source data must have at least 2 dimensions for curvilinear regridding"
-        raise ValueError(msg)
+        return xr.Dataset(coords={"latitude": lat_2d, "longitude": lon_2d})
 
     def _get_config(self) -> dict[str, Any]:
         """Get the configuration of the regridder for serialization.
