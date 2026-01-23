@@ -567,13 +567,16 @@ class CurvilinearRegridder(BaseRegridder):
         target_grid : xr.Dataset
             The target grid specification.
         method : str, optional
-            Interpolation method. Defaults to "linear".
+            Interpolation method, by default "linear". Supported methods
+            include "linear" and "nearest".
         **kwargs : Any
-            Additional method-specific arguments.
+            Additional keyword arguments passed to the underlying
+            interpolation function.
         """
         self.method = method
         self.method_kwargs = kwargs
-        # Unpack nested method_kwargs that can occur during deserialization
+        # Unpack nested method_kwargs, which can occur during deserialization
+        # from a saved regridder configuration file. See `BaseRegridder.from_file`.
         if "method_kwargs" in self.method_kwargs and len(self.method_kwargs) == 1:
             self.method_kwargs = self.method_kwargs["method_kwargs"]
         self._interpolator_cache: dict[tuple, CurvilinearInterpolator] = {}

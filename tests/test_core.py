@@ -103,3 +103,37 @@ def test_create_source_grid_from_data_insufficient_dims():
 
     with pytest.raises(ValueError, match="Source data must have at least 2 dimensions"):
         regridder._create_source_grid_from_data(source_da)
+
+
+def test_curvilinear_regridder_initialization():
+    """Test the initialization of the CurvilinearRegridder.
+    This test verifies that the `method` and `method_kwargs` attributes
+    are correctly assigned during the instantiation of the regridder.
+    """
+    # 1. Create dummy source and target grids for initialization
+    source_da = xr.DataArray(
+        np.random.rand(2, 3),
+        dims=["y", "x"],
+        coords={"latitude": (["y", "x"], np.random.rand(2, 3)), "longitude": (["y", "x"], np.random.rand(2, 3))},
+    )
+    target_ds = xr.Dataset(coords={"latitude": (("y_new",), [1.0]), "longitude": (("x_new",), [1.0])})
+
+    # 2. Test initialization with a specific method and kwargs
+    regridder_custom = CurvilinearRegridder(
+        source_data=source_da,
+        target_grid=target_ds,
+        method="nearest",
+        k=3,
+        radius_of_influence=50000,
+    )
+    assert regridder_custom.method == "nearest"
+    expected_kwargs = {"k": 3, "radius_of_influence": 50000}
+    assert regridder_custom.method_kwargs == expected_kwargs
+
+    # 3. Test initialization with default parameters
+    regridder_default = CurvilinearRegridder(
+        source_data=source_da,
+        target_grid=target_ds,
+    )
+    assert regridder_default.method == "linear"
+    assert regridder_default.method_kwargs == {}
