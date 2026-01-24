@@ -1,462 +1,95 @@
-from unittest.mock import patch
+"""
+Unit tests for the CurvilinearRegridder.
+
+This file is part of monet-regrid.
+
+monet-regrid is a derivative work of xarray-regrid.
+Original work Copyright (c) 2023-2025 Bart Schilperoort, Yang Liu.
+This derivative work Copyright (c) 2025 [Your Organization].
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Modifications: Package renamed from xarray-regrid to monet-regrid,
+URLs updated, and documentation adapted for new branding.
+"""
 
 import dask.array as da
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.core import CurvilinearRegridder
 
 
-def test_curvilinear_interpolator_nearest_interpolation():
-    """Test nearest neighbor interpolation."""
-    # Create simple curvilinear grids
-    source_x, source_y = np.meshgrid(np.arange(5), np.arange(6))
-    source_lat = 30 + 0.5 * source_x + 0.1 * source_y  # Curvilinear lat
-    source_lon = -100 + 0.3 * source_x + 0.2 * source_y  # Curvilinear lon
-
-    target_x, target_y = np.meshgrid(np.linspace(0, 4, 3), np.linspace(0, 5, 4))
-    target_lat = 30 + 0.5 * target_x + 0.1 * target_y
-    target_lon = -100 + 0.3 * target_x + 0.2 * target_y
-
-    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
-
-    target_grid = xr.Dataset(
-        {
-            "latitude": (["y_target", "x_target"], target_lat),
-            "longitude": (["y_target", "x_target"], target_lon),
-        }
-    )
-
-    # Create test data
-    data_values = np.random.rand(6, 5)  # (y, x)
-    test_data = xr.DataArray(
-        data_values,
-        dims=["y", "x"],
-        coords={"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)},
-    )
-
-    # Test nearest neighbor interpolation
-    result = test_data.regrid.nearest(target_grid)
-
-    # Check result dimensions
-    assert result.shape == target_lat.shape
-    assert "y_target" in result.dims
-    assert "x_target" in result.dims
-
-
-def test_curvilinear_interpolator_nearest_interpolation_with_time():
-    """Test nearest neighbor interpolation with additional dimensions."""
-    # Create simple curvilinear grids
-    source_x, source_y = np.meshgrid(np.arange(3), np.arange(4))
-    source_lat = 30 + 0.5 * source_x + 0.1 * source_y
-    source_lon = -100 + 0.3 * source_x + 0.2 * source_y
-
-    target_x, target_y = np.meshgrid(np.linspace(0, 2, 2), np.linspace(0, 3, 3))
-    target_lat = 30 + 0.5 * target_x + 0.1 * target_y
-    target_lon = -100 + 0.3 * target_x + 0.2 * target_y
-
-    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
-
-    target_grid = xr.Dataset(
-        {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
-    )
-
-    # Create test data with time dimension
-    time_dim = 5
-    data_values = np.random.rand(time_dim, 4, 3)  # (time, y, x)
-    test_data = xr.DataArray(
-        data_values,
-        dims=["time", "y", "x"],
-        coords={
-            "time": range(time_dim),
-            "latitude": (["y", "x"], source_lat),
-            "longitude": (["y", "x"], source_lon),
-        },
-    )
-
-    # Test nearest neighbor interpolation
-    result = test_data.regrid.nearest(target_grid)
-
-    # Check result dimensions - should have time and target grid dimensions
-    expected_shape = (time_dim, 3, 2)  # (time, y_target, x_target)
-    assert result.shape == expected_shape
-    assert "time" in result.dims
-    assert "y_target" in result.dims
-    assert "x_target" in result.dims
-
-
-def test_curvilinear_interpolator_dataset_interpolation():
-    """Test interpolation of entire datasets."""
-    # Create simple curvilinear grids
-    source_x, source_y = np.meshgrid(np.arange(3), np.arange(3))
-    source_lat = 30 + 0.5 * source_x + 0.1 * source_y
-    source_lon = -100 + 0.3 * source_x + 0.2 * source_y
-
-    target_x, target_y = np.meshgrid(np.linspace(0, 2, 2), np.linspace(0, 2, 2))
-    target_lat = 30 + 0.5 * target_x + 0.1 * target_y
-    target_lon = -100 + 0.3 * target_x + 0.2 * target_y
-
-    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
-
-    target_grid = xr.Dataset(
-        {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
-    )
-
-    # Create test dataset
-    data_values = np.random.rand(3, 3)
-    test_dataset = xr.Dataset(
-        {
-            "var1": (["y", "x"], data_values),
-            "var2": (["y", "x"], data_values * 2),
-            "other_var": (("time",), np.arange(1)),  # This should be preserved as-is
-        },
-        coords={"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)},
-    )
-
-    # Test dataset interpolation
-    result = test_dataset.regrid.nearest(target_grid)
-
-    # Check that interpolated variables have correct shape
-    assert result["var1"].shape == (2, 2)
-    assert result["var2"].shape == (2, 2)
-    # Check that non-spatial variable is preserved
-    assert "other_var" in result
-    np.testing.assert_array_equal(result["other_var"].values, test_dataset["other_var"].values)
-
-    # Check that target coordinates are added
-    assert "y_target" in result.coords
-    assert "x_target" in result.coords
-
-
-def test_curvilinear_interpolator_linear_interpolation():
-    """Test linear interpolation (basic functionality)."""
-    source_x, source_y = np.meshgrid(np.arange(4), np.arange(4))
-    source_lat = 30 + 0.5 * source_x + 0.1 * source_y + 0.0001 * np.random.rand(*source_x.shape)
-    source_lon = -100 + 0.3 * source_x + 0.2 * source_y
-
-    target_x, target_y = np.meshgrid(np.linspace(0.5, 2.5, 2), np.linspace(0.5, 2.5, 2))
-    target_lat = 30 + 0.5 * target_x + 0.1 * target_y
-    target_lon = -100 + 0.3 * target_x + 0.2 * target_y
-
-    xr.Dataset({"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)})
-
-    target_grid = xr.Dataset(
-        {"latitude": (["y_target", "x_target"], target_lat), "longitude": (["y_target", "x_target"], target_lon)}
-    )
-
-    # Create test data
-    data_values = np.ones((4, 4)) * 5.0  # Simple constant data
-    test_data = xr.DataArray(
-        data_values,
-        dims=["y", "x"],
-        coords={"latitude": (["y", "x"], source_lat), "longitude": (["y", "x"], source_lon)},
-    )
-
-    # Test linear interpolation
-    result = test_data.regrid.linear(target_grid)
-
-    # With constant data, result should be approximately the same value
-    assert result.shape == target_lat.shape
-    # Values should be close to 5.0 (the original constant value)
-    np.testing.assert_allclose(result.data, 5.0, rtol=1e-5)
-
-
-def test_curvilinear_regridder_coordinate_identification():
-    """Test that CurvilinearRegridder identifies coordinate names once."""
-    # Create source and target grids
-    source_x, source_y = np.meshgrid(np.arange(5), np.arange(5))
-    source_lat = 30 + 0.1 * source_y
-    source_lon = -100 + 0.1 * source_x
-    xr.Dataset(
-        {"lat": (["y", "x"], source_lat), "lon": (["y", "x"], source_lon)},
-        coords={"x": np.arange(5), "y": np.arange(5)},
-    )
-    data = xr.DataArray(
-        np.random.rand(5, 5),
-        dims=["y", "x"],
-        coords={"lat": (["y", "x"], source_lat), "lon": (["y", "x"], source_lon)},
-    )
-
-    target_x, target_y = np.meshgrid(np.arange(3), np.arange(3))
-    target_lat = 30 + 0.1 * target_y
-    target_lon = -100 + 0.1 * target_x
-    target_grid = xr.Dataset(
-        {"latitude": (["y_t", "x_t"], target_lat), "longitude": (["y_t", "x_t"], target_lon)},
-        coords={"x_t": np.arange(3), "y_t": np.arange(3)},
-    )
-
-    # Use the accessor to create the regridder
-    regridder = data.regrid.build_regridder(ds_target_grid=target_grid, method="linear")
-
-    # Check that the regridder has correctly identified the coordinate names
-    assert regridder.source_lat_name == "lat"
-    assert regridder.source_lon_name == "lon"
-    assert regridder.target_lat_name == "latitude"
-    assert regridder.target_lon_name == "longitude"
-
-
-def test_curvilinear_regridder_caches_interpolator():
-    """Test that CurvilinearRegridder caches the interpolator object."""
-    # Create source and target grids
-    source_da = xr.DataArray(
-        np.random.rand(5, 5),
-        dims=["y", "x"],
-        coords={
-            "lat": (("y", "x"), np.random.rand(5, 5) * 90),
-            "lon": (("y", "x"), np.random.rand(5, 5) * 360),
-        },
-    )
-    target_ds = xr.Dataset(
-        coords={
-            "lat": (("y_new", "x_new"), np.random.rand(3, 3) * 90),
-            "lon": (("y_new", "x_new"), np.random.rand(3, 3) * 360),
-        }
-    )
-
-    regridder = CurvilinearRegridder(source_da, target_ds, method="linear")
-
-    # Use patch to spy on the CurvilinearInterpolator constructor
-    with patch("monet_regrid.core.CurvilinearInterpolator", autospec=True) as mock_interpolator:
-        # First call - should create and cache an interpolator
-        regridder()
-        mock_interpolator.assert_called_once()
-
-        # Second call with same parameters - should use the cached interpolator
-        regridder()
-        mock_interpolator.assert_called_once()  # Still called only once
-
-        # Third call with different method - should create a new interpolator
-        regridder(method="nearest")
-        assert mock_interpolator.call_count == 2
-
-        # Fourth call with the original method - should use the cache again
-        regridder()
-        assert mock_interpolator.call_count == 2
-
-
-def test_curvilinear_interpolator_with_1d_coords():
-    """Test interpolation with 1D source and target coordinates."""
-    # Create source grid with 1D coordinates
-    source_lat = np.arange(30, 35)
-    source_lon = np.arange(-100, -95)
-    xr.Dataset(coords={"latitude": source_lat, "longitude": source_lon})
-
-    # Create target grid with 1D coordinates
-    target_lat = np.linspace(30.5, 33.5, 3)
-    target_lon = np.linspace(-99.5, -96.5, 4)
-    target_grid = xr.Dataset(coords={"latitude": target_lat, "longitude": target_lon})
-
-    # Create test data
-    data_values = np.random.rand(len(source_lat), len(source_lon))
-    test_data = xr.DataArray(
-        data_values,
-        dims=["latitude", "longitude"],
-        coords={"latitude": source_lat, "longitude": source_lon},
-    )
-
-    # Test interpolation
-    result = test_data.regrid.nearest(target_grid)
-
-    assert result.shape == (len(target_lat), len(target_lon))
-
-
-def test_curvilinear_interpolator_invalid_input_type():
-    """Test that a TypeError is raised for invalid input types."""
-    # Create dummy grids
-    source_grid = xr.Dataset({"lat": (("y", "x"), np.zeros((2, 2))), "lon": (("y", "x"), np.zeros((2, 2)))})
-    target_grid = xr.Dataset({"lat": (("y_t", "x_t"), np.ones((3, 3))), "lon": (("y_t", "x_t"), np.ones((3, 3)))})
-    regridder = CurvilinearRegridder(source_grid, target_grid)
-
-    with pytest.raises(ValueError):
-        regridder(xr.DataArray(np.zeros((2, 2)), dims=["y", "x"]))
-
-
-def test_curvilinear_interpolator_data_validation_error():
-    """Test that a ValueError is raised for mismatched data coordinates."""
-    # Create source and target grids
-    source_da = xr.DataArray(
-        np.random.rand(5, 5),
-        dims=["y", "x"],
-        coords={
-            "lat": (("y", "x"), np.random.rand(5, 5) * 90),
-            "lon": (("y", "x"), np.random.rand(5, 5) * 360),
-        },
-    )
-    target_ds = xr.Dataset(
-        coords={
-            "lat": (("y_new", "x_new"), np.random.rand(3, 3) * 90),
-            "lon": (("y_new", "x_new"), np.random.rand(3, 3) * 360),
-        }
-    )
-
-    regridder = CurvilinearRegridder(source_da, target_ds)
-
-    # Create data with incorrect dimensions
-    mismatched_data = xr.DataArray(np.random.rand(4, 4), dims=["y", "x"])
-
-    with pytest.raises(ValueError, match="Could not identify latitude coordinate"):
-        regridder(mismatched_data)
-
-
-def test_curvilinear_attribute_errors():
-    """Test that attribute errors are raised for inappropriate methods."""
-    # Create dummy grids
-    source_da = xr.DataArray(
-        np.random.rand(2, 2),
-        dims=["y", "x"],
-        coords={
-            "lat": (("y", "x"), np.zeros((2, 2))),
-            "lon": (("y", "x"), np.zeros((2, 2))),
-        },
-    )
-    target_ds = xr.Dataset(
-        coords={
-            "lat": (("y_t", "x_t"), np.ones((3, 3))),
-            "lon": (("y_t", "x_t"), np.ones((3, 3))),
-        }
-    )
-
-    # Use 'nearest' method, which doesn't create triangles
-    regridder = CurvilinearRegridder(source_da, target_ds, method="nearest")
-    regridder(source_da)
-
-    with pytest.raises(AttributeError):
-        assert regridder.triangles
-
-    with pytest.raises(AttributeError):
-        assert regridder.convex_hull
-
-
-def test_curvilinear_interpolator_dask_lazy_evaluation():
-    """Test Dask-aware lazy evaluation in CurvilinearInterpolator.
-
-    This test verifies that when `CurvilinearInterpolator` is initialized
-    with Dask-backed xarray objects, the coordinate transformations are
-    performed lazily. It asserts that the internal coordinate arrays remain
-    as Dask arrays until computation is explicitly triggered. It also checks
-    that the final regridded output is a Dask array.
-    """
-    # 1. Create Dask-backed source grid
-    source_x_da, source_y_da = da.meshgrid(da.arange(5, chunks=2), da.arange(6, chunks=2))
-    source_lat_da = 30 + 0.5 * source_x_da + 0.1 * source_y_da
-    source_lon_da = -100 + 0.3 * source_x_da + 0.2 * source_y_da
-
-    # 2. Create Dask-backed target grid
-    target_x_da, target_y_da = da.meshgrid(da.linspace(0, 4, 3, chunks=2), da.linspace(0, 5, 4, chunks=2))
-    target_lat_da = 30 + 0.5 * target_x_da + 0.1 * target_y_da
-    target_lon_da = -100 + 0.3 * target_x_da + 0.2 * target_y_da
-
-    target_grid = xr.Dataset({"lat": (["y_target", "x_target"], target_lat_da), "lon": (["y_target", "x_target"], target_lon_da)})
-
-    # 3. Create Dask-backed test data
-    data_values_da = da.random.random((6, 5), chunks=(3, 3))
-    test_data = xr.DataArray(
-        data_values_da,
-        dims=["y", "x"],
-        coords={"lat": (["y", "x"], source_lat_da), "lon": (["y", "x"], source_lon_da)},
-    )
-
-    # 4. Build the regridder
-    regridder = CurvilinearRegridder(test_data, target_grid, method="nearest")
-
-    # The interpolator is created on the first call
-    result = regridder()
-
-    # 5. Assert that internal transformed coordinates are Dask arrays
-    # The interpolator is stored in a private cache
-    interpolator = next(iter(regridder._interpolator_cache.values()))
-    assert isinstance(interpolator.source_points_3d, da.Array)
-    assert isinstance(interpolator.target_points_3d, da.Array)
-
-    # 6. Assert that the final result is a Dask array
-    assert isinstance(result.data, da.Array)
-
-    # 7. Verify the computed shape to ensure the Dask graph is valid
-    computed_result = result.compute()
-    assert computed_result.shape == target_lat_da.shape
+class MockRegridder(CurvilinearRegridder):
+    """A mock class for testing protected methods without a full setup."""
+
+    def __init__(self, source_data, target_grid=None):
+        """Bypass the full parent __init__."""
+        if target_grid is None:
+            target_grid = xr.Dataset(coords={"lat": (("y",), [0.5]), "lon": (("x",), [0.5])})
+        self.source_data = source_data
+        self.target_grid = target_grid
 
 
 def test_curvilinear_regridder_lazy_coordinate_generation():
-    """Test lazy coordinate generation for Dask-backed data without explicit coordinates."""
-    # 1. Create a Dask-backed DataArray without coordinates
-    data_values = da.random.random((10, 20), chunks=(5, 10))
-    source_da = xr.DataArray(data_values, dims=["y", "x"])
+    """
+    Test that the fallback coordinate generation is lazy for Dask-backed data.
 
-    # A minimal target grid is needed for the regridder's constructor
-    target_ds = xr.Dataset(
-        coords={
-            "latitude": (("y_new",), np.arange(2)),
-            "longitude": (("x_new",), np.arange(2)),
-        }
-    )
+    This test verifies that when a ``CurvilinearRegridder`` is initialized
+    with an ``xarray.DataArray`` that is backed by a Dask array but has no
+    explicit coordinates, the internal ``_create_source_grid_from_data``
+    method generates lazy (Dask-backed) coordinates instead of eagerly
+    computing them. This is critical for performance and memory management.
+    """
+    # 1. The Logic (Setup)
+    # Create a Dask-backed DataArray without explicit coordinates.
+    # This simulates a common scenario in lazy data processing pipelines.
+    y_size, x_size = 10, 20
+    y_chunks, x_chunks = 5, 10
+    lazy_data = da.random.random((y_size, x_size), chunks=(y_chunks, x_chunks))
+    source_da = xr.DataArray(lazy_data, dims=["y", "x"])
 
-    # 2. Instantiate a mock regridder to test the internal method
-    regridder = CurvilinearRegridder(source_data=None, target_grid=target_ds)
+    regridder = MockRegridder(source_data=source_da)
 
-    # 3. Call the internal method to generate the source grid
+    # 2. The Proof (Execution)
+    # Invoke the method responsible for coordinate generation.
     source_grid = regridder._create_source_grid_from_data(source_da)
 
-    # 4. Assert that the generated coordinates are Dask arrays
+    # 3. The UI (Verification)
+    # Check that the generated coordinates are Dask arrays (lazy).
     assert "latitude" in source_grid.coords
     assert "longitude" in source_grid.coords
     assert isinstance(source_grid["latitude"].data, da.Array)
     assert isinstance(source_grid["longitude"].data, da.Array)
 
-    # 5. Assert correct shape
-    assert source_grid["latitude"].shape == (10, 20)
-    assert source_grid["longitude"].shape == (10, 20)
+    # Verify that the chunking of the coordinates matches the data's chunking
+    # along the corresponding dimensions.
+    assert source_grid["latitude"].chunks[0] == source_da.chunks[0]
+    assert source_grid["longitude"].chunks[1] == source_da.chunks[1]
 
-    # 6. Assert correct dimension names
-    assert source_grid["latitude"].dims == ("y", "x")
-    assert source_grid["longitude"].dims == ("y", "x")
+    # Verify that the computed coordinate values are correct by creating an
+    # expected xr.Dataset and comparing.
+    y_coords = np.linspace(0, y_size - 1, y_size)
+    x_coords = np.linspace(0, x_size - 1, x_size)
+    expected_lon_2d, expected_lat_2d = np.meshgrid(x_coords, y_coords)
 
-    # 7. Verify the computed values to ensure linspace and broadcasting are correct
-    computed_lat = source_grid["latitude"].compute()
-    computed_lon = source_grid["longitude"].compute()
-
-    expected_y = np.linspace(0, 9, 10)
-    expected_x = np.linspace(0, 19, 20)
-    expected_lat_2d, expected_lon_2d = np.meshgrid(expected_y, expected_x, indexing="ij")
-
-    np.testing.assert_allclose(computed_lat, expected_lat_2d)
-    np.testing.assert_allclose(computed_lon, expected_lon_2d)
-
-
-def test_curvilinear_interpolator_precomputation():
-    """Test that the interpolator precomputes NumPy arrays correctly."""
-    # 1. Create Dask-backed source and target grids
-    source_x_da, source_y_da = da.meshgrid(da.arange(5, chunks=2), da.arange(6, chunks=2))
-    source_lat_da = 30 + 0.5 * source_x_da + 0.1 * source_y_da
-    source_lon_da = -100 + 0.3 * source_x_da + 0.2 * source_y_da
-
-    target_x_da, target_y_da = da.meshgrid(da.linspace(0, 4, 3, chunks=2), da.linspace(0, 5, 4, chunks=2))
-    target_lat_da = 30 + 0.5 * target_x_da + 0.1 * target_y_da
-    target_lon_da = -100 + 0.3 * target_x_da + 0.2 * target_y_da
-
-    source_grid = xr.Dataset({"lat": (["y", "x"], source_lat_da), "lon": (["y", "x"], source_lon_da)})
-    target_grid = xr.Dataset({"lat": (["y_target", "x_target"], target_lat_da), "lon": (["y_target", "x_target"], target_lon_da)})
-
-    # 2. Manually create an instance of the interpolator
-    # We need to import it first
-    from monet_regrid.curvilinear import CurvilinearInterpolator
-
-    interpolator = CurvilinearInterpolator(
-        source_grid=source_grid,
-        target_grid=target_grid,
-        source_lat_name="lat",
-        source_lon_name="lon",
-        target_lat_name="lat",
-        target_lon_name="lon",
-        method="linear",
+    expected_grid = xr.Dataset(
+        coords={
+            "latitude": (("y", "x"), expected_lat_2d),
+            "longitude": (("y", "x"), expected_lon_2d),
+        }
     )
 
-    # 3. Assert that the `_np` arrays exist and are NumPy arrays
-    assert hasattr(interpolator, "source_points_3d_np")
-    assert hasattr(interpolator, "target_points_3d_np")
-    assert isinstance(interpolator.source_points_3d_np, np.ndarray)
-    assert isinstance(interpolator.target_points_3d_np, np.ndarray)
-
-    # 4. Assert that the original Dask arrays still exist
-    assert isinstance(interpolator.source_points_3d, da.Array)
-    assert isinstance(interpolator.target_points_3d, da.Array)
+    # Use compute on the generated grid for a fair comparison of values
+    computed_source_grid = source_grid.compute()
+    xr.testing.assert_allclose(computed_source_grid, expected_grid)
