@@ -200,7 +200,7 @@ class TestPerformanceBenchmarks:
 
     def test_hybrid_interpolation_performance(self):
         """Compare performance between original (Delaunay) and hybrid (KD-Tree + Numba) linear interpolation."""
-        ny, nx = 200, 240
+        ny, nx = 400, 480
         source_grid, target_grid = self._create_test_grids(ny, nx, grid_type="curvilinear")
         test_data = self._create_test_data(ny, nx)
         test_data = test_data.assign_coords({"latitude": source_grid.latitude, "longitude": source_grid.longitude})
@@ -211,6 +211,8 @@ class TestPerformanceBenchmarks:
         time_original = time.time() - start_time
 
         # Time hybrid linear interpolation by allowing the default structured path
+        # Includes a warm-up run to account for Numba JIT compilation overhead.
+        _ = test_data.regrid.build_regridder(target_grid, method="linear")
         start_time = time.time()
         _regridder_hybrid = test_data.regrid.build_regridder(target_grid, method="linear")
         time_hybrid = time.time() - start_time
