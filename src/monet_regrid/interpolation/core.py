@@ -211,7 +211,7 @@ class InterpolationEngine:
             # Use parallel query if supported (SciPy 1.6+)
             try:
                 distances, indices = self.source_kdtree.query(target_points_3d, workers=-1)
-            except TypeError:
+            except TypeError:  # pragma: no cover
                 # Fallback for older SciPy or pykdtree adapter
                 distances, indices = self.source_kdtree.query(target_points_3d)
 
@@ -292,7 +292,7 @@ class InterpolationEngine:
         # 2. Find nearest neighbor for each target point
         try:
             _, nearest_indices = self.source_kdtree.query(target_points_3d, k=1, workers=-1)
-        except TypeError:
+        except TypeError:  # pragma: no cover
             _, nearest_indices = self.source_kdtree.query(target_points_3d, k=1)
         nearest_indices = nearest_indices.astype(np.int32)
 
@@ -308,7 +308,7 @@ class InterpolationEngine:
             if self.fill_method == "nearest" or radius_of_influence is not None:
                 try:
                     distances, fallback_idxs = self.source_kdtree.query(target_points_3d[not_found_indices], workers=-1)
-                except TypeError:
+                except TypeError:  # pragma: no cover
                     distances, fallback_idxs = self.source_kdtree.query(target_points_3d[not_found_indices])
 
                 for i, idx in enumerate(not_found_indices):
@@ -450,7 +450,10 @@ class InterpolationEngine:
                 self.precomputed_weights["valid_points"][not_found_indices] = True
             elif self.distance_threshold is not None and self.source_kdtree is not None:
                 # Vectorized KDTree query
-                distances, nearest_idxs = self.source_kdtree.query(original_points, workers=-1)
+                try:
+                    distances, nearest_idxs = self.source_kdtree.query(original_points, workers=-1)
+                except TypeError:  # pragma: no cover
+                    distances, nearest_idxs = self.source_kdtree.query(original_points)
                 within_threshold = distances < self.distance_threshold
 
                 if np.any(within_threshold):
