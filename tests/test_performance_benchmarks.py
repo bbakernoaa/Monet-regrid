@@ -197,3 +197,23 @@ class TestPerformanceBenchmarks:
         # Verify both produce valid results
         assert result_nearest.shape == target_grid["latitude"].shape
         assert result_linear.shape == target_grid["latitude"].shape
+
+    def test_hybrid_interpolation_performance(self):
+        """Compare performance between original (Delaunay) and hybrid (KD-Tree + Numba) linear interpolation."""
+        ny, nx = 200, 240
+        source_grid, target_grid = self._create_test_grids(ny, nx, grid_type="curvilinear")
+        test_data = self._create_test_data(ny, nx)
+        test_data = test_data.assign_coords({"latitude": source_grid.latitude, "longitude": source_grid.longitude})
+
+        # Time original linear interpolation (pure Delaunay) by forcing the unstructured path
+        start_time = time.time()
+        _regridder_original = test_data.regrid.build_regridder(target_grid, method="linear", method_kwargs={"source_shape": None})
+        time_original = time.time() - start_time
+
+        # Time hybrid linear interpolation by allowing the default structured path
+        start_time = time.time()
+        _regridder_hybrid = test_data.regrid.build_regridder(target_grid, method="linear")
+        time_hybrid = time.time() - start_time
+
+        # The hybrid method should be significantly faster
+        assert time_hybrid < time_original, f"Hybrid method ({time_hybrid:.2f}s) is not faster than original ({time_original:.2f}s)"

@@ -407,6 +407,71 @@ class CurvilinearInterpolator:
         self.source_points_3d_np = self.source_points_3d.compute()
         self.target_points_3d_np = self.target_points_3d.compute()
 
+        # Hybrid approach for linear interpolation
+        if self.method == "linear":
+            target_lat = self.target_grid[self.target_lat_name].values.flatten()
+            polar_threshold = 85.0
+            is_polar = np.abs(target_lat) >= polar_threshold
+            polar_indices = np.where(is_polar)[0]
+            non_polar_indices = np.where(~is_polar)[0]
+
+            non_polar_weights, polar_weights = {}, {}
+
+            # Process non-polar points with fast grid search engine
+            if len(non_polar_indices) > 0:
+                non_polar_engine = InterpolationEngine(
+                    method="linear",
+                    spherical=self.spherical,
+                    fill_method=self.fill_method,
+                    extrapolate=self.extrapolate,
+                )
+                non_polar_engine.build_structures(
+                    self.source_points_3d_np,
+                    self.target_points_3d_np[non_polar_indices],
+                    self.radius_of_influence,
+                    source_shape=self.source_shape,
+                )
+                non_polar_weights = non_polar_engine.precomputed_weights
+
+            # Process polar points with robust Delaunay triangulation engine
+            if len(polar_indices) > 0:
+                polar_engine = InterpolationEngine(
+                    method="linear",
+                    spherical=self.spherical,
+                    fill_method=self.fill_method,
+                    extrapolate=self.extrapolate,
+                )
+                polar_engine.build_structures(
+                    self.source_points_3d_np,
+                    self.target_points_3d_np[polar_indices],
+                    self.radius_of_influence,
+                )
+                polar_weights = polar_engine.precomputed_weights
+
+            # Merge the results from the two engines
+            if len(polar_indices) > 0 and len(non_polar_indices) > 0:
+                final_weights = {}
+                for key in non_polar_weights:
+                    if isinstance(non_polar_weights[key], np.ndarray):
+                        merged_array = np.empty(
+                            (len(target_lat), *non_polar_weights[key].shape[1:]),
+                            dtype=non_polar_weights[key].dtype,
+                        )
+                        merged_array[non_polar_indices] = non_polar_weights[key]
+                        if key in polar_weights:
+                            merged_array[polar_indices] = polar_weights[key]
+                        else:
+                            merged_array[polar_indices] = np.nan
+                        final_weights[key] = merged_array
+                    else:
+                        final_weights[key] = non_polar_weights[key]
+                self.interpolation_engine.precomputed_weights = final_weights
+
+            elif len(non_polar_indices) > 0:
+                self.interpolation_engine.precomputed_weights = non_polar_weights
+            elif len(polar_indices) > 0:
+                self.interpolation_engine.precomputed_weights = polar_weights
+
         if self.method == "conservative":
             # Extract boundaries (code omitted for brevity, same as previous)
             # Helper to get bounds

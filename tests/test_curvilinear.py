@@ -93,3 +93,125 @@ def test_curvilinear_regridder_lazy_coordinate_generation():
     # Use compute on the generated grid for a fair comparison of values
     computed_source_grid = source_grid.compute()
     xr.testing.assert_allclose(computed_source_grid, expected_grid)
+
+
+def test_curvilinear_regridder_linear_structured_accuracy():
+    """
+    Test the numerical accuracy of the structured linear interpolation.
+
+    This test verifies that the Numba-accelerated grid search for linear
+    interpolation is numerically correct. It uses a known, simple linear
+    function as the ground truth. Linear interpolation of a linear field
+    should be nearly exact.
+    """
+    # 1. The Logic (Setup)
+    # Create a slightly irregular 2D source grid.
+    y_coords = np.linspace(30, 40, 50)
+    x_coords = np.linspace(-120, -110, 100)
+    xx, yy = np.meshgrid(x_coords, y_coords)
+    source_lon_2d = xx + 0.1 * np.sin(np.deg2rad(yy))
+    source_lat_2d = yy + 0.1 * np.sin(np.deg2rad(xx))
+
+    source_ds = xr.Dataset(
+        coords={
+            "latitude": (("y", "x"), source_lat_2d),
+            "longitude": (("y", "x"), source_lon_2d),
+        }
+    )
+
+    # Create source data from a simple analytical function.
+    def analytical_func(lat, lon):
+        """A simple linear function for testing interpolation accuracy."""
+        return 2 * lat + 3 * lon
+
+    source_da = analytical_func(source_ds["latitude"], source_ds["longitude"])
+    source_da.name = "temperature"
+
+    # Create a regular target grid.
+    target_ds = xr.Dataset(
+        coords={
+            "lat": np.linspace(32, 38, 20),
+            "lon": np.linspace(-118, -112, 30),
+        }
+    )
+
+    # 2. The Proof (Execution)
+    # Initialize the regridder, which triggers the Numba-accelerated path.
+    regridder = CurvilinearRegridder(source_ds, target_ds, method="linear")
+
+    # Perform the interpolation.
+    interpolated_da = regridder(source_da)
+
+    # 3. The UI (Verification)
+    # Calculate the expected values on the target grid using the analytical function.
+    expected_lon_2d, expected_lat_2d = np.meshgrid(target_ds["lon"], target_ds["lat"])
+    expected_values = analytical_func(expected_lat_2d, expected_lon_2d)
+    expected_da = xr.DataArray(
+        expected_values,
+        coords={"lat": target_ds["lat"], "lon": target_ds["lon"]},
+        dims=["lat", "lon"],
+        name="temperature",
+    )
+
+    # Assert that the interpolated data is numerically very close to the expected data.
+    # A tight tolerance is used because the interpolation should be nearly exact.
+    xr.testing.assert_allclose(interpolated_da, expected_da, rtol=1e-6)
+
+
+def test_curvilinear_regridder_hybrid_accuracy():
+    """
+    Test the numerical accuracy of the hybrid (polar/non-polar) interpolation.
+
+    This test is critical for verifying that the merge logic for the hybrid
+    interpolation strategy is correct. It creates a target grid that spans
+    the polar boundary (85 degrees latitude), forcing the use of both the fast
+    Numba path and the robust Delaunay fallback path. The final, merged result
+    is then compared against a known analytical function to ensure its
+    numerical integrity.
+    """
+    # 1. The Logic (Setup)
+    # Create a high-latitude source grid.
+    y_coords = np.linspace(80, 90, 20)
+    x_coords = np.linspace(-180, 180, 40)
+    source_lon_2d, source_lat_2d = np.meshgrid(x_coords, y_coords)
+
+    source_ds = xr.Dataset(
+        coords={
+            "latitude": (("y", "x"), source_lat_2d),
+            "longitude": (("y", "x"), source_lon_2d),
+        }
+    )
+
+    # Create source data from a simple analytical function.
+    def analytical_func(lat, lon):
+        """A simple linear function for testing interpolation accuracy."""
+        return 2 * lat + 0.5 * lon
+
+    source_da = analytical_func(source_ds["latitude"], source_ds["longitude"])
+    source_da.name = "polar_temp"
+
+    # Create a target grid that straddles the 85-degree polar threshold.
+    target_lat = np.linspace(84, 86, 10)
+    target_lon = np.linspace(-170, 170, 20)
+    target_ds = xr.Dataset(coords={"lat": target_lat, "lon": target_lon})
+
+    # 2. The Proof (Execution)
+    # Initialize the regridder, which will trigger the hybrid logic.
+    regridder = CurvilinearRegridder(source_ds, target_ds, method="linear")
+    interpolated_da = regridder(source_da)
+
+    # 3. The UI (Verification)
+    # Calculate the expected values on the target grid using the analytical function.
+    expected_lon_2d, expected_lat_2d = np.meshgrid(target_lon, target_lat)
+    expected_values = analytical_func(expected_lat_2d, expected_lon_2d)
+    expected_da = xr.DataArray(
+        expected_values,
+        coords={"lat": target_lat, "lon": target_lon},
+        dims=["lat", "lon"],
+        name="polar_temp",
+    )
+
+    # Assert that the interpolated data is numerically very close to the expected data.
+    # A slightly higher tolerance is used to account for the less precise (but more
+    # robust) Delaunay triangulation used in the polar region fallback.
+    xr.testing.assert_allclose(interpolated_da, expected_da, rtol=1e-2)
