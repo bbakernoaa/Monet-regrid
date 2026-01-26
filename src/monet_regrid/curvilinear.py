@@ -121,17 +121,42 @@ def _check_and_raise_on_non_finite(
 
 
 class CurvilinearInterpolator:
-    """Optimized interpolator for curvilinear grids using 3D coordinate transformations.
+    """Interpolator for curvilinear grids using 3D coordinate transformations.
 
     This class handles interpolation between curvilinear grids by transforming
-    geographic coordinates to 3D geocentric coordinates (EPSG 4979 → 4978) and
-    performing surface-aware interpolation in 3D space.
+    geographic coordinates (latitude, longitude) to a 3D geocentric coordinate
+    system (EPSG:4978). This approach correctly handles grid cells near the
+    poles and across the antimeridian.
 
-    It is designed to be Dask-aware, allowing for lazy evaluation of coordinate
-    transformations on large, out-of-core datasets. The interpolation itself
-    is performed using SciPy, which requires in-memory NumPy arrays, so a
-    `.compute()` call is triggered internally only when building the interpolation
-    structures.
+    The interpolation workflow is designed to be "build-once, apply-many" and
+    is aware of Dask arrays for lazy computation.
+
+    - **Coordinate Transformation**: Source and target grid coordinates are
+      lazily transformed into 3D space using `dask.array`.
+    - **Structure Building**: The core interpolation structures (e.g., KDTree,
+      Delaunay triangulation) are built eagerly using NumPy arrays, as required
+      by SciPy. This is the main computational cost.
+    - **Interpolation**: The pre-computed structures are applied to data
+      variables using `xarray.apply_ufunc`, which preserves Dask laziness.
+
+    Attributes
+    ----------
+    source_grid : xr.Dataset
+        The source grid with 2D latitude/longitude coordinates.
+    target_grid : xr.Dataset
+        The target grid.
+    method : str
+        The interpolation method (e.g., 'linear', 'nearest').
+    spherical : bool
+        Flag indicating if spherical barycentric coordinates are used for linear
+        interpolation.
+    interpolation_engine : InterpolationEngine
+        The underlying engine that stores precomputed weights and performs the
+        interpolation.
+    source_points_3d : dask.array.Array
+        Lazy array of transformed 3D source coordinates.
+    target_points_3d : dask.array.Array
+        Lazy array of transformed 3D target coordinates.
     """
 
     def __init__(
@@ -147,21 +172,42 @@ class CurvilinearInterpolator:
         fill_method: Literal["nan", "nearest"] = "nan",
         extrapolate: bool = False,
         **kwargs: Any,
-    ):
-        """Initialize the optimized curvilinear interpolator.
+    ) -> None:
+        """Initialize the interpolator and precompute interpolation structures.
 
-        Args:
-            source_grid: Source grid specification with 2D coordinates
-            target_grid: Target grid specification with 2D coordinates
-            source_lat_name: Name of the latitude coordinate in the source grid
-            source_lon_name: Name of the longitude coordinate in the source grid
-            target_lat_name: Name of the latitude coordinate in the target grid
-            target_lon_name: Name of the longitude coordinate in the target grid
-            method: Interpolation method ('nearest', 'linear', 'conservative', 'bilinear', 'cubic')
-            spherical: Whether to use spherical barycentrics (True) or planar (False)
-            fill_method: How to handle out-of-domain targets ('nan' or 'nearest')
-            extrapolate: Whether to allow extrapolation beyond source domain
-            **kwargs: Additional method-specific arguments
+        This method sets up the interpolator by transforming coordinates to 3D,
+        building the necessary spatial index (e.g., KDTree or Delaunay
+        triangulation), and pre-computing the interpolation weights.
+
+        Parameters
+        ----------
+        source_grid : xr.Dataset
+            The source grid, which must contain 2D latitude and longitude
+            coordinate variables.
+        target_grid : xr.Dataset
+            The target grid.
+        source_lat_name : str
+            Name of the latitude coordinate in the source grid.
+        source_lon_name : str
+            Name of the longitude coordinate in the source grid.
+        target_lat_name : str
+            Name of the latitude coordinate in the target grid.
+        target_lon_name : str
+            Name of the longitude coordinate in the target grid.
+        method : {'nearest', 'linear', 'conservative', 'bilinear', 'cubic'}, default: 'linear'
+            The interpolation method to use.
+        spherical : bool, default: True
+            Whether to use spherical barycentric coordinates for linear
+            interpolation. If False, planar coordinates are used.
+        fill_method : {'nan', 'nearest'}, default: 'nan'
+            Strategy for handling points in the target grid that are outside
+            the convex hull of the source grid. 'nan' fills with NaN, while
+            'nearest' uses the value of the nearest source point.
+        extrapolate : bool, default: False
+            Whether to allow extrapolation for out-of-domain points.
+        **kwargs
+            Additional method-specific arguments. For example,
+            `radius_of_influence` can be used for nearest-neighbor interpolation.
         """
         self.source_grid = source_grid
         self.target_grid = target_grid
@@ -463,13 +509,35 @@ class CurvilinearInterpolator:
             )
 
     def __call__(self, data: xr.DataArray | xr.Dataset) -> xr.DataArray | xr.Dataset:
-        """Apply interpolation to data.
+        """Apply the precomputed interpolation to a DataArray or Dataset.
 
-        Args:
-            data: Input data with curvilinear coordinates matching source grid
+        This method uses `xarray.apply_ufunc` to apply the interpolation across
+        all variables in a lazy, Dask-aware manner. The core logic is wrapped
+        in `_apply_interpolation_wrapper`.
 
-        Returns:
-            Interpolated data on target grid
+        Parameters
+        ----------
+        data : xr.DataArray or xr.Dataset
+            The input data to be interpolated. Its spatial dimensions must
+            match the source grid used to initialize the interpolator.
+
+        Returns
+        -------
+        xr.DataArray or xr.Dataset
+            The interpolated data on the target grid.
+
+        Raises
+        ------
+        TypeError
+            If the input `data` is not an xarray DataArray or Dataset.
+        ValueError
+            If the coordinates of the input `data` do not match the source grid.
+
+        Notes
+        -----
+        This operation is lazy if the input data is backed by Dask. The actual
+        computation is triggered only when the returned xarray object is
+        explicitly computed (e.g., by calling `.compute()` or `.values`).
         """
         if isinstance(data, xr.DataArray):
             return self._interpolate_dataarray(data)
