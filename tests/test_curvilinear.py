@@ -93,3 +93,50 @@ def test_curvilinear_regridder_lazy_coordinate_generation():
     # Use compute on the generated grid for a fair comparison of values
     computed_source_grid = source_grid.compute()
     xr.testing.assert_allclose(computed_source_grid, expected_grid)
+
+
+def test_curvilinear_regridder_lazy_coordinate_generation_from_numpy():
+    """
+    Test that the fallback coordinate generation is lazy for NumPy-backed data.
+
+    This test ensures that when a ``CurvilinearRegridder`` is initialized
+    with an ``xarray.DataArray`` backed by a NumPy array (eager) but without
+    explicit coordinates, the ``_create_source_grid_from_data`` method still
+    generates lazy Dask-backed coordinates. This confirms that the regridder
+    promotes lazy evaluation even when the input data is in-memory.
+    """
+    # 1. The Logic (Setup)
+    # Create a NumPy-backed DataArray without explicit coordinates.
+    y_size, x_size = 10, 20
+    eager_data = np.random.random((y_size, x_size))
+    source_da = xr.DataArray(eager_data, dims=["y", "x"])
+
+    regridder = MockRegridder(source_data=source_da)
+
+    # 2. The Proof (Execution)
+    # Invoke the method responsible for coordinate generation.
+    source_grid = regridder._create_source_grid_from_data(source_da)
+
+    # 3. The UI (Verification)
+    # Check that the generated coordinates are Dask arrays (lazy), even though
+    # the input was a NumPy array.
+    assert "latitude" in source_grid.coords
+    assert "longitude" in source_grid.coords
+    assert isinstance(source_grid["latitude"].data, da.Array)
+    assert isinstance(source_grid["longitude"].data, da.Array)
+
+    # Verify that the computed coordinate values are correct.
+    y_coords = np.linspace(0, y_size - 1, y_size)
+    x_coords = np.linspace(0, x_size - 1, x_size)
+    expected_lon_2d, expected_lat_2d = np.meshgrid(x_coords, y_coords)
+
+    expected_grid = xr.Dataset(
+        coords={
+            "latitude": (("y", "x"), expected_lat_2d),
+            "longitude": (("y", "x"), expected_lon_2d),
+        }
+    )
+
+    # Use compute on the generated grid for a fair comparison of values
+    computed_source_grid = source_grid.compute()
+    xr.testing.assert_allclose(computed_source_grid, expected_grid)
