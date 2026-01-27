@@ -785,15 +785,17 @@ class CurvilinearRegridder(BaseRegridder):
         y_dim, x_dim = data.dims[-2], data.dims[-1]
         y_size, x_size = data.sizes[y_dim], data.sizes[x_dim]
 
-        # Use Dask for lazy coordinate generation if input is Dask-backed
+        # Use Dask for lazy coordinate generation, regardless of input backing
         if isinstance(data.data, da.Array):
             y_chunks = data.chunks[list(data.dims).index(y_dim)]
             x_chunks = data.chunks[list(data.dims).index(x_dim)]
-            y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
-            x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
         else:
-            y_coords_array = np.linspace(0, y_size - 1, y_size)
-            x_coords_array = np.linspace(0, x_size - 1, x_size)
+            # For NumPy arrays, we can let Dask choose the chunking
+            y_chunks = "auto"
+            x_chunks = "auto"
+
+        y_coords_array = da.linspace(0, y_size - 1, y_size, chunks=y_chunks)
+        x_coords_array = da.linspace(0, x_size - 1, x_size, chunks=x_chunks)
 
         # Wrap in DataArrays for broadcasting
         y_coords = xr.DataArray(y_coords_array, dims=[y_dim])
