@@ -95,6 +95,58 @@ def test_curvilinear_regridder_lazy_coordinate_generation():
     xr.testing.assert_allclose(computed_source_grid, expected_grid)
 
 
+def test_curvilinear_interpolator_is_lazy():
+    """
+    Test that the CurvilinearInterpolator is lazy and only builds when called.
+    """
+    from monet_regrid.curvilinear import CurvilinearInterpolator
+
+    # 1. The Logic (Setup)
+    # Create Dask-backed source and target grids.
+    source_da = xr.DataArray(
+        da.random.random((10, 20), chunks=(5, 10)),
+        dims=["y", "x"],
+        coords={
+            "lat": (("y", "x"), np.random.uniform(0, 10, size=(10, 20))),
+            "lon": (("y", "x"), np.random.uniform(0, 20, size=(10, 20))),
+        },
+    )
+    target_ds = xr.Dataset(
+        coords={
+            "lat": (("y_new",), np.arange(0.5, 10, 2)),
+            "lon": (("x_new",), np.arange(0.5, 20, 2)),
+        }
+    )
+
+    # 2. The Proof (Execution & Verification)
+    # Instantiate the interpolator.
+    interpolator = CurvilinearInterpolator(
+        source_grid=source_da.to_dataset(name="data"),
+        target_grid=target_ds,
+        source_lat_name="lat",
+        source_lon_name="lon",
+        target_lat_name="lat",
+        target_lon_name="lon",
+        method="linear",
+    )
+
+    # Assert that the engine has not been built yet.
+    assert interpolator.interpolation_engine is None
+    assert not interpolator._is_built
+
+    # Call the interpolator to trigger the build.
+    regridded_da = interpolator(source_da)
+
+    # Assert that the engine has now been built.
+    assert interpolator.interpolation_engine is not None
+    assert interpolator._is_built
+
+    # 3. The UI (Verification)
+    # Check that the output is a Dask-backed DataArray and has the correct shape.
+    assert isinstance(regridded_da.data, da.Array)
+    assert regridded_da.shape == (5, 10)
+
+
 def test_curvilinear_regridder_lazy_coordinate_generation_from_numpy():
     """
     Test that the fallback coordinate generation is lazy for NumPy-backed data.
