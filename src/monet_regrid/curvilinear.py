@@ -221,6 +221,8 @@ class CurvilinearInterpolator:
         self.extrapolate = extrapolate
         self.radius_of_influence = kwargs.get("radius_of_influence", 1e6)
         self.method_kwargs = {k: v for k, v in kwargs.items() if k != "radius_of_influence"}
+        self.interpolation_engine: InterpolationEngine | None = None
+        self._is_built = False
 
         # Initialize coordinate transformation
         self.coordinate_transformer = CoordinateTransformer("EPSG:4979", "EPSG:4978")
@@ -231,142 +233,209 @@ class CurvilinearInterpolator:
             # For now, let's implement a placeholder or a check
             pass
 
-        # Transform coordinates to 3D
+        # Transform coordinates to 3D, but lazily
         self._transform_coordinates()
+
+    def _build(self) -> None:
+        """Build the interpolation engine and precompute weights.
+        This method is called just-in-time to perform the expensive,
+        eager computations required to set up the interpolation structures
+        (e.g., KDTree, Delaunay triangulation). It ensures that these
+        operations are only performed when data is actually being regridded,
+        not during the initial setup of the regridder object.
+        """
+        if self._is_built:
+            return
 
         # Build interpolation structures
         self._build_interpolation_structures()
 
         # Precompute interpolation weights for build-once/apply-many pattern
         self._precompute_interpolation_weights()
+        self._is_built = True
 
     @property
     def triangles(self) -> np.ndarray:
-        """Access triangulation simplices from the interpolation engine."""
-        if hasattr(self.interpolation_engine, "triangles") and self.interpolation_engine.triangles is not None:
-            # For 3D Delaunay, simplices are tetrahedra with 4 vertices
-            return self.interpolation_engine.triangles.simplices  # type: ignore
-        msg = f"'{self.__class__.__name__}' object has no attribute 'triangles'"
+        """The simplices of the Delaunay triangulation.
+        Returns
+        -------
+        np.ndarray
+            An array of shape (n_triangles, 4) where each row represents a
+            tetrahedron in the 3D triangulation. The values are indices into
+            the `source_points_3d_np` array.
+        """
+        if self.interpolation_engine and self.interpolation_engine.triangles:
+            return self.interpolation_engine.triangles.simplices
+        msg = "Triangulation is not available for the current interpolation method."
         raise AttributeError(msg)
 
     @property
     def triangle_centroids(self) -> np.ndarray:
-        """Access triangle centroids from the interpolation engine."""
-        if (
-            self.method == "linear"
-            and hasattr(self.interpolation_engine, "triangles")
-            and self.interpolation_engine.triangles is not None
-        ):
-            # Compute centroids of triangles for efficient lookup
-            if not hasattr(self, "_triangle_centroids"):
-                # Get the triangles (simplices) and compute centroids
-                simplices = self.triangles
-                self._triangle_centroids = np.mean(self.source_points_3d_np[simplices], axis=1)
-            return self._triangle_centroids  # type: ignore
-        msg = f"'{self.__class__.__name__}' object has no attribute 'triangle_centroids'"
-        raise AttributeError(msg)
+        """The centroids of the Delaunay triangulation simplices.
+        Returns
+        -------
+        np.ndarray
+            An array of shape (n_triangles, 3) containing the 3D coordinates
+            of the centroid of each tetrahedron.
+        """
+        if not hasattr(self, "_triangle_centroids"):
+            self._triangle_centroids = np.mean(self.source_points_3d_np[self.triangles], axis=1)
+        return self._triangle_centroids
 
     @property
     def triangle_centroid_kdtree(self) -> cKDTree:
-        """Access KDTree of triangle centroids from the interpolation engine."""
-        if self.method == "linear" and hasattr(self.interpolation_engine, "target_kdtree"):
-            # Create a KDTree for triangle centroids if needed
-            if not hasattr(self, "_triangle_centroid_kdtree"):
-                self._triangle_centroid_kdtree = cKDTree(self.triangle_centroids)
-            return self._triangle_centroid_kdtree
-        msg = f"'{self.__class__.__name__}' object has no attribute 'triangle_centroid_kdtree'"
-        raise AttributeError(msg)
+        """A KDTree built from the triangle centroids for fast lookups.
+        Returns
+        -------
+        scipy.spatial.cKDTree
+            A KDTree object for querying the nearest triangle centroids.
+        """
+        if not hasattr(self, "_triangle_centroid_kdtree"):
+            self._triangle_centroid_kdtree = cKDTree(self.triangle_centroids)
+        return self._triangle_centroid_kdtree
 
     @property
     def kdtree(self) -> cKDTree:
-        """Access KDTree from the interpolation engine."""
-        if hasattr(self.interpolation_engine, "source_kdtree"):
+        """A KDTree built from the source grid points for fast lookups.
+        Returns
+        -------
+        scipy.spatial.cKDTree
+            A KDTree object for querying the nearest source points.
+        """
+        if self.interpolation_engine and self.interpolation_engine.source_kdtree:
             return self.interpolation_engine.source_kdtree
-        msg = f"'{self.__class__.__name__}' object has no attribute 'kdtree'"
+        msg = "KDTree is not available for the current interpolation method."
         raise AttributeError(msg)
 
     @property
     def target_kdtree(self) -> cKDTree:
-        """Access target KDTree from the interpolation engine."""
-        if hasattr(self.interpolation_engine, "target_kdtree"):
+        """A KDTree built from the target grid points for fast lookups.
+        Returns
+        -------
+        scipy.spatial.cKDTree
+            A KDTree object for querying the nearest target points.
+        """
+        if self.interpolation_engine and self.interpolation_engine.target_kdtree:
             return self.interpolation_engine.target_kdtree
-        msg = f"'{self.__class__.__name__}' object has no attribute 'target_kdtree'"
+        msg = "Target KDTree is not available for the current interpolation method."
         raise AttributeError(msg)
 
     @property
     def convex_hull(self) -> Delaunay:
-        """Access triangulation structure (Delaunay) from the interpolation engine."""
-        if hasattr(self.interpolation_engine, "triangles") and self.interpolation_engine.triangles is not None:
-            # For linear method, this is the Delaunay object which the test expects
+        """The convex hull of the source grid points.
+        Returns
+        -------
+        scipy.spatial.Delaunay
+            The Delaunay triangulation object, which also represents the
+            convex hull of the source points in 3D space.
+        """
+        if self.interpolation_engine and self.interpolation_engine.triangles:
             return self.interpolation_engine.triangles
-        msg = f"'{self.__class__.__name__}' object has no attribute 'convex_hull'"
+        msg = "Convex hull is not available for the current interpolation method."
         raise AttributeError(msg)
 
     @property
     def distance_threshold(self) -> float:
-        """Access distance threshold from the interpolation engine."""
-        if hasattr(self.interpolation_engine, "distance_threshold") and self.interpolation_engine.distance_threshold is not None:
+        """The distance threshold for out-of-domain detection.
+        This is typically calculated as a multiple of the average grid spacing
+        to identify target points that are too far from any source point.
+        Returns
+        -------
+        float
+            The distance threshold in the units of the 3D coordinate system.
+        """
+        if self.interpolation_engine and self.interpolation_engine.distance_threshold is not None:
             return self.interpolation_engine.distance_threshold
         return float("inf")
 
     @property
     def source_indices(self) -> np.ndarray:
-        """Access source indices from the interpolation engine."""
-        if hasattr(self.interpolation_engine, "source_indices") and self.interpolation_engine.source_indices is not None:
+        """The indices of the source points that are nearest to each target point.
+        Returns
+        -------
+        np.ndarray
+            An array of indices into the flattened source grid. The shape
+            depends on the interpolation method (e.g., for nearest, it is
+            (n_target_points,), for linear it is (n_target_points, 4)).
+        """
+        if self.interpolation_engine and self.interpolation_engine.source_indices is not None:
             return self.interpolation_engine.source_indices
-        msg = f"'{self.__class__.__name__}' object has no attribute 'source_indices'"
+        msg = "Source indices are not available for the current interpolation method."
         raise AttributeError(msg)
 
     @property
     def transformer(self) -> Any:
-        """Access the coordinate transformer."""
+        """The pyproj coordinate transformer.
+        Returns
+        -------
+        pyproj.Transformer
+            The transformer object used for converting between geographic and
+            geocentric coordinates.
+        """
         return self.coordinate_transformer.transformer
 
     def _find_triangle_containing_point(self, point_3d: np.ndarray, triangle_idx: int) -> bool:
-        """Check if a 3D point is contained in the specified triangle."""
-        if not hasattr(self.interpolation_engine, "triangles") or self.interpolation_engine.triangles is None:
-            return False
-
-        # Get the triangle vertices
-        simplex_vertices = self.source_points_3d[self.triangles[triangle_idx]]
-
-        # Use the interpolation engine's method to check if point is in triangle
-        # For 3D, this checks if a point is in a tetrahedron
-
+        """Check if a 3D point is contained within a specific tetrahedron.
+        Parameters
+        ----------
+        point_3d : np.ndarray
+            The 3D coordinates of the point to check.
+        triangle_idx : int
+            The index of the tetrahedron (simplex) in the Delaunay triangulation.
+        Returns
+        -------
+        bool
+            True if the point is inside the tetrahedron, False otherwise.
+        """
+        simplex_vertices = self.source_points_3d_np[self.triangles[triangle_idx]]
         return _point_in_tetrahedron(point_3d, simplex_vertices)
 
     @property
-    def precomputed_weights(self) -> dict:
-        """Access precomputed weights from the interpolation engine."""
-        if hasattr(self.interpolation_engine, "precomputed_weights") and self.interpolation_engine.precomputed_weights is not None:
+    def precomputed_weights(self) -> dict[str, np.ndarray]:
+        """A dictionary of precomputed interpolation weights.
+        The keys of the dictionary depend on the interpolation method, but
+        typically include 'weights' and 'source_indices'.
+        Returns
+        -------
+        dict[str, np.ndarray]
+            The precomputed weights and indices.
+        """
+        if self.interpolation_engine and self.interpolation_engine.precomputed_weights:
             return self.interpolation_engine.precomputed_weights
-        msg = f"'{self.__class__.__name__}' object has no attribute 'precomputed_weights'"
+        msg = "Precomputed weights are not available for the current method."
         raise AttributeError(msg)
 
     def _compute_barycentric_weights(self, point_3d: np.ndarray, triangle_idx: int) -> tuple[float, ...]:
-        """Compute barycentric weights for a point in the specified triangle."""
-        if (
-            not hasattr(self.interpolation_engine, "triangles")
-            or self.interpolation_engine.triangles is None
-            or triangle_idx >= len(self.triangles)
-        ):
-            # Return equal weights if triangle is invalid
-            return (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
-
-        # Get the triangle vertices
-        triangle_vertices = self.source_points_3d[self.interpolation_engine.triangles.simplices[triangle_idx]]
-
-        # Use the interpolation engine's method to compute barycentric weights
-
-        weights = _compute_barycentric_weights_3d(point_3d, triangle_vertices)
+        """Compute barycentric weights for a point within a tetrahedron.
+        Parameters
+        ----------
+        point_3d : np.ndarray
+            The 3D coordinates of the point.
+        triangle_idx : int
+            The index of the tetrahedron in the Delaunay triangulation.
+        Returns
+        -------
+        tuple[float, ...]
+            A tuple of four barycentric coordinates that can be used to
+            interpolate data at the given point. Returns (NaN, NaN, NaN, NaN)
+            if the point is outside the tetrahedron.
+        """
+        simplex_vertices = self.source_points_3d_np[self.triangles[triangle_idx]]
+        weights = _compute_barycentric_weights_3d(point_3d, simplex_vertices)
         return tuple(weights) if weights is not None else (np.nan, np.nan, np.nan, np.nan)
 
     @property
     def distances(self) -> np.ndarray:
-        """Access distances from the interpolation engine."""
-        if hasattr(self.interpolation_engine, "distances") and self.interpolation_engine.distances is not None:
+        """The distances from each target point to its nearest source point(s).
+        Returns
+        -------
+        np.ndarray
+            An array of distances. The shape depends on the interpolation
+            method.
+        """
+        if self.interpolation_engine and self.interpolation_engine.distances is not None:
             return self.interpolation_engine.distances
-        msg = f"'{self.__class__.__name__}' object has no attribute 'distances'"
+        msg = "Distances are not available for the current interpolation method."
         raise AttributeError(msg)
 
     def _transform_coordinates(self) -> None:
@@ -539,6 +608,9 @@ class CurvilinearInterpolator:
         computation is triggered only when the returned xarray object is
         explicitly computed (e.g., by calling `.compute()` or `.values`).
         """
+        if not self._is_built:
+            self._build()
+
         if isinstance(data, xr.DataArray):
             return self._interpolate_dataarray(data)
         elif isinstance(data, xr.Dataset):
