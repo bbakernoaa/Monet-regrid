@@ -145,15 +145,20 @@ def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: 
 
 
 def to_intervalindex(coords: np.ndarray) -> pd.IntervalIndex:
-    """Convert a 1-d coordinate array to a pandas IntervalIndex. Take
-    the midpoints between the coordinates as the interval boundaries.
+    """Convert a 1-d coordinate array to a pandas IntervalIndex.
 
-    Args:
-        coords: 1-d array containing the coordinate values.
+    The midpoints between the coordinates are taken as the interval boundaries.
 
-    Returns:
+    Parameters
+    ----------
+    coords : np.ndarray
+        1-d array containing the coordinate values.
+
+    Returns
+    -------
+    pd.IntervalIndex
         A pandas IntervalIndex containing the intervals corresponding to the input
-            coordinates.
+        coordinates.
     """
     if len(coords) > 1:
         midpoints = (coords[:-1] + coords[1:]) / 2

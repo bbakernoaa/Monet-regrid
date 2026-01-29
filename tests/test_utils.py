@@ -1,8 +1,15 @@
 import dask.array as da
 import numpy as np
+import pandas as pd
 import xarray as xr
 
-from monet_regrid.utils import Grid, create_lat_lon_coords, create_regridding_dataset, format_lat
+from monet_regrid.utils import (
+    Grid,
+    create_lat_lon_coords,
+    create_regridding_dataset,
+    format_lat,
+    to_intervalindex,
+)
 
 
 def test_lazy_coordinate_generation():
@@ -58,3 +65,20 @@ def test_format_lat():
     assert formatted.attrs["foo"] == "bar"
     assert formatted.lat.attrs["is"] == "coord"
     assert formatted.x.attrs["is"] == "data"
+
+
+def test_to_intervalindex():
+    """Test the conversion of a coordinate array to a pandas IntervalIndex."""
+    # Test case with multiple coordinates
+    coords = np.array([10, 20, 30])
+    intervals = to_intervalindex(coords)
+    expected_breaks = [5.0, 15.0, 25.0, 35.0]
+    expected_intervals = pd.IntervalIndex.from_breaks(expected_breaks)
+    pd.testing.assert_index_equal(intervals, expected_intervals)
+    assert len(intervals) == len(coords)
+
+    # Test case with a single coordinate (edge case)
+    coords_single = np.array([10])
+    intervals_single = to_intervalindex(coords_single)
+    expected_intervals_single = pd.IntervalIndex.from_breaks([-np.inf, np.inf])
+    pd.testing.assert_index_equal(intervals_single, expected_intervals_single)
