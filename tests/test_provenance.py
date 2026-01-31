@@ -21,7 +21,11 @@ def test_rectilinear_regridder_history_preservation():
     regridder = RectilinearRegridder(source_data=source_da, target_grid=target_ds)
     regridded_da = regridder(method="linear")
 
-    expected_history = "Initial state.\nRegridded using RectilinearRegridder with method='linear'"
+    expected_history = (
+        "Initial state.\n"
+        "Pre-formatted data for regridding (pole padding/longitude shift)\n"
+        "Regridded using RectilinearRegridder with method='linear'"
+    )
     assert "history" in regridded_da.attrs
     assert regridded_da.attrs["history"] == expected_history
 
@@ -42,7 +46,10 @@ def test_rectilinear_regridder_history_creation():
     regridder = RectilinearRegridder(source_data=source_da, target_grid=target_ds)
     regridded_da = regridder(method="nearest")
 
-    expected_history = "Regridded using RectilinearRegridder with method='nearest'"
+    expected_history = (
+        "Pre-formatted data for regridding (pole padding/longitude shift)\n"
+        "Regridded using RectilinearRegridder with method='nearest'"
+    )
     assert "history" in regridded_da.attrs
     assert regridded_da.attrs["history"] == expected_history
 

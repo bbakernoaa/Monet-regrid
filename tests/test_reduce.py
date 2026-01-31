@@ -165,7 +165,8 @@ def test_attrs_dataarray(dummy_lc_data, dummy_target_grid):
         values=EXP_LABELS,
     )
     assert da_regrid.attrs != {}
-    assert da_regrid.attrs == dummy_lc_data["lc"].attrs
+    assert all(item in da_regrid.attrs.items() for item in dummy_lc_data["lc"].attrs.items())
+    assert "history" in da_regrid.attrs
     assert da_regrid["longitude"].attrs == dummy_target_grid["longitude"].attrs
 
 
@@ -176,7 +177,8 @@ def test_attrs_dataset(dummy_lc_data, dummy_target_grid):
         values=EXP_LABELS,
     )
     assert ds_regrid.attrs != {}
-    assert ds_regrid.attrs == dummy_lc_data.attrs
+    assert all(item in ds_regrid.attrs.items() for item in dummy_lc_data.attrs.items())
+    assert "history" in ds_regrid.attrs
     assert ds_regrid["longitude"].attrs == dummy_target_grid["longitude"].attrs
 
 
