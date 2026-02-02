@@ -56,13 +56,29 @@ def interp_regrid(
 ) -> xr.DataArray | xr.Dataset:
     """Refine a dataset using xarray's interp method or scipy's RegularGridInterpolator.
 
-    Args:
-        data: Input dataset.
-        target_ds: Dataset which coordinates the input dataset should be regrid to.
-        method: Which interpolation method to use (e.g. 'linear', 'nearest').
+    Parameters
+    ----------
+    data : xr.DataArray | xr.Dataset
+        Input data to be regridded.
+    target_ds : xr.Dataset
+        Target dataset containing the coordinates to regrid to.
+    method : Literal["linear", "nearest", "cubic", "bilinear"]
+        Interpolation method to use.
 
-    Returns:
-        Regridded input dataset
+    Returns
+    -------
+    xr.DataArray | xr.Dataset
+        The regridded data.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>> from monet_regrid.methods.interp import interp_regrid
+    >>> ds = xr.Dataset({"a": (("x", "y"), np.random.rand(10, 10))},
+    ...                 coords={"x": np.arange(10), "y": np.arange(10)})
+    >>> target = xr.Dataset(coords={"x": np.linspace(0, 9, 20), "y": np.linspace(0, 9, 20)})
+    >>> res = interp_regrid(ds, target, method="linear")
     """
     # Identify common coordinates
     coord_names = set(target_ds.coords).intersection(set(data.coords))
@@ -99,6 +115,13 @@ def interp_regrid(
     for coord in coord_names:
         interped[coord].attrs = coord_attrs[coord]
 
+    # Update history for provenance
+    history = f"Interpolated using monet_regrid.methods.interp.interp_regrid (method={method})"
+    if "history" in interped.attrs:
+        interped.attrs["history"] = interped.attrs["history"] + "\n" + history
+    else:
+        interped.attrs["history"] = history
+
     return interped
 
 
@@ -110,7 +133,31 @@ def _interp_regrid_fast(
 ) -> xr.DataArray:
     """Fast interpolation using scipy.interpolate.RegularGridInterpolator directly.
 
-    This avoids some overhead from xarray's interp() method.
+    This avoids some overhead from xarray's interp() method by working directly
+    on NumPy arrays.
+
+    Parameters
+    ----------
+    data : xr.DataArray
+        Input DataArray to be regridded.
+    target_ds : xr.Dataset
+        Target dataset containing coordinates.
+    method : Literal["linear", "nearest", "cubic", "bilinear"]
+        Interpolation method.
+    coord_names : Sequence[Hashable]
+        Names of coordinates to interpolate over.
+
+    Returns
+    -------
+    xr.DataArray
+        The interpolated DataArray.
+
+    Raises
+    ------
+    ValueError
+        If interpolation dimensions are not found or coordinates are not monotonic.
+    NotImplementedError
+        If data is Dask-backed or has extra dimensions.
     """
     # Sort coordinate names to match data dimensions order where possible
     # This is critical for RegularGridInterpolator which expects points in (n, D) format

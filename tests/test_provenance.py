@@ -24,6 +24,7 @@ def test_rectilinear_regridder_history_preservation():
     expected_history = (
         "Initial state.\n"
         "Pre-formatted data for regridding (pole padding/longitude shift)\n"
+        "Interpolated using monet_regrid.methods.interp.interp_regrid (method=linear)\n"
         "Regridded using RectilinearRegridder with method='linear'"
     )
     assert "history" in regridded_da.attrs
@@ -48,6 +49,7 @@ def test_rectilinear_regridder_history_creation():
 
     expected_history = (
         "Pre-formatted data for regridding (pole padding/longitude shift)\n"
+        "Interpolated using monet_regrid.methods.interp.interp_regrid (method=nearest)\n"
         "Regridded using RectilinearRegridder with method='nearest'"
     )
     assert "history" in regridded_da.attrs
