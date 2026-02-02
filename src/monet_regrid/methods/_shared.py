@@ -33,7 +33,18 @@ import xarray as xr
 
 
 def construct_intervals(coord: np.ndarray) -> pd.IntervalIndex:
-    """Create pandas.intervals with given coordinates."""
+    """Create pandas.intervals with given coordinates.
+
+    Parameters
+    ----------
+    coord : np.ndarray
+        Array of coordinate centers.
+
+    Returns
+    -------
+    pd.IntervalIndex
+        Intervals representing the bins.
+    """
     step_size = np.median(np.diff(coord, n=1))
     breaks = np.append(coord, coord[-1] + step_size) - step_size / 2
 
@@ -70,7 +81,26 @@ def restore_properties(
     coords: list[Hashable],
     fill_value: Any,
 ) -> xr.DataArray | xr.Dataset:
-    """Restore coord names, copy values and attributes of target, & add NaN padding."""
+    """Restore coord names, copy values and attributes of target, & add NaN padding.
+
+    Parameters
+    ----------
+    result : xr.DataArray | xr.Dataset
+        The raw reduced data from flox.
+    original_data : xr.DataArray | xr.Dataset
+        The original input data before reduction.
+    target_ds : xr.Dataset
+        The target grid dataset.
+    coords : list[Hashable]
+        List of coordinate names that were reduced.
+    fill_value : Any
+        Value used to fill uncovered regions.
+
+    Returns
+    -------
+    xr.DataArray | xr.Dataset
+        The processed data with restored metadata and alignment.
+    """
     result.attrs = original_data.attrs
 
     result = result.rename({f"{coord}_bins": coord for coord in coords})
@@ -119,7 +149,22 @@ def reduce_data_to_new_domain(
     target_ds: xr.Dataset,
     coords: list[Hashable],
 ) -> xr.DataArray | xr.Dataset:
-    """Slice the input data to bounds of the target dataset, to reduce computations."""
+    """Slice the input data to bounds of the target dataset, to reduce computations.
+
+    Parameters
+    ----------
+    data : xr.DataArray | xr.Dataset
+        Input data to be sliced.
+    target_ds : xr.Dataset
+        Target dataset providing the spatial bounds.
+    coords : list[Hashable]
+        Names of coordinates to slice along.
+
+    Returns
+    -------
+    xr.DataArray | xr.Dataset
+        The sliced data.
+    """
     for coord in coords:
         coord_res = np.median(np.diff(target_ds[coord].to_numpy(), 1))
         data = data.sel(

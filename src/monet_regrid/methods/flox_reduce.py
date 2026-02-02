@@ -78,21 +78,35 @@ def statistic_reduce(
     reduce using the specified method.
     https://flox.readthedocs.io/en/latest/aggregations.html
 
-    Args:
-        data: Input dataset.
-            It is assumed that the coordinates of this data are sorted.
-        target_ds: Dataset which coordinates the input dataset should be regrid to.
-        time_dim: Name of the time dimension. Defaults to "time". Use `None` to force
-            regridding over the time dimension.
-        method: One of the following reduction methods: "sum", "mean", "var", "std",
-            or "median.
-        skipna: If NaN values should be ignored.
-        fill_value: What value to fill uncovered parts of the target grid. By default
-            this will be NaN, and integer type data will be cast to float to accomodate
-            this.
+    Parameters
+    ----------
+    data : xr.DataArray | xr.Dataset
+        Input data to be regridded. It is assumed that the coordinates are sorted.
+    target_ds : xr.Dataset
+        Target dataset containing coordinates to regrid to.
+    time_dim : str | None
+        Name of the time dimension. Use `None` to force regridding over time.
+    method : str
+        Reduction method (e.g., "sum", "mean", "var", "std", "median", "max", "min").
+    skipna : bool, optional
+        Whether to ignore NaN values. Defaults to False.
+    fill_value : Any, optional
+        Value to fill uncovered parts of the target grid. Defaults to None.
 
-    Returns:
-        xarray.dataset with regridded land cover categorical data.
+    Returns
+    -------
+    xr.DataArray | xr.Dataset
+        The regridded data.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>> from monet_regrid.methods.flox_reduce import statistic_reduce
+    >>> ds = xr.Dataset({"a": (("lat", "lon"), np.random.rand(10, 10))},
+    ...                 coords={"lat": np.arange(10), "lon": np.arange(10)})
+    >>> target = xr.Dataset(coords={"lat": [2, 5, 8], "lon": [2, 5, 8]})
+    >>> res = statistic_reduce(ds, target, time_dim=None, method="mean")
     """
     valid_methods = ["sum", "mean", "var", "std", "median", "max", "min"]
     if method not in valid_methods:
@@ -122,13 +136,32 @@ def statistic_reduce(
 
     result = restore_properties(result, data, target_ds, coord_names, fill_value)
     result = result.reindex_like(sorted_target_coords, copy=False)
+
+    # Update history for provenance
+    history = f"Reduced using monet_regrid.methods.flox_reduce.statistic_reduce (method={method})"
+    if "history" in result.attrs:
+        result.attrs["history"] = result.attrs["history"] + "\n" + history
+    else:
+        result.attrs["history"] = history
+
     return result
 
 
 def find_matching_int_dtype(
     a: np.ndarray,
 ) -> type[np.signedinteger] | type[np.unsignedinteger]:
-    """Find the smallest integer datatype that can cover the given array."""
+    """Find the smallest integer datatype that can cover the given array.
+
+    Parameters
+    ----------
+    a : np.ndarray
+        Input array.
+
+    Returns
+    -------
+    type[np.signedinteger] | type[np.unsignedinteger]
+        Smallest compatible integer dtype.
+    """
     # Integer types in increasing memory use
     int_types: list[type[np.signedinteger] | type[np.unsignedinteger]] = [
         np.int8,
@@ -154,26 +187,30 @@ def compute_mode(
 ) -> xr.DataArray:
     """Upsample the input data using a "most common label" (mode) approach.
 
-    Args:
-        data: Input DataArray, with an integer data type. If your data does not consist
-            of integer type values, you will have to encode them to integer types.
-            It is assumed that the coordinates of this data are sorted.
-        target_ds: Dataset which coordinates the input dataset should be regrid to.
-        values: Numpy array containing all labels expected to be in the input
-            data. For example, `np.array([0, 2, 4])`, if the data only contains the
-            values 0, 2 and 4.
-        time_dim: Name of the time dimension. Defaults to "time". Use `None` to force
-            regridding over the time dimension.
-        fill_value: What value to fill uncovered parts of the target grid. By default
-            this will be NaN, and integer type data will be cast to float to accomodate
-            this.
-        anti_mode: Find the least-common-value (anti-mode).
+    Parameters
+    ----------
+    data : xr.DataArray
+        Input DataArray with integer dtype.
+    target_ds : xr.Dataset
+        Target dataset with coordinates to regrid to.
+    values : np.ndarray
+        Labels expected in the input data.
+    time_dim : str | None
+        Name of time dimension. Use `None` to force regridding over time.
+    fill_value : Any, optional
+        Value to fill uncovered parts of the target grid. Defaults to None.
+    anti_mode : bool, optional
+        If True, find the least-common value (anti-mode). Defaults to False.
 
-    Raises:
-        ValueError: if the input data is not of an integer dtype.
+    Returns
+    -------
+    xr.DataArray
+        Regridded categorical data.
 
-    Returns:
-        xarray.DataArray with regridded categorical data.
+    Raises
+    ------
+    ValueError
+        If the input data is not of an integer dtype.
     """
     array_name = data.name if data.name is not None else "DATA_NAME"
 
@@ -207,4 +244,13 @@ def compute_mode(
 
     result = restore_properties(result, data, target_ds, coords, fill_value)
     result = result.reindex_like(target_coords, copy=False)
+
+    # Update history for provenance
+    mode_str = "least_common" if anti_mode else "most_common"
+    history = f"Reduced using monet_regrid.methods.flox_reduce.compute_mode ({mode_str})"
+    if "history" in result.attrs:
+        result.attrs["history"] = result.attrs["history"] + "\n" + history
+    else:
+        result.attrs["history"] = history
+
     return result
