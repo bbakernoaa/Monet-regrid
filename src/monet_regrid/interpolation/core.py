@@ -33,14 +33,19 @@ class InterpolationEngine:
         spherical: bool = True,
         fill_method: Literal["nan", "nearest"] = "nan",
         extrapolate: bool = False,
-    ):
+    ) -> None:
         """Initialize the interpolation engine.
 
-        Args:
-            method: Interpolation method ('nearest', 'linear', 'conservative', 'bilinear', 'cubic')
-            spherical: Whether to use spherical barycentrics (True) or planar (False)
-            fill_method: How to handle out-of-domain targets ('nan' or 'nearest')
-            extrapolate: Whether to allow extrapolation beyond source domain
+        Parameters
+        ----------
+        method : {"nearest", "linear", "conservative", "bilinear", "cubic"}, default: "linear"
+            Interpolation method to use.
+        spherical : bool, default: True
+            Whether to use spherical barycentrics (True) or planar (False).
+        fill_method : {"nan", "nearest"}, default: "nan"
+            How to handle out-of-domain targets.
+        extrapolate : bool, default: False
+            Whether to allow extrapolation beyond source domain.
         """
         self.method = method
         self.spherical = spherical
@@ -72,11 +77,20 @@ class InterpolationEngine:
     ) -> None:
         """Build interpolation structures based on method.
 
-        Args:
-            source_points_3d: Array of 3D source points (n, 3)
-            target_points_3d: Array of 3D target points (m, 3)
-            radius_of_influence: Maximum distance for valid interpolation
-            source_shape: Shape of source grid (ny, nx) for structured interpolation
+        Parameters
+        ----------
+        source_points_3d : np.ndarray
+            Array of 3D source points (n, 3).
+        target_points_3d : np.ndarray
+            Array of 3D target points (m, 3).
+        radius_of_influence : float | None, default: None
+            Maximum distance for valid interpolation.
+        source_shape : tuple[int, int] | None, default: None
+            Shape of source grid (ny, nx) for structured interpolation.
+
+        Returns
+        -------
+        None
         """
         self.target_points_3d = target_points_3d
         if self.method == "nearest":
@@ -108,12 +122,22 @@ class InterpolationEngine:
     ) -> None:
         """Build structures for conservative regridding.
 
-        Args:
-            source_centers_3d: Centers of source cells (N, 3)
-            target_centers_3d: Centers of target cells (M, 3)
-            source_vertices_lonlat: Vertices of source cells (N, 4, 2) in (lon, lat)
-            target_vertices_lonlat: Vertices of target cells (M, 4, 2) in (lon, lat)
-            radius_of_influence: Search radius for overlapping cells
+        Parameters
+        ----------
+        source_centers_3d : np.ndarray
+            Centers of source cells (N, 3).
+        target_centers_3d : np.ndarray
+            Centers of target cells (M, 3).
+        source_vertices_lonlat : np.ndarray
+            Vertices of source cells (N, 4, 2) in (lon, lat).
+        target_vertices_lonlat : np.ndarray
+            Vertices of target cells (M, 4, 2) in (lon, lat).
+        radius_of_influence : float | None, default: None
+            Search radius for overlapping cells.
+
+        Returns
+        -------
+        None
         """
         if not HAS_POLYGON_CLIPPING:
             msg = "Numba is required for conservative regridding."
@@ -462,12 +486,17 @@ class InterpolationEngine:
     def interpolate(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
         """Apply interpolation to source data.
 
-        Args:
-            source_data: Input data array with source grid dimensions
-            use_precomputed: Whether to use precomputed weights (default True)
+        Parameters
+        ----------
+        source_data : np.ndarray
+            Input data array with source grid dimensions.
+        use_precomputed : bool, default: True
+            Whether to use precomputed weights.
 
-        Returns:
-            Interpolated data on target grid
+        Returns
+        -------
+        np.ndarray
+            Interpolated data on target grid.
         """
         if self.method == "nearest":
             return self._interpolate_nearest(source_data)
@@ -482,7 +511,20 @@ class InterpolationEngine:
             raise ValueError(msg)
 
     def _interpolate_conservative(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
-        """Perform conservative regridding."""
+        """Perform conservative regridding.
+
+        Parameters
+        ----------
+        source_data : np.ndarray
+            The input data to regrid.
+        use_precomputed : bool, default: True
+            Whether to use precomputed weights.
+
+        Returns
+        -------
+        np.ndarray
+            The regridded data.
+        """
         if not use_precomputed or self.precomputed_weights is None:
             msg = "Weights not precomputed for conservative regridding."
             raise RuntimeError(msg)
@@ -547,7 +589,20 @@ class InterpolationEngine:
             return result.reshape(-1)
 
     def _interpolate_structured(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
-        """Perform structured interpolation (bilinear/cubic)."""
+        """Perform structured interpolation (bilinear/cubic).
+
+        Parameters
+        ----------
+        source_data : np.ndarray
+            The input data to interpolate.
+        use_precomputed : bool, default: True
+            Whether to use precomputed weights.
+
+        Returns
+        -------
+        np.ndarray
+            The interpolated data.
+        """
         if not use_precomputed or self.precomputed_weights is None:
             msg = f"Weights not precomputed for {self.method} regridding."
             raise RuntimeError(msg)
@@ -582,7 +637,18 @@ class InterpolationEngine:
             return result.reshape(-1)
 
     def _interpolate_nearest(self, source_data: np.ndarray) -> np.ndarray:
-        """Perform nearest neighbor interpolation."""
+        """Perform nearest neighbor interpolation.
+
+        Parameters
+        ----------
+        source_data : np.ndarray
+            The input data to interpolate.
+
+        Returns
+        -------
+        np.ndarray
+            The interpolated data.
+        """
         # source_data shape: (..., source_spatial_count)
         # Reshape to handle multiple dimensions
         original_shape = source_data.shape
@@ -652,7 +718,20 @@ class InterpolationEngine:
             return result.reshape(-1)
 
     def _interpolate_linear(self, source_data: np.ndarray, use_precomputed: bool = True) -> np.ndarray:
-        """Perform linear interpolation using Delaunay triangulation."""
+        """Perform linear interpolation using Delaunay triangulation.
+
+        Parameters
+        ----------
+        source_data : np.ndarray
+            The input data to interpolate.
+        use_precomputed : bool, default: True
+            Whether to use precomputed weights.
+
+        Returns
+        -------
+        np.ndarray
+            The interpolated data.
+        """
         if not use_precomputed or self.precomputed_weights is None:
             # Fallback to direct computation if precomputed weights not available
             warnings.warn("Precomputed weights not available, using direct computation", stacklevel=2)

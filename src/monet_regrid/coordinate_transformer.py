@@ -29,7 +29,6 @@ URLs updated, and documentation adapted for new branding.
 from __future__ import annotations
 
 import hashlib
-from typing import Any
 
 import numpy as np
 import pyproj
@@ -45,12 +44,15 @@ from scipy.spatial.distance import pdist  # type: ignore
 class CoordinateTransformer:
     """Optimized coordinate transformer with caching and batch processing."""
 
-    def __init__(self, source_crs: str = "EPSG:4979", target_crs: str = "EPSG:4978"):
+    def __init__(self, source_crs: str = "EPSG:4979", target_crs: str = "EPSG:4978") -> None:
         """Initialize coordinate transformer.
 
-        Args:
-            source_crs: Source coordinate reference system (default: EPSG:4979 for lat/lon/height)
-            target_crs: Target coordinate reference system (default: EPSG:4978 for 3D geocentric)
+        Parameters
+        ----------
+        source_crs : str, default: "EPSG:4979"
+            Source coordinate reference system (default: EPSG:4979 for lat/lon/height).
+        target_crs : str, default: "EPSG:4978"
+            Target coordinate reference system (default: EPSG:4978 for 3D geocentric).
         """
         self.source_crs = source_crs
         self.target_crs = target_crs
@@ -60,21 +62,28 @@ class CoordinateTransformer:
 
     def transform_coordinates(
         self,
-        lon: Any,
-        lat: Any,
-        height: Any | None = None,
+        lon: np.ndarray | da.Array,
+        lat: np.ndarray | da.Array,
+        height: np.ndarray | da.Array | None = None,
         use_cache: bool = True,
-    ) -> tuple[Any, Any, Any]:
+    ) -> tuple[np.ndarray | da.Array, np.ndarray | da.Array, np.ndarray | da.Array]:
         """Transform coordinates from geographic to 3D geocentric.
 
-        Args:
-            lon: Longitude array (degrees)
-            lat: Latitude array (degrees)
-            height: Height array (meters, optional, defaults to 0)
-            use_cache: Whether to use caching for repeated transformations
+        Parameters
+        ----------
+        lon : np.ndarray | da.Array
+            Longitude array (degrees).
+        lat : np.ndarray | da.Array
+            Latitude array (degrees).
+        height : np.ndarray | da.Array | None, default: None
+            Height array (meters, optional, defaults to 0).
+        use_cache : bool, default: True
+            Whether to use caching for repeated transformations.
 
-        Returns:
-            Tuple of (x, y, z) coordinates in target CRS
+        Returns
+        -------
+        tuple[np.ndarray | da.Array, np.ndarray | da.Array, np.ndarray | da.Array]
+            Tuple of (x, y, z) coordinates in target CRS.
         """
         # Handle Dask arrays lazily
         if da is not None:
@@ -140,21 +149,28 @@ class CoordinateTransformer:
 
     def inverse_transform_coordinates(
         self,
-        x: Any,
-        y: Any,
-        z: Any,
+        x: np.ndarray | da.Array,
+        y: np.ndarray | da.Array,
+        z: np.ndarray | da.Array,
         use_cache: bool = True,
-    ) -> tuple[Any, Any, Any]:
+    ) -> tuple[np.ndarray | da.Array, np.ndarray | da.Array, np.ndarray | da.Array]:
         """Transform coordinates from 3D geocentric back to geographic.
 
-        Args:
-            x: X coordinate array in target CRS
-            y: Y coordinate array in target CRS
-            z: Z coordinate array in target CRS
-            use_cache: Whether to use caching for repeated transformations
+        Parameters
+        ----------
+        x : np.ndarray | da.Array
+            X coordinate array in target CRS.
+        y : np.ndarray | da.Array
+            Y coordinate array in target CRS.
+        z : np.ndarray | da.Array
+            Z coordinate array in target CRS.
+        use_cache : bool, default: True
+            Whether to use caching for repeated transformations.
 
-        Returns:
-            Tuple of (lon, lat, height) coordinates in source CRS
+        Returns
+        -------
+        tuple[np.ndarray | da.Array, np.ndarray | da.Array, np.ndarray | da.Array]
+            Tuple of (lon, lat, height) coordinates in source CRS.
         """
         # Handle Dask arrays lazily
         if da is not None:
@@ -212,12 +228,17 @@ class CoordinateTransformer:
     def calculate_distance_threshold(self, points_3d: np.ndarray, factor: float = 3.0) -> float:
         """Calculate appropriate distance threshold for out-of-domain detection.
 
-        Args:
-            points_3d: Array of 3D points (n, 3) in geocentric coordinates
-            factor: Multiplier for average distance between points
+        Parameters
+        ----------
+        points_3d : np.ndarray
+            Array of 3D points (n, 3) in geocentric coordinates.
+        factor : float, default: 3.0
+            Multiplier for average distance between points.
 
-        Returns:
-            Distance threshold value
+        Returns
+        -------
+        float
+            Distance threshold value.
         """
         if len(points_3d) < 2:
             return float("inf")
@@ -264,24 +285,24 @@ class CoordinateTransformer:
 
     def _transform_coordinates_dask(
         self,
-        lon: Any,
-        lat: Any,
-        height: Any | None = None,
-    ) -> tuple[Any, Any, Any]:
+        lon: da.Array,
+        lat: da.Array,
+        height: da.Array | None = None,
+    ) -> tuple[da.Array, da.Array, da.Array]:
         """Lazy Dask implementation of transform_coordinates.
 
         Parameters
         ----------
-        lon : dask.array.Array
+        lon : da.Array
             Longitude array.
-        lat : dask.array.Array
+        lat : da.Array
             Latitude array.
-        height : dask.array.Array, optional
+        height : da.Array, optional
             Height array.
 
         Returns
         -------
-        tuple[dask.array.Array, dask.array.Array, dask.array.Array]
+        tuple[da.Array, da.Array, da.Array]
             X, Y, Z coordinates.
         """
         if height is None:
@@ -312,24 +333,24 @@ class CoordinateTransformer:
 
     def _inverse_transform_coordinates_dask(
         self,
-        x: Any,
-        y: Any,
-        z: Any,
-    ) -> tuple[Any, Any, Any]:
+        x: da.Array,
+        y: da.Array,
+        z: da.Array,
+    ) -> tuple[da.Array, da.Array, da.Array]:
         """Lazy Dask implementation of inverse_transform_coordinates.
 
         Parameters
         ----------
-        x : dask.array.Array
+        x : da.Array
             X coordinate.
-        y : dask.array.Array
+        y : da.Array
             Y coordinate.
-        z : dask.array.Array
+        z : da.Array
             Z coordinate.
 
         Returns
         -------
-        tuple[dask.array.Array, dask.array.Array, dask.array.Array]
+        tuple[da.Array, da.Array, da.Array]
             Longitude, Latitude, Height coordinates.
         """
         # Ensure all arrays have the same chunking

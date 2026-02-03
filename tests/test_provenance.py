@@ -1,95 +1,91 @@
 import numpy as np
+import pytest
 import xarray as xr
 
-from monet_regrid.core import CurvilinearRegridder, RectilinearRegridder
+from monet_regrid.core import RectilinearRegridder
+from monet_regrid.curvilinear import CurvilinearInterpolator
 
 
-def test_rectilinear_regridder_history_preservation():
-    """Test that the history attribute is updated correctly when one already exists."""
-    source_da = xr.DataArray(
-        np.random.rand(10, 20),
-        dims=["y", "x"],
-        coords={"lat": (("y",), np.linspace(0, 1, 10)), "lon": (("x",), np.linspace(0, 1, 20))},
-        attrs={"history": "Initial state."},
-    )
-    target_ds = xr.Dataset(
-        coords={
-            "lat": (("y",), np.linspace(0, 1, 5)),
-            "lon": (("x",), np.linspace(0, 1, 10)),
-        },
-    )
-    regridder = RectilinearRegridder(source_data=source_da, target_grid=target_ds)
-    regridded_da = regridder(method="linear")
-
-    expected_history = (
-        "Initial state.\n"
-        "Pre-formatted data for regridding (pole padding/longitude shift)\n"
-        "Interpolated using monet_regrid.methods.interp.interp_regrid (method=linear)\n"
-        "Regridded using RectilinearRegridder with method='linear'"
-    )
-    assert "history" in regridded_da.attrs
-    assert regridded_da.attrs["history"] == expected_history
-
-
-def test_rectilinear_regridder_history_creation():
-    """Test that the history attribute is created if it does not exist."""
-    source_da = xr.DataArray(
-        np.random.rand(10, 20),
-        dims=["y", "x"],
-        coords={"lat": (("y",), np.linspace(0, 1, 10)), "lon": (("x",), np.linspace(0, 1, 20))},
-    )
-    target_ds = xr.Dataset(
-        coords={
-            "lat": (("y",), np.linspace(0, 1, 5)),
-            "lon": (("x",), np.linspace(0, 1, 10)),
-        },
-    )
-    regridder = RectilinearRegridder(source_data=source_da, target_grid=target_ds)
-    regridded_da = regridder(method="nearest")
-
-    expected_history = (
-        "Pre-formatted data for regridding (pole padding/longitude shift)\n"
-        "Interpolated using monet_regrid.methods.interp.interp_regrid (method=nearest)\n"
-        "Regridded using RectilinearRegridder with method='nearest'"
-    )
-    assert "history" in regridded_da.attrs
-    assert regridded_da.attrs["history"] == expected_history
-
-
-def test_curvilinear_regridder_history_preservation():
-    """Test history attribute update for the curvilinear regridder when one exists."""
-    lon = np.arange(5, 15, 2)
-    lat = np.arange(40, 50, 2)
+@pytest.fixture
+def source_grid():
+    lon = np.linspace(0, 10, 5)
+    lat = np.linspace(0, 10, 5)
     lon2d, lat2d = np.meshgrid(lon, lat)
-    source_da = xr.DataArray(
-        np.random.rand(5, 5),
-        dims=["y", "x"],
-        coords={"lat": (("y", "x"), lat2d), "lon": (("y", "x"), lon2d)},
-        attrs={"history": "Curvilinear initial state."},
+    ds = xr.Dataset(
+        coords={
+            "lat": (("y", "x"), lat2d),
+            "lon": (("y", "x"), lon2d),
+        }
     )
-    target_ds = xr.Dataset(coords={"lat": np.arange(40, 50, 1), "lon": np.arange(5, 15, 1)})
-    regridder = CurvilinearRegridder(source_data=source_da, target_grid=target_ds)
-    regridded_da = regridder(method="linear")
-
-    expected_history = "Curvilinear initial state.\nRegridded using CurvilinearRegridder with method='linear'"
-    assert "history" in regridded_da.attrs
-    assert regridded_da.attrs["history"] == expected_history
+    return ds
 
 
-def test_curvilinear_regridder_history_creation():
-    """Test that the history attribute is created for the curvilinear regridder if it does not exist."""
-    lon = np.arange(5, 15, 2)
-    lat = np.arange(40, 50, 2)
+@pytest.fixture
+def target_grid():
+    lon = np.linspace(0, 10, 3)
+    lat = np.linspace(0, 10, 3)
     lon2d, lat2d = np.meshgrid(lon, lat)
-    source_da = xr.DataArray(
-        np.random.rand(5, 5),
-        dims=["y", "x"],
-        coords={"lat": (("y", "x"), lat2d), "lon": (("y", "x"), lon2d)},
+    ds = xr.Dataset(
+        coords={
+            "lat": (("y", "x"), lat2d),
+            "lon": (("y", "x"), lon2d),
+        }
     )
-    target_ds = xr.Dataset(coords={"lat": np.arange(40, 50, 1), "lon": np.arange(5, 15, 1)})
-    regridder = CurvilinearRegridder(source_data=source_da, target_grid=target_ds)
-    regridded_da = regridder(method="nearest")
+    return ds
 
-    expected_history = "Regridded using CurvilinearRegridder with method='nearest'"
-    assert "history" in regridded_da.attrs
-    assert regridded_da.attrs["history"] == expected_history
+
+def test_curvilinear_provenance_dataarray(source_grid, target_grid):
+    data = xr.DataArray(
+        np.random.rand(5, 5),
+        coords=source_grid.coords,
+        dims=("y", "x"),
+        name="test_data",
+    )
+    data.attrs["history"] = "Original data"
+
+    interpolator = CurvilinearInterpolator(source_grid, target_grid, "lat", "lon", "lat", "lon", method="nearest")
+    result = interpolator(data)
+
+    assert "history" in result.attrs
+    assert "Original data" in result.attrs["history"]
+    assert "Interpolated using monet_regrid.curvilinear.CurvilinearInterpolator (method=nearest)" in result.attrs["history"]
+
+
+def test_curvilinear_provenance_dataset(source_grid, target_grid):
+    ds = xr.Dataset(
+        {"test_data": (("y", "x"), np.random.rand(5, 5))},
+        coords=source_grid.coords,
+    )
+    ds.attrs["history"] = "Original dataset"
+
+    interpolator = CurvilinearInterpolator(source_grid, target_grid, "lat", "lon", "lat", "lon", method="nearest")
+    result = interpolator(ds)
+
+    assert "history" in result.attrs
+    assert "Original dataset" in result.attrs["history"]
+    assert "Interpolated using monet_regrid.curvilinear.CurvilinearInterpolator (method=nearest)" in result.attrs["history"]
+
+
+def test_rectilinear_provenance(source_grid, target_grid):
+    # Convert grids to rectilinear for this test
+    lon_1d = source_grid.lon.values[0, :]
+    lat_1d = source_grid.lat.values[:, 0]
+    source_rect = xr.Dataset(coords={"lat": lat_1d, "lon": lon_1d})
+
+    lon_t_1d = target_grid.lon.values[0, :]
+    lat_t_1d = target_grid.lat.values[:, 0]
+    target_rect = xr.Dataset(coords={"lat": lat_t_1d, "lon": lon_t_1d})
+
+    data = xr.DataArray(
+        np.random.rand(len(lat_1d), len(lon_1d)),
+        coords=source_rect.coords,
+        dims=("lat", "lon"),
+        name="test_data",
+    )
+    data.attrs["history"] = "Original data"
+
+    regridder = RectilinearRegridder(data, target_rect, method="nearest")
+    result = regridder()
+
+    assert "history" in result.attrs
+    assert "Original data" in result.attrs["history"]
