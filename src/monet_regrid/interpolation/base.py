@@ -19,29 +19,67 @@ except ImportError:
 if HAS_PYKDTREE:
 
     class cKDTree:  # noqa: N801
-        """Adapter for pykdtree to mimic scipy.spatial.cKDTree."""
+        """Adapter for pykdtree to mimic scipy.spatial.cKDTree.
 
-        def __init__(self, data, leafsize=10):
+        This class provides a subset of the scipy.spatial.cKDTree interface,
+        powered by the faster pykdtree library if available.
+        """
+
+        def __init__(self, data: np.ndarray, leafsize: int = 10) -> None:
+            """Initialize the KDTree.
+
+            Parameters
+            ----------
+            data : np.ndarray
+                The data points to index (n, m).
+            leafsize : int, default: 10
+                The number of points at which to switch to brute-force.
+            """
             self._tree = PyKDTree(data, leafsize=leafsize)
             self._data = data
             self._leafsize = leafsize
             self.n = len(data)
 
-        def __getstate__(self):
+        def __getstate__(self) -> tuple[np.ndarray, int]:
             # Pickling support: pykdtree might not pickle well, so we rebuild
             return (self._data, self._leafsize)
 
-        def __setstate__(self, state):
+        def __setstate__(self, state: tuple[np.ndarray, int]) -> None:
             data, leafsize = state
             self._data = data
             self._leafsize = leafsize
             self.n = len(data)
 
         @property
-        def data(self):
+        def data(self) -> np.ndarray:
+            """The indexed data points.
+
+            Returns
+            -------
+            np.ndarray
+                The data points.
+            """
             return self._data
 
-        def query(self, x, k=1, distance_upper_bound=np.inf):
+        def query(
+            self, x: np.ndarray, k: int = 1, distance_upper_bound: float = np.inf
+        ) -> tuple[np.ndarray, np.ndarray] | tuple[float, int]:
+            """Query the KDTree for nearest neighbors.
+
+            Parameters
+            ----------
+            x : np.ndarray
+                The point or points to query.
+            k : int, default: 1
+                The number of nearest neighbors to return.
+            distance_upper_bound : float, default: inf
+                Return only neighbors within this distance.
+
+            Returns
+            -------
+            tuple[np.ndarray, np.ndarray] | tuple[float, int]
+                The distances and indices of the nearest neighbors.
+            """
             x = np.asarray(x)
             is_1d = x.ndim == 1
             if is_1d:

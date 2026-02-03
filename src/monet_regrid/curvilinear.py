@@ -47,8 +47,23 @@ from monet_regrid.interpolation.utils import (
 )
 
 
-def _apply_interpolation_wrapper(data_slice, engine, target_shape):
-    """Wrapper for interpolation to be used with apply_ufunc (picklable)."""
+def _apply_interpolation_wrapper(data_slice: np.ndarray, engine: InterpolationEngine, target_shape: tuple[int, ...]) -> np.ndarray:
+    """Wrapper for interpolation to be used with apply_ufunc (picklable).
+
+    Parameters
+    ----------
+    data_slice : np.ndarray
+        The input data slice to interpolate.
+    engine : InterpolationEngine
+        The interpolation engine containing precomputed weights.
+    target_shape : tuple[int, ...]
+        The desired spatial shape of the output.
+
+    Returns
+    -------
+    np.ndarray
+        The interpolated data reshaped to the target grid.
+    """
     # Reshape to 1D for interpolation (flatten the spatial dimensions)
     # The input will be (..., source_lat, source_lon)
     # We reshape to (..., source_points_flat)
@@ -205,9 +220,13 @@ class CurvilinearInterpolator:
             'nearest' uses the value of the nearest source point.
         extrapolate : bool, default: False
             Whether to allow extrapolation for out-of-domain points.
-        **kwargs
+        **kwargs : Any
             Additional method-specific arguments. For example,
             `radius_of_influence` can be used for nearest-neighbor interpolation.
+
+        Returns
+        -------
+        None
         """
         self.source_grid = source_grid
         self.target_grid = target_grid
@@ -238,11 +257,16 @@ class CurvilinearInterpolator:
 
     def _build(self) -> None:
         """Build the interpolation engine and precompute weights.
+
         This method is called just-in-time to perform the expensive,
         eager computations required to set up the interpolation structures
         (e.g., KDTree, Delaunay triangulation). It ensures that these
         operations are only performed when data is actually being regridded,
         not during the initial setup of the regridder object.
+
+        Returns
+        -------
+        None
         """
         if self._is_built:
             return
@@ -257,6 +281,7 @@ class CurvilinearInterpolator:
     @property
     def triangles(self) -> np.ndarray:
         """The simplices of the Delaunay triangulation.
+
         Returns
         -------
         np.ndarray
@@ -439,7 +464,12 @@ class CurvilinearInterpolator:
         raise AttributeError(msg)
 
     def _transform_coordinates(self) -> None:
-        """Transform geographic coordinates to 3D geocentric coordinates."""
+        """Transform geographic coordinates to 3D geocentric coordinates.
+
+        Returns
+        -------
+        None
+        """
         # Use dask.array for lazy evaluation of coordinate transformations
         # Extract source coordinates
         source_lat = self.source_grid[self.source_lat_name]
@@ -508,7 +538,12 @@ class CurvilinearInterpolator:
         self.target_points_3d = da.stack([self.target_x, self.target_y, self.target_z], axis=1)
 
     def _build_interpolation_structures(self) -> None:
-        """Build interpolation structures based on method."""
+        """Build interpolation structures based on method.
+
+        Returns
+        -------
+        None
+        """
         # Create interpolation engine
         self.interpolation_engine = InterpolationEngine(
             method=self.method, spherical=self.spherical, fill_method=self.fill_method, extrapolate=self.extrapolate
@@ -620,7 +655,18 @@ class CurvilinearInterpolator:
             raise TypeError(msg)
 
     def _interpolate_dataarray(self, data: xr.DataArray) -> xr.DataArray:
-        """Interpolate a single DataArray."""
+        """Interpolate a single DataArray.
+
+        Parameters
+        ----------
+        data : xr.DataArray
+            The input DataArray to interpolate.
+
+        Returns
+        -------
+        xr.DataArray
+            The interpolated DataArray on the target grid.
+        """
         # Validate that data coordinates match source grid
         if not self._validate_data_coordinates(data):
             msg = "Data coordinates do not match source grid"
@@ -678,10 +724,6 @@ class CurvilinearInterpolator:
         if not result.attrs and data.attrs:
             result.attrs = data.attrs.copy()
 
-        # DEBUG
-        if not result.attrs:
-            pass
-
         # Attach coordinates to result
         # Coordinates from data (non-spatial) are preserved by apply_ufunc
         # We need to add target spatial coordinates
@@ -698,10 +740,29 @@ class CurvilinearInterpolator:
             if dim in self.target_grid.coords:
                 result.coords[dim] = self.target_grid.coords[dim]
 
+        # Update history
+        history = result.attrs.get("history", "")
+        new_history = f"Interpolated using monet_regrid.curvilinear.CurvilinearInterpolator (method={self.method})"
+        if history:
+            result.attrs["history"] = f"{history}\n{new_history}"
+        else:
+            result.attrs["history"] = new_history
+
         return result  # type: ignore[no-any-return]
 
     def _interpolate_dataset(self, dataset: xr.Dataset) -> xr.Dataset:
-        """Interpolate an entire Dataset."""
+        """Interpolate an entire Dataset.
+
+        Parameters
+        ----------
+        dataset : xr.Dataset
+            The input Dataset to interpolate.
+
+        Returns
+        -------
+        xr.Dataset
+            The interpolated Dataset on the target grid.
+        """
         result_dataset = xr.Dataset()
 
         for var_name, data_array in dataset.items():
@@ -733,6 +794,14 @@ class CurvilinearInterpolator:
                 # Create a coordinate for the dimension if it doesn't exist
                 dim_size = self.target_grid.sizes[dim_name]
                 result_dataset.coords[dim_name] = np.arange(dim_size)
+
+        # Update history
+        history = dataset.attrs.get("history", "")
+        new_history = f"Interpolated using monet_regrid.curvilinear.CurvilinearInterpolator (method={self.method})"
+        if history:
+            result_dataset.attrs["history"] = f"{history}\n{new_history}"
+        else:
+            result_dataset.attrs["history"] = new_history
 
         return result_dataset
 

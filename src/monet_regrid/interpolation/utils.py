@@ -23,13 +23,39 @@ __all__ = [
 
 
 def _point_in_tetrahedron(point: np.ndarray, tetra_vertices: np.ndarray) -> bool:
-    """Check if a 3D point is contained in a tetrahedron."""
+    """Check if a 3D point is contained in a tetrahedron.
+
+    Parameters
+    ----------
+    point : np.ndarray
+        The 3D point coordinates (3,).
+    tetra_vertices : np.ndarray
+        The coordinates of the tetrahedron vertices (4, 3).
+
+    Returns
+    -------
+    bool
+        True if the point is inside the tetrahedron, False otherwise.
+    """
     weights = _compute_barycentric_weights_3d(point, tetra_vertices)
     return bool(weights is not None and np.all(weights >= -1e-9) and np.all(weights <= 1 + 1e-9))
 
 
 def _compute_barycentric_weights_3d(point: np.ndarray, tetra_vertices: np.ndarray) -> np.ndarray | None:
-    """Compute barycentric weights for a point in a 3D tetrahedron."""
+    """Compute barycentric weights for a point in a 3D tetrahedron.
+
+    Parameters
+    ----------
+    point : np.ndarray
+        The 3D point coordinates (3,).
+    tetra_vertices : np.ndarray
+        The coordinates of the tetrahedron vertices (4, 3).
+
+    Returns
+    -------
+    np.ndarray | None
+        The barycentric weights (4,) or None if the tetrahedron is degenerate.
+    """
     # Using the matrix inversion method
     t_matrix = np.vstack((tetra_vertices.T, np.ones(4)))
     p = np.append(point, 1)
@@ -42,7 +68,20 @@ def _compute_barycentric_weights_3d(point: np.ndarray, tetra_vertices: np.ndarra
 
 
 def _point_in_triangle_3d(point: np.ndarray, triangle_vertices: np.ndarray) -> bool:
-    """Check if a 3D point is contained in a triangle using barycentric coordinates."""
+    """Check if a 3D point is contained in a triangle using barycentric coordinates.
+
+    Parameters
+    ----------
+    point : np.ndarray
+        The 3D point coordinates (3,).
+    triangle_vertices : np.ndarray
+        The coordinates of the triangle vertices (3, 3).
+
+    Returns
+    -------
+    bool
+        True if the point is inside the triangle, False otherwise.
+    """
     # Legacy method
     v0 = triangle_vertices[1] - triangle_vertices[0]
     v1 = triangle_vertices[2] - triangle_vertices[0]
@@ -67,7 +106,20 @@ def _point_in_triangle_3d(point: np.ndarray, triangle_vertices: np.ndarray) -> b
 
 
 def _compute_barycentric_weights_2d_in_3d(point: np.ndarray, triangle_vertices: np.ndarray) -> np.ndarray:
-    """Compute barycentric weights for a point in a 3D triangle."""
+    """Compute barycentric weights for a point in a 3D triangle.
+
+    Parameters
+    ----------
+    point : np.ndarray
+        The 3D point coordinates (3,).
+    triangle_vertices : np.ndarray
+        The coordinates of the triangle vertices (3, 3).
+
+    Returns
+    -------
+    np.ndarray
+        The barycentric weights (3,).
+    """
     # Legacy method
     v0 = triangle_vertices[1] - triangle_vertices[0]
     v1 = triangle_vertices[2] - triangle_vertices[0]
