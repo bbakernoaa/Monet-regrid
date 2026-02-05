@@ -567,15 +567,48 @@ class CurvilinearInterpolator:
                     lon_bounds_name = ds[lon_name].attrs.get("bounds", f"{lon_name}_bnds")
 
                     if lat_bounds_name in ds and lon_bounds_name in ds:
-                        # Reshape to (N, 4, 2) format
                         lat_b = ds[lat_bounds_name].values
                         lon_b = ds[lon_bounds_name].values
 
                         if lat_b.ndim == 3 and lat_b.shape[-1] == 4:
+                            # 2D curvilinear bounds (y, x, 4)
                             n_cells = lat_b.shape[0] * lat_b.shape[1]
                             lat_b_flat = lat_b.reshape(n_cells, 4)
                             lon_b_flat = lon_b.reshape(n_cells, 4)
                             return np.stack([lon_b_flat, lat_b_flat], axis=2)
+                        elif lat_b.ndim == 2 and lat_b.shape[-1] == 2:
+                            # 1D rectilinear bounds (lat, 2) and (lon, 2)
+                            # We need to broadcast these to 2D (lat, lon, 4)
+                            # lat_b is (ny, 2), lon_b is (nx, 2)
+                            ny = lat_b.shape[0]
+                            nx = lon_b.shape[0]
+
+                            # Create 4 vertices for each cell from 1D bounds
+                            # SW: (lon_left, lat_bottom)
+                            # SE: (lon_right, lat_bottom)
+                            # NE: (lon_right, lat_top)
+                            # NW: (lon_left, lat_top)
+
+                            # Broadcast 1D bounds to 2D vertices (y, x, 4)
+                            # lat_b: (ny, 2) -> (ny, nx, 4)
+                            # lon_b: (nx, 2) -> (ny, nx, 4)
+                            res_lat_b = np.zeros((ny, nx, 4))
+                            res_lon_b = np.zeros((ny, nx, 4))
+
+                            # Use NumPy broadcasting to populate vertex coordinates
+                            # Vertices: SW, SE, NE, NW
+                            res_lat_b[:, :, 0] = lat_b[:, 0][:, np.newaxis]
+                            res_lat_b[:, :, 1] = lat_b[:, 0][:, np.newaxis]
+                            res_lat_b[:, :, 2] = lat_b[:, 1][:, np.newaxis]
+                            res_lat_b[:, :, 3] = lat_b[:, 1][:, np.newaxis]
+
+                            res_lon_b[:, :, 0] = lon_b[:, 0][np.newaxis, :]
+                            res_lon_b[:, :, 1] = lon_b[:, 1][np.newaxis, :]
+                            res_lon_b[:, :, 2] = lon_b[:, 1][np.newaxis, :]
+                            res_lon_b[:, :, 3] = lon_b[:, 0][np.newaxis, :]
+
+                            n_cells = ny * nx
+                            return np.stack([res_lon_b.reshape(n_cells, 4), res_lat_b.reshape(n_cells, 4)], axis=2)
                 except Exception:  # noqa: S110
                     pass
 

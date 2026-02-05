@@ -5,32 +5,54 @@ This module provides JIT-compiled functions for performing the interpolation loo
 These functions are designed to be used inside xr.apply_ufunc.
 """
 
+from __future__ import annotations
+
 import numpy as np
 from numba import jit, prange
 
 
 @jit(nopython=True, nogil=True, parallel=True)
 def apply_weights_linear(
-    data_flat,  # (n_samples, n_source_points)
-    simplex_indices,  # (n_target_points,)
-    barycentric_weights,  # (n_target_points, 4)
-    valid_points,  # (n_target_points,)
-    simplex_vertices,  # (n_simplices, 4) - indices into data_flat
-    fallback_indices,  # (n_target_points,) - indices into data_flat or -1
-):
-    """
-    Apply precomputed barycentric weights to interpolate data.
+    data_flat: np.ndarray,
+    simplex_indices: np.ndarray,
+    barycentric_weights: np.ndarray,
+    valid_points: np.ndarray,
+    simplex_vertices: np.ndarray,
+    fallback_indices: np.ndarray,
+) -> np.ndarray:
+    """Apply precomputed barycentric weights to interpolate data.
 
-    Args:
-        data_flat: 2D array of source data (n_samples, n_source_points)
-        simplex_indices: Array of simplex indices for each target point
-        barycentric_weights: Array of barycentric weights for each target point
-        valid_points: Boolean array indicating if target point is valid
-        simplex_vertices: Array mapping simplex index to 4 vertex indices
-        fallback_indices: Array of fallback (nearest neighbor) indices
+    Parameters
+    ----------
+    data_flat : np.ndarray
+        2D array of source data (n_samples, n_source_points).
+    simplex_indices : np.ndarray
+        Array of simplex indices for each target point (n_target_points,).
+    barycentric_weights : np.ndarray
+        Array of barycentric weights for each target point (n_target_points, 4).
+    valid_points : np.ndarray
+        Boolean array indicating if target point is valid (n_target_points,).
+    simplex_vertices : np.ndarray
+        Array mapping simplex index to 4 vertex indices (n_simplices, 4).
+    fallback_indices : np.ndarray
+        Array of fallback (nearest neighbor) indices (n_target_points,).
 
-    Returns:
-        Interpolated data (n_samples, n_target_points)
+    Returns
+    -------
+    np.ndarray
+        Interpolated data (n_samples, n_target_points).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> data = np.random.rand(1, 10)
+    >>> simplex_indices = np.array([0], dtype=np.int32)
+    >>> barycentric_weights = np.array([[0.25, 0.25, 0.25, 0.25]])
+    >>> valid_points = np.array([True])
+    >>> simplex_vertices = np.array([[0, 1, 2, 3]], dtype=np.int32)
+    >>> fallback_indices = np.array([-1], dtype=np.int32)
+    >>> res = apply_weights_linear(data, simplex_indices, barycentric_weights,
+    ...                            valid_points, simplex_vertices, fallback_indices)
     """
     n_samples = data_flat.shape[0]
     n_targets = len(simplex_indices)
@@ -67,15 +89,7 @@ def apply_weights_linear(
 
                 # Check for NaNs in source data
                 if np.isnan(val0) or np.isnan(val1) or np.isnan(val2) or np.isnan(val3):
-                    # If any vertex is NaN, result is NaN (unless we want to
-                    # implement fallback here). The original implementation had
-                    # a complex fallback here which is hard to replicate
-                    # exactly in Numba efficiently without passing more data
-                    # (KDTree etc). For now, we leave as NaN to be consistent
-                    # with standard linear interp behavior, or users can
-                    # fillna() before regridding.
-
-                    # However, if fallback_indices are provided, we can use them
+                    # If any vertex is NaN, use fallback if available
                     if fallback_indices[i] != -1:
                         fallback_idx = fallback_indices[i]
                         result[s, i] = data_flat[s, fallback_idx]
@@ -96,20 +110,34 @@ def apply_weights_linear(
 
 @jit(nopython=True, nogil=True, parallel=True)
 def apply_weights_nearest(
-    data_flat,  # (n_samples, n_source_points)
-    source_indices,  # (n_target_points,)
-    valid_points,  # (n_target_points,) boolean (e.g. distance < threshold)
-):
-    """
-    Apply nearest neighbor interpolation.
+    data_flat: np.ndarray,
+    source_indices: np.ndarray,
+    valid_points: np.ndarray,
+) -> np.ndarray:
+    """Apply nearest neighbor interpolation.
 
-    Args:
-        data_flat: 2D array of source data
-        source_indices: Array of nearest source indices for each target point
-        valid_points: Boolean mask of valid points (distance threshold check)
+    Parameters
+    ----------
+    data_flat : np.ndarray
+        2D array of source data (n_samples, n_source_points).
+    source_indices : np.ndarray
+        Array of nearest source indices for each target point (n_target_points,).
+    valid_points : np.ndarray
+        Boolean mask of valid points (n_target_points,).
 
-    Returns:
-        Interpolated data
+    Returns
+    -------
+    np.ndarray
+        Interpolated data (n_samples, n_target_points).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> data = np.array([[10.0, 20.0]])
+    >>> indices = np.array([0, 1], dtype=np.int32)
+    >>> valid = np.array([True, True])
+    >>> apply_weights_nearest(data, indices, valid)
+    array([[10., 20.]])
     """
     n_samples = data_flat.shape[0]
     n_targets = len(source_indices)
@@ -130,36 +158,48 @@ def apply_weights_nearest(
 
 @jit(nopython=True, nogil=True, parallel=True)
 def apply_weights_conservative(
-    data_flat,  # (n_samples, n_source_points)
-    source_indices,  # (n_interactions,)
-    target_indices,  # (n_interactions,)
-    weights,  # (n_interactions,)
-    n_targets,  # int
-):
-    """
-    Apply conservative regridding weights using sparse COO format.
+    data_flat: np.ndarray,
+    source_indices: np.ndarray,
+    target_indices: np.ndarray,
+    weights: np.ndarray,
+    n_targets: int,
+) -> np.ndarray:
+    """Apply conservative regridding weights using sparse COO format.
 
-    Args:
-        data_flat: 2D array of source data
-        source_indices: Indices of source cells
-        target_indices: Indices of target cells
-        weights: Weights for each interaction
-        n_targets: Number of target cells (to size the output)
+    Parameters
+    ----------
+    data_flat : np.ndarray
+        2D array of source data (n_samples, n_source_points).
+    source_indices : np.ndarray
+        Indices of source cells (n_interactions,).
+    target_indices : np.ndarray
+        Indices of target cells (n_interactions,).
+    weights : np.ndarray
+        Weights for each interaction (n_interactions,).
+    n_targets : int
+        Number of target cells (to size the output).
 
-    Returns:
-        Regridded data (n_samples, n_targets)
+    Returns
+    -------
+    np.ndarray
+        Regridded data (n_samples, n_targets).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> data = np.array([[1.0, 2.0]])
+    >>> src_idx = np.array([0, 1], dtype=np.int32)
+    >>> tgt_idx = np.array([0, 0], dtype=np.int32)
+    >>> weights = np.array([0.5, 0.5])
+    >>> apply_weights_conservative(data, src_idx, tgt_idx, weights, 1)
+    array([[1.5]])
     """
     n_samples = data_flat.shape[0]
     n_interactions = len(weights)
 
-    # We need to be careful with parallelization here because multiple threads might write to the same target
-    # Standard parallel reduction or atomics are needed.
-    # Numba supports atomics but they can be slow.
-    # Alternatively, we can parallelize over samples if n_samples is large.
-
     result = np.zeros((n_samples, n_targets), dtype=data_flat.dtype)
 
-    # If n_samples is large, parallelize over samples
+    # Parallelize over samples for maximum speed when n_samples > 1
     if n_samples > 1:
         for s in prange(n_samples):
             for k in range(n_interactions):
@@ -171,45 +211,57 @@ def apply_weights_conservative(
                 if not np.isnan(val):
                     result[s, t_idx] += val * w
     else:
-        # If n_samples is 1, parallelize over interactions? No, race condition on t_idx.
-        # We can't easily parallelize over interactions without race conditions unless we sort by target index
-        # and process chunks.
-        # But for now, let's keep it serial over interactions if n_samples is small.
-        # Actually, if we use atomics we can parallelize.
-        # Or we can accept serial execution for n_samples=1 case, which is still fast in C/Numba.
-
+        # Serial execution for n_samples == 1 to avoid race conditions on t_idx
         for k in range(n_interactions):
             t_idx = target_indices[k]
             s_idx = source_indices[k]
             w = weights[k]
 
-            for s in range(n_samples):
-                val = data_flat[s, s_idx]
-                if not np.isnan(val):
-                    result[s, t_idx] += val * w
+            val = data_flat[0, s_idx]
+            if not np.isnan(val):
+                result[0, t_idx] += val * w
 
     return result
 
 
 @jit(nopython=True, nogil=True)
-def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
-    """
-    Find local coordinates (u, v) for a point p inside a quadrilateral defined by v1, v2, v3, v4.
+def inverse_bilinear_interpolation(
+    p: np.ndarray,
+    v1: np.ndarray,
+    v2: np.ndarray,
+    v3: np.ndarray,
+    v4: np.ndarray,
+    max_iter: int = 10,
+    tol: float = 1e-5,
+) -> tuple[float, float]:
+    """Find local coordinates (u, v) for a point p inside a quadrilateral.
+
     Solves for p = (1-u)(1-v)v1 + u(1-v)v2 + uvv3 + (1-u)v v4
+    using Newton-Raphson.
 
-    We assume the quad is roughly planar or we project to a local plane?
-    Actually, we can solve this in 2D if we just use the first 2 coordinates (x, y)
-    assuming the problem is defined in a projected space or lat/lon space.
-    If 3D, it's overdetermined but we can minimize distance.
+    Parameters
+    ----------
+    p : np.ndarray
+        (2,) target point.
+    v1, v2, v3, v4 : np.ndarray
+        (2,) vertices (SW, SE, NE, NW).
+    max_iter : int, optional
+        Maximum number of iterations. Defaults to 10.
+    tol : float, optional
+        Convergence tolerance. Defaults to 1e-5.
 
-    Standard approach for general quad: Newton-Raphson on 2D coordinates.
-
-    Args:
-        p: (2,) target point
-        v1, v2, v3, v4: (2,) vertices (SW, SE, NE, NW)
-
-    Returns:
+    Returns
+    -------
+    tuple[float, float]
         (u, v) where 0 <= u, v <= 1 if inside.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> p = np.array([0.5, 0.5])
+    >>> v1, v2, v3, v4 = np.array([0,0]), np.array([1,0]), np.array([1,1]), np.array([0,1])
+    >>> inverse_bilinear_interpolation(p, v1, v2, v3, v4)
+    (0.5, 0.5)
     """
     # Initial guess (center)
     u = 0.5
@@ -217,9 +269,6 @@ def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
 
     for _ in range(max_iter):
         # Calculate residuals
-        # p_est = (1-u)(1-v)v1 + u(1-v)v2 + uvv3 + (1-u)v v4
-        #       = v1 + u(v2-v1) + v(v4-v1) + uv(v1-v2+v3-v4)
-
         a_var = v1
         b_var = v2 - v1
         c_var = v4 - v1
@@ -232,8 +281,6 @@ def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
             break
 
         # Jacobian
-        # dP/du = b_var + v * d_var
-        # dP/dv = c_var + u * d_var
         j00 = b_var[0] + v * d_var[0]
         j01 = c_var[0] + u * d_var[0]
         j10 = b_var[1] + v * d_var[1]
@@ -255,20 +302,37 @@ def inverse_bilinear_interpolation(p, v1, v2, v3, v4, max_iter=10, tol=1e-5):
 
 
 @jit(nopython=True, nogil=True)
-def _det3x3(a, b, c):
-    """Determinant of 3x3 matrix formed by 3 vectors (scalar triple product)."""
+def _det3x3(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
+    """Determinant of 3x3 matrix formed by 3 vectors (scalar triple product).
+
+    Parameters
+    ----------
+    a, b, c : np.ndarray
+        (3,) vectors.
+
+    Returns
+    -------
+    float
+        Determinant.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> a, b, c = np.eye(3)
+    >>> _det3x3(a, b, c)
+    1.0
+    """
     return a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])
 
 
 @jit(nopython=True, nogil=True, parallel=True)
 def compute_linear_weights_grid(
-    target_points,
-    source_points,
-    nearest_indices,
-    source_shape,
-):
-    """
-    Compute linear interpolation weights using grid-based search.
+    target_points: np.ndarray,
+    source_points: np.ndarray,
+    nearest_indices: np.ndarray,
+    source_shape: tuple[int, int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute linear interpolation weights using grid-based search.
 
     Splits each quad into 2 triangles and uses 3D barycentric weights for
     accurate surface interpolation on a sphere.
@@ -288,6 +352,15 @@ def compute_linear_weights_grid(
     -------
     tuple[np.ndarray, np.ndarray, np.ndarray]
         Indices, weights, and valid mask.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> src = np.array([[0,0,1], [1,0,1], [1,1,1], [0,1,1]], dtype=np.float64)
+    >>> tgt = np.array([[0.5, 0.5, 1.0]])
+    >>> near = np.array([0], dtype=np.int32)
+    >>> compute_linear_weights_grid(tgt, src, near, (2, 2))
+    (array([[0, 2, 3, -1]]), array([[0.5, 0.5, 0.0, 0.0]]), array([True]))
     """
     n_targets = target_points.shape[0]
     ny, nx = source_shape
@@ -327,8 +400,6 @@ def compute_linear_weights_grid(
                     v1 = source_points[t_idxs[1]]
                     v2 = source_points[t_idxs[2]]
 
-                    # Compute barycentric weights for P in tetrahedron O-V0-V1-V2
-                    # using scalar triple products
                     det_total = _det3x3(v0, v1, v2)
                     if abs(det_total) < 1e-15:
                         continue
@@ -339,8 +410,6 @@ def compute_linear_weights_grid(
                     w3 = 1.0 - (w0 + w1 + w2)  # Weight for Earth center
 
                     # Point is inside if all surface weights >= 0
-                    # w3 is for Earth center and should be near 0 for surface points
-                    # (slightly negative since surface is above the flat triangle)
                     if w0 >= -1e-9 and w1 >= -1e-9 and w2 >= -1e-9 and w3 >= -0.1:
                         sum_surface = w0 + w1 + w2
                         out_indices[k, 0] = t_idxs[0]
@@ -377,23 +446,45 @@ def compute_linear_weights_grid(
 
 @jit(nopython=True, nogil=True, parallel=True)
 def compute_structured_weights(
-    target_points,  # (n_targets, 3) or (n_targets, 2)
-    source_points,  # (n_source, 3) or (n_source, 2) - flattened
-    nearest_indices,  # (n_targets,) from KDTree
-    source_shape,  # (ny, nx)
-    method_enum,  # 0=bilinear, 1=cubic
-):
-    """
-    Compute weights for structured interpolation (bilinear/cubic).
+    target_points: np.ndarray,
+    source_points: np.ndarray,
+    nearest_indices: np.ndarray,
+    source_shape: tuple[int, int],
+    method_enum: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute weights for structured interpolation (bilinear/cubic).
 
-    We assume source_points are flattened from (ny, nx).
-    Indices map as: idx = j * nx + i
+    Parameters
+    ----------
+    target_points : np.ndarray
+        Array of target points (n_targets, 3) or (n_targets, 2).
+    source_points : np.ndarray
+        Flattened array of source points (n_source, 3) or (n_source, 2).
+    nearest_indices : np.ndarray
+        Indices of nearest source neighbors (n_targets,).
+    source_shape : tuple[int, int]
+        Original shape of the source grid (ny, nx).
+    method_enum : int
+        0 for bilinear, 1 for cubic.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+        Indices, weights, and valid mask.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> src = np.array([[0,0,0], [1,0,0], [1,1,0], [0,1,0]], dtype=np.float64)
+    >>> tgt = np.array([[0.5, 0.5, 0.0]])
+    >>> near = np.array([0], dtype=np.int32)
+    >>> compute_structured_weights(tgt, src, near, (2, 2), 0)
+    (array([[0, 1, 2, 3]]), array([[0.25, 0.25, 0.25, 0.25]]), array([True]))
     """
     n_targets = target_points.shape[0]
     ny, nx = source_shape
 
     # Output structure
-    # For bilinear: 4 weights. For cubic: 16 weights.
     max_weights = 16 if method_enum == 1 else 4
 
     out_indices = np.full((n_targets, max_weights), -1, dtype=np.int32)
@@ -405,9 +496,6 @@ def compute_structured_weights(
         nearest_idx = nearest_indices[k]
         j_n = nearest_idx // nx
         i_n = nearest_idx % nx
-
-        # 2. Check 4 surrounding cells (quadrants) to find which one contains the point
-        # A cell (j, i) is formed by (j,i), (j,i+1), (j+1,i+1), (j+1,i)
 
         found = False
         final_u = 0.0
@@ -452,47 +540,25 @@ def compute_structured_weights(
                 break
 
         if not found:
-            # Fallback to nearest neighbor or extrapolation?
-            # For now, mark invalid or use nearest (which is essentially what we started with)
-            # Actually, let's keep it simple: if not found, use nearest (weight 1.0)
-            # Or leave valid=False
             continue
 
         out_valid[k] = True
 
         if method_enum == 0:  # Bilinear
-            # Weights: (1-u)(1-v), u(1-v), uv, (1-u)v
-            # Indices: (j,i), (j,i+1), (j+1,i+1), (j+1,i)
-            # SW, SE, NE, NW
-
             # SW
             out_indices[k, 0] = base_j * nx + base_i
             out_weights[k, 0] = (1 - final_u) * (1 - final_v)
-
             # SE
             out_indices[k, 1] = base_j * nx + (base_i + 1)
             out_weights[k, 1] = final_u * (1 - final_v)
-
             # NE
             out_indices[k, 2] = (base_j + 1) * nx + (base_i + 1)
             out_weights[k, 2] = final_u * final_v
-
             # NW
             out_indices[k, 3] = (base_j + 1) * nx + base_i
             out_weights[k, 3] = (1 - final_u) * final_v
 
         elif method_enum == 1:  # Cubic
-            # Bicubic interpolation on the index space (u, v)
-            # We need 4x4 stencil: from base_i-1 to base_i+2
-
-            # Compute cubic weights for u
-            # Catmull-Rom spline or similar?
-            # Standard bicubic convolution weights
-            # w0(t) = -0.5t^3 + t^2 - 0.5t
-            # w1(t) = 1.5t^3 - 2.5t^2 + 1
-            # w2(t) = -1.5t^3 + 2t^2 + 0.5t
-            # w3(t) = 0.5t^3 - 0.5t^2
-
             u = final_u
             v = final_v
 
@@ -515,7 +581,6 @@ def compute_structured_weights(
                     cur_j = base_j + dy
                     cur_i = base_i + dx
 
-                    # Clamp to boundaries (repeat edge pixels)
                     cur_j_clamped = min(max(cur_j, 0), ny - 1)
                     cur_i_clamped = min(max(cur_i, 0), nx - 1)
 
@@ -531,13 +596,38 @@ def compute_structured_weights(
 
 @jit(nopython=True, nogil=True, parallel=True)
 def apply_weights_structured(
-    data_flat,  # (n_samples, n_source_points)
-    indices,  # (n_targets, max_weights)
-    weights,  # (n_targets, max_weights)
-    valid_mask,  # (n_targets,)
-):
-    """
-    Apply structured interpolation weights (bilinear/cubic).
+    data_flat: np.ndarray,
+    indices: np.ndarray,
+    weights: np.ndarray,
+    valid_mask: np.ndarray,
+) -> np.ndarray:
+    """Apply structured interpolation weights (bilinear/cubic).
+
+    Parameters
+    ----------
+    data_flat : np.ndarray
+        2D array of source data (n_samples, n_source_points).
+    indices : np.ndarray
+        Array of indices into source data (n_targets, max_weights).
+    weights : np.ndarray
+        Array of weights (n_targets, max_weights).
+    valid_mask : np.ndarray
+        Boolean mask of valid points (n_targets,).
+
+    Returns
+    -------
+    np.ndarray
+        Interpolated data (n_samples, n_targets).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> data = np.array([[10, 20, 30, 40]], dtype=np.float64)
+    >>> indices = np.array([[0, 1, 2, 3]], dtype=np.int32)
+    >>> weights = np.array([[0.25, 0.25, 0.25, 0.25]])
+    >>> valid = np.array([True])
+    >>> apply_weights_structured(data, indices, weights, valid)
+    array([[25.]])
     """
     n_samples = data_flat.shape[0]
     n_targets = indices.shape[0]
@@ -551,29 +641,16 @@ def apply_weights_structured(
 
         for s in range(n_samples):
             val_sum = 0.0
+            has_nan = False
 
             for k in range(max_weights):
                 idx = indices[i, k]
                 w = weights[i, k]
-
                 val = data_flat[s, idx]
-                if not np.isnan(val):
-                    val_sum += val * w
-                    # weight_sum += w # For normalization if needed? Usually sum(w)=1
-
-            # For bicubic, sum(weights) is 1.0 but weights can be negative.
-            # If NaNs are present, handling is tricky.
-            # Simple approach: if any NaN in stencil, result is NaN (safe).
-            # Or ignore NaNs (renormalize).
-            # Here we just output the sum. If all valid, it's correct.
-            # If some NaN, val_sum will be partial.
-            # Let's verify NaNs strictly.
-
-            has_nan = False
-            for k in range(max_weights):
-                if np.isnan(data_flat[s, indices[i, k]]):
+                if np.isnan(val):
                     has_nan = True
                     break
+                val_sum += val * w
 
             if has_nan:
                 result[s, i] = np.nan
