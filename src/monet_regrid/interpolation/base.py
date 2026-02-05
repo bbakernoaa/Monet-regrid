@@ -1,10 +1,16 @@
 """
 Base classes and types for interpolation.
+
+This module provides common utilities, adapters, and availability checks for
+various interpolation backends, including Numba-accelerated kernels and
+optimized KDTree implementations.
 """
 
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -41,10 +47,24 @@ if HAS_PYKDTREE:
             self.n = len(data)
 
         def __getstate__(self) -> tuple[np.ndarray, int]:
+            """Prepare the KDTree for pickling.
+
+            Returns
+            -------
+            tuple[np.ndarray, int]
+                The state needed to reconstruct the KDTree.
+            """
             # Pickling support: pykdtree might not pickle well, so we rebuild
             return (self._data, self._leafsize)
 
         def __setstate__(self, state: tuple[np.ndarray, int]) -> None:
+            """Restore the KDTree from a pickled state.
+
+            Parameters
+            ----------
+            state : tuple[np.ndarray, int]
+                The state needed to reconstruct the KDTree.
+            """
             data, leafsize = state
             self._data = data
             self._leafsize = leafsize
@@ -62,8 +82,12 @@ if HAS_PYKDTREE:
             return self._data
 
         def query(
-            self, x: np.ndarray, k: int = 1, distance_upper_bound: float = np.inf
-        ) -> tuple[np.ndarray, np.ndarray] | tuple[float, int]:
+            self,
+            x: np.ndarray,
+            k: int = 1,
+            distance_upper_bound: float = np.inf,
+            workers: int = 1,  # noqa: ARG002
+        ) -> tuple[np.ndarray | float, np.ndarray | int]:
             """Query the KDTree for nearest neighbors.
 
             Parameters
@@ -74,10 +98,13 @@ if HAS_PYKDTREE:
                 The number of nearest neighbors to return.
             distance_upper_bound : float, default: inf
                 Return only neighbors within this distance.
+            workers : int, default: 1
+                Number of workers for the query. Ignored by pykdtree but
+                kept for API compatibility.
 
             Returns
             -------
-            tuple[np.ndarray, np.ndarray] | tuple[float, int]
+            tuple[np.ndarray | float, np.ndarray | int]
                 The distances and indices of the nearest neighbors.
             """
             x = np.asarray(x)
@@ -90,7 +117,7 @@ if HAS_PYKDTREE:
 
             if is_1d:
                 if k == 1:
-                    return d[0], i[0]
+                    return float(d[0]), int(i[0])
                 else:
                     return d[0], i[0]
             return d, i
@@ -110,11 +137,12 @@ try:
     HAS_NUMBA = True
 except ImportError:
     HAS_NUMBA = False
-    apply_weights_conservative = None
-    apply_weights_linear = None
-    apply_weights_nearest = None
-    apply_weights_structured = None
-    compute_structured_weights = None
+    apply_weights_conservative: Callable[..., Any] | None = None
+    apply_weights_linear: Callable[..., Any] | None = None
+    apply_weights_nearest: Callable[..., Any] | None = None
+    apply_weights_structured: Callable[..., Any] | None = None
+    compute_linear_weights_grid: Callable[..., Any] | None = None
+    compute_structured_weights: Callable[..., Any] | None = None
     warnings.warn("Numba not available. Falling back to slower pure Python/NumPy implementation.", stacklevel=2)
 
 try:
@@ -123,7 +151,7 @@ try:
     HAS_POLYGON_CLIPPING = True
 except ImportError:
     HAS_POLYGON_CLIPPING = False
-    compute_conservative_weights = None
+    compute_conservative_weights: Callable[..., Any] | None = None
 
 __all__ = [
     "HAS_NUMBA",
