@@ -138,11 +138,7 @@ def statistic_reduce(
     result = result.reindex_like(sorted_target_coords, copy=False)
 
     # Update history for provenance
-    history = f"Reduced using monet_regrid.methods.flox_reduce.statistic_reduce (method={method})"
-    if "history" in result.attrs:
-        result.attrs["history"] = result.attrs["history"] + "\n" + history
-    else:
-        result.attrs["history"] = history
+    utils.update_history(result, f"Reduced using monet_regrid.methods.flox_reduce.statistic_reduce (method={method})")
 
     return result
 
@@ -247,10 +243,6 @@ def compute_mode(
 
     # Update history for provenance
     mode_str = "least_common" if anti_mode else "most_common"
-    history = f"Reduced using monet_regrid.methods.flox_reduce.compute_mode ({mode_str})"
-    if "history" in result.attrs:
-        result.attrs["history"] = result.attrs["history"] + "\n" + history
-    else:
-        result.attrs["history"] = history
+    utils.update_history(result, f"Reduced using monet_regrid.methods.flox_reduce.compute_mode ({mode_str})")
 
     return result

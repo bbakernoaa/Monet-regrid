@@ -32,6 +32,8 @@ import numpy as np
 import xarray as xr
 from scipy.interpolate import RegularGridInterpolator
 
+from monet_regrid import utils
+
 
 @overload
 def interp_regrid(
@@ -120,7 +122,7 @@ def interp_regrid(
                 interped = interped.assign_coords({c: target_ds[c] for c in coord_names})
 
             # Update history for provenance (Fast Path)
-            _update_history(interped, method)
+            utils.update_history(interped, f"Interpolated using monet_regrid.methods.interp.interp_regrid (method={method})")
             return interped
         except (ValueError, IndexError, NotImplementedError):
             # Fallback to xarray's interp if fast path fails globally
@@ -142,38 +144,9 @@ def interp_regrid(
             interped[coord].attrs = coord_attrs[coord]
 
     # Update history for provenance (Slow Path)
-    _update_history(interped, method)
+    utils.update_history(interped, f"Interpolated using monet_regrid.methods.interp.interp_regrid (method={method})")
 
     return interped
-
-
-def _update_history(obj: xr.DataArray | xr.Dataset, method: str) -> None:
-    """Update the history attribute of an xarray object for provenance tracking.
-
-    Parameters
-    ----------
-    obj : xr.DataArray | xr.Dataset
-        The xarray object to update.
-    method : str
-        The interpolation method used (e.g., 'linear', 'nearest').
-
-    Returns
-    -------
-    None
-        The object is modified in-place.
-
-    Examples
-    --------
-    >>> import xarray as xr
-    >>> da = xr.DataArray([1, 2, 3], attrs={"history": "Original"})
-    >>> _update_history(da, "linear")
-    >>> print(da.attrs["history"])
-    Original
-    Interpolated using monet_regrid.methods.interp.interp_regrid (method=linear)
-    """
-    history = f"Interpolated using monet_regrid.methods.interp.interp_regrid (method={method})"
-    existing_history = obj.attrs.get("history", "")
-    obj.attrs["history"] = f"{existing_history}\n{history}" if existing_history else history
 
 
 def _interp_regrid_fast(
@@ -185,7 +158,7 @@ def _interp_regrid_fast(
     """Fast interpolation using scipy.interpolate.RegularGridInterpolator directly.
 
     This avoids some overhead from xarray's interp() method by working directly
-    on NumPy arrays.
+    on NumPy arrays or Dask chunks using xr.apply_ufunc.
 
     Parameters
     ----------
@@ -207,12 +180,7 @@ def _interp_regrid_fast(
     ------
     ValueError
         If interpolation dimensions are not found or coordinates are not monotonic.
-    NotImplementedError
-        If data is Dask-backed or has extra dimensions.
     """
-    # Sort coordinate names to match data dimensions order where possible
-    # This is critical for RegularGridInterpolator which expects points in (n, D) format
-
     # Get interpolation dimensions (must be in both data dims and coord_names)
     interp_dims = [dim for dim in data.dims if dim in coord_names]
 
@@ -224,11 +192,7 @@ def _interp_regrid_fast(
     src_coords = []
     for dim in interp_dims:
         coord_vals = data.coords[dim].values
-        # RegularGridInterpolator requires strictly increasing coordinates
-        # We can handle decreasing by flipping, but mixed is not allowed
-        # Check if monotonic increasing
         is_monotonic_inc = np.all(np.diff(coord_vals) > 0)
-        # Check if monotonic decreasing
         is_monotonic_dec = np.all(np.diff(coord_vals) < 0)
 
         if not (is_monotonic_inc or is_monotonic_dec):
@@ -237,75 +201,112 @@ def _interp_regrid_fast(
         src_coords.append(coord_vals)
 
     # Prepare target coordinates
-    # For RegularGridInterpolator, we need to create a meshgrid of target points
-    tgt_coords_1d = []
-    for dim in interp_dims:
-        tgt_coords_1d.append(target_ds.coords[dim].values)
+    tgt_coords_1d = [target_ds.coords[dim].values for dim in interp_dims]
+    target_shape = tuple(len(c) for c in tgt_coords_1d)
 
     # Map method names
     scipy_method = method
     if method == "bilinear":
-        scipy_method = "linear"  # scipy uses 'linear' for bilinear in 2D
+        scipy_method = "linear"
 
-    # We must be careful not to trigger eager loading if data is dask-backed
-    if data.chunks is not None:
-        msg = "Dask-backed data not supported in fast path; falling back to xarray.interp"
-        raise NotImplementedError(msg)
+    # Define the output core dimensions and sizes for apply_ufunc
+    output_core_dims = [interp_dims]
+    output_sizes = {dim: len(target_ds.coords[dim]) for dim in interp_dims}
 
-    # Handle extra dimensions (e.g., time, level) using vectorization
-    extra_dims = [d for d in data.dims if d not in interp_dims]
-    if extra_dims:
-        # Transpose to put interpolation dims first
-        transpose_order = interp_dims + extra_dims
-        data_transposed = data.transpose(*transpose_order)
-        values_to_interp = data_transposed.values
-    else:
-        values_to_interp = data.values
-
-    # Create interpolator
-    # Note: fill_value=np.nan is safer but might be slower; xarray default is usually nan
-    interpolator = RegularGridInterpolator(
-        tuple(src_coords), values_to_interp, method=scipy_method, bounds_error=False, fill_value=np.nan
+    # Use xr.apply_ufunc to handle both NumPy and Dask arrays
+    result = xr.apply_ufunc(
+        _scipy_interp_wrapper,
+        data,
+        kwargs={
+            "src_coords": tuple(src_coords),
+            "tgt_coords_1d": tuple(tgt_coords_1d),
+            "method": scipy_method,
+            "target_shape": target_shape,
+        },
+        input_core_dims=[interp_dims],
+        output_core_dims=output_core_dims,
+        exclude_dims=set(interp_dims),
+        dask="parallelized",
+        output_dtypes=[data.dtype],
+        dask_gufunc_kwargs={"allow_rechunk": True, "output_sizes": output_sizes},
+        keep_attrs=True,
     )
-
-    # Generate target points grid
-    # We use indexing='ij' to match matrix indexing (row, col, ...)
-    tgt_mesh = np.meshgrid(*tgt_coords_1d, indexing="ij")
-
-    # Stack to get shape (N, D) where N is total points and D is dimensions
-    flat_tgt = np.stack([m.ravel() for m in tgt_mesh], axis=-1)
-
-    # Interpolate
-    new_values_flat = interpolator(flat_tgt)
-
-    # Reshape back to target grid shape
-    # The shape is determined by the target coordinate lengths plus extra dims
-    target_shape = [len(c) for c in tgt_coords_1d]
-    if extra_dims:
-        target_shape.extend([data.sizes[d] for d in extra_dims])
-
-    new_values = new_values_flat.reshape(target_shape)
 
     # Construct the result DataArray with ALL coordinates (Scientific Hygiene)
     new_coords = {}
-    result_dims = list(interp_dims) + extra_dims
-
     for name, coord in data.coords.items():
         if name in interp_dims:
-            # Dimension coordinate being interpolated
             new_coords[name] = target_ds.coords[name]
         elif any(dim in coord.dims for dim in interp_dims):
-            # Auxiliary coordinate depending on interpolated dims -> Interpolate it
             interp_dict = {dim: target_ds.coords[dim] for dim in coord.dims if dim in interp_dims}
             new_coords[name] = coord.interp(interp_dict, method=method)
         else:
-            # Preserve coordinates that don't depend on interpolated dims
             new_coords[name] = coord
 
-    result = xr.DataArray(new_values, dims=result_dims, coords=new_coords, attrs=data.attrs, name=data.name)
-
-    # Transpose back to original dimension order if necessary
-    if extra_dims:
-        result = result.transpose(*data.dims)
+    # Re-attach coordinates and preserve attributes
+    result = result.assign_coords(new_coords)
+    if data.name:
+        result.name = data.name
 
     return result
+
+
+def _scipy_interp_wrapper(
+    data: np.ndarray,
+    src_coords: tuple[np.ndarray, ...],
+    tgt_coords_1d: tuple[np.ndarray, ...],
+    method: str,
+    target_shape: tuple[int, ...],
+) -> np.ndarray:
+    """Wrapper for RegularGridInterpolator to be used with apply_ufunc.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Input data slice. Core dimensions are at the end.
+    src_coords : tuple[np.ndarray, ...]
+        Source coordinate arrays.
+    tgt_coords_1d : tuple[np.ndarray, ...]
+        Target coordinate arrays.
+    method : str
+        Interpolation method.
+    target_shape : tuple[int, ...]
+        Desired output shape for the spatial dimensions.
+
+    Returns
+    -------
+    np.ndarray
+        Interpolated data slice. Core dimensions are at the end.
+    """
+    n_interp = len(src_coords)
+    # RegularGridInterpolator expects core dimensions at the beginning.
+    # apply_ufunc moves them to the end.
+    if data.ndim > n_interp:
+        axes = list(range(data.ndim))
+        new_axes = axes[-n_interp:] + axes[:-n_interp]
+        data_for_interp = data.transpose(new_axes)
+    else:
+        data_for_interp = data
+
+    # Create interpolator
+    interpolator = RegularGridInterpolator(src_coords, data_for_interp, method=method, bounds_error=False, fill_value=np.nan)
+
+    # Generate target points grid
+    tgt_mesh = np.meshgrid(*tgt_coords_1d, indexing="ij")
+    flat_tgt = np.stack([m.ravel() for m in tgt_mesh], axis=-1)
+
+    # Interpolate
+    # Result has shape (N_target_flat, ...) where ... are extra dimensions
+    new_values_flat = interpolator(flat_tgt)
+
+    # Reshape to (target_shape, ...)
+    extra_shape = data.shape[:-n_interp]
+    new_values = new_values_flat.reshape(*target_shape, *extra_shape)
+
+    # Move core dimensions back to the end for apply_ufunc
+    if data.ndim > n_interp:
+        axes = list(range(new_values.ndim))
+        final_axes = axes[n_interp:] + axes[:n_interp]
+        return new_values.transpose(final_axes)
+
+    return new_values

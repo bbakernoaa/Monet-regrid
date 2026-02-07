@@ -129,9 +129,7 @@ def conservative_regrid(
     regridded_data = regridded_data.reindex_like(target_ds, copy=False)
 
     # Update history attribute for provenance
-    history_message = "Regridded using conservative method"
-    existing_history = regridded_data.attrs.get("history", "")
-    regridded_data.attrs["history"] = f"{existing_history}\n{history_message}" if existing_history else history_message
+    utils.update_history(regridded_data, "Regridded using conservative method")
 
     return regridded_data
 

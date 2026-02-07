@@ -39,6 +39,7 @@ import numpy as np
 import xarray as xr
 from scipy.spatial import Delaunay, cKDTree  # type: ignore
 
+from monet_regrid import utils
 from monet_regrid.coordinate_transformer import CoordinateTransformer
 from monet_regrid.interpolation import InterpolationEngine
 from monet_regrid.interpolation.utils import (
@@ -774,12 +775,7 @@ class CurvilinearInterpolator:
                 result.coords[dim] = self.target_grid.coords[dim]
 
         # Update history
-        history = result.attrs.get("history", "")
-        new_history = f"Interpolated using monet_regrid.curvilinear.CurvilinearInterpolator (method={self.method})"
-        if history:
-            result.attrs["history"] = f"{history}\n{new_history}"
-        else:
-            result.attrs["history"] = new_history
+        utils.update_history(result, f"Interpolated using monet_regrid.curvilinear.CurvilinearInterpolator (method={self.method})")
 
         return result  # type: ignore[no-any-return]
 
@@ -796,7 +792,7 @@ class CurvilinearInterpolator:
         xr.Dataset
             The interpolated Dataset on the target grid.
         """
-        result_dataset = xr.Dataset()
+        result_dataset = xr.Dataset(attrs=dataset.attrs)
 
         for var_name, data_array in dataset.items():
             # Skip coordinate variables that match the grid coordinates
@@ -829,12 +825,9 @@ class CurvilinearInterpolator:
                 result_dataset.coords[dim_name] = np.arange(dim_size)
 
         # Update history
-        history = dataset.attrs.get("history", "")
-        new_history = f"Interpolated using monet_regrid.curvilinear.CurvilinearInterpolator (method={self.method})"
-        if history:
-            result_dataset.attrs["history"] = f"{history}\n{new_history}"
-        else:
-            result_dataset.attrs["history"] = new_history
+        utils.update_history(
+            result_dataset, f"Interpolated using monet_regrid.curvilinear.CurvilinearInterpolator (method={self.method})"
+        )
 
         return result_dataset
 

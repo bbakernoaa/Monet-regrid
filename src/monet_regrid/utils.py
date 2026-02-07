@@ -430,9 +430,7 @@ def format_for_regrid(
                     result[var] = result[var].chunk({coord: -1})
 
     # Update history attribute for provenance
-    history_message = "Pre-formatted data for regridding (pole padding/longitude shift)"
-    existing_history = result.attrs.get("history", "")
-    result.attrs["history"] = f"{existing_history}\n{history_message}" if existing_history else history_message
+    update_history(result, "Pre-formatted data for regridding (pole padding/longitude shift)")
 
     return result
 
@@ -986,6 +984,34 @@ def _create_cache_key(data: xr.DataArray | xr.Dataset, time_dim: str | None = No
     dims_key = tuple(sorted(data.dims))
 
     return (coords_key, dims_key, time_dim)
+
+
+def update_history(obj: xr.DataArray | xr.Dataset, message: str) -> None:
+    """Update the history attribute of an xarray object for provenance tracking.
+
+    Parameters
+    ----------
+    obj : xr.DataArray | xr.Dataset
+        The xarray object to update.
+    message : str
+        The message to append to the history.
+
+    Returns
+    -------
+    None
+        The object is modified in-place.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> da = xr.DataArray([1, 2, 3], attrs={"history": "Original"})
+    >>> update_history(da, "Interpolated using monet_regrid")
+    >>> print(da.attrs["history"])
+    Original
+    Interpolated using monet_regrid
+    """
+    existing_history = obj.attrs.get("history", "")
+    obj.attrs["history"] = f"{existing_history}\n{message}" if existing_history else message
 
 
 def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
