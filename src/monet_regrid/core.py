@@ -625,21 +625,47 @@ class CurvilinearRegridder(BaseRegridder):
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation for curvilinear grids.
 
-        This method caches the underlying ``CurvilinearInterpolator`` object after its
-        first creation for a given grid and method configuration. Subsequent calls with
-        the same configuration will reuse the cached interpolator to improve performance.
+        This method applies the regridding algorithm to the input data. It caches
+        the underlying ``CurvilinearInterpolator`` object after its first creation
+        for a given grid and method configuration. Subsequent calls with the
+        same configuration will reuse the cached interpolator to improve performance.
 
         Parameters
         ----------
         data : xr.DataArray | xr.Dataset | None, optional
-            Data to regrid. Defaults to the source data from initialization.
+            The data to be regridded. If `None`, the `source_data` provided
+            during initialization is used. Defaults to `None`.
         **kwargs : Any
-            Additional arguments to override initialization parameters.
+            Additional keyword arguments to override the regridder's
+            initialization parameters for this specific call. For example,
+            `method='nearest'` could be used to temporarily change the
+            interpolation method.
 
         Returns
         -------
         xr.DataArray | xr.Dataset
-            The regridded data.
+            The regridded data, with the same type as the input `data`.
+
+        Examples
+        --------
+        >>> import xarray as xr
+        >>> import numpy as np
+        >>> source_da = xr.DataArray(
+        ...     np.random.rand(10, 20),
+        ...     dims=["y", "x"],
+        ...     coords={"latitude": (("y", "x"), np.random.rand(10, 20)),
+        ...             "longitude": (("y", "x"), np.random.rand(10, 20))},
+        ... )
+        >>> target_ds = xr.Dataset(
+        ...     coords={
+        ...         "lat": (("y_new",), np.arange(0.5, 10, 2)),
+        ...         "lon": (("x_new",), np.arange(0.5, 20, 2)),
+        ...     }
+        ... )
+        >>> regridder = CurvilinearRegridder(source_da, target_ds)
+        >>> regridded_da = regridder()
+        >>> print(regridded_da.shape)
+        (5, 10)
         """
         # Use provided data or fall back to source data
         input_data = data if data is not None else self.source_data
