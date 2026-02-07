@@ -73,7 +73,24 @@ def benchmark() -> None:
     speedup = slow_time / fast_time
     print(f"Speedup: {speedup:.2f}x")  # noqa: T201
 
-    # 4. Visualization (Track A: Static)
+    # 4. Dask Benchmark
+    print("\nBenchmarking with Dask-backed data...")  # noqa: T201
+    da_dask = da.chunk({"time": 10, "lat": 100, "lon": 100})
+
+    # Optimized Path with Dask
+    start = time.perf_counter()
+    res_dask = interp_regrid(da_dask, target_ds, method="linear")
+    # This should be fast as it is lazy
+    lazy_time = time.perf_counter() - start
+    print(f"Dask Optimized Path (Lazy) Time: {lazy_time:.4f}s")  # noqa: T201
+
+    # Now compute it
+    start = time.perf_counter()
+    _res_computed = res_dask.compute()
+    dask_compute_time = time.perf_counter() - start
+    print(f"Dask Optimized Path (Compute) Time: {dask_compute_time:.4f}s")  # noqa: T201
+
+    # 5. Visualization (Track A: Static)
     if ccrs:
         fig, axes = plt.subplots(1, 2, figsize=(15, 6), subplot_kw={"projection": ccrs.PlateCarree()})
 

@@ -34,6 +34,7 @@ import dask.array as da
 import numpy as np
 import xarray as xr
 
+from monet_regrid import utils
 from monet_regrid.constants import GridType
 from monet_regrid.curvilinear import CurvilinearInterpolator
 from monet_regrid.methods import conservative, interp
@@ -359,9 +360,7 @@ class RectilinearRegridder(BaseRegridder):
             raise ValueError(msg)
 
         # Update history attribute for provenance
-        history_message = f"Regridded using RectilinearRegridder with method='{method}'"
-        existing_history = regridded_data.attrs.get("history", "")
-        regridded_data.attrs["history"] = f"{existing_history}\n{history_message}" if existing_history else history_message
+        utils.update_history(regridded_data, f"Regridded using RectilinearRegridder with method='{method}'")
 
         return regridded_data
 
@@ -389,23 +388,29 @@ class RectilinearRegridder(BaseRegridder):
         dict[str, Any]
             Dictionary containing regridder metadata and configuration.
         """
-        source_dims = {}
-        if hasattr(self.source_data, "dims"):
-            # Convert dims to a dict format (name -> size)
-            if hasattr(self.source_data, "sizes"):
-                source_dims = {dim: self.source_data.sizes[dim] for dim in self.source_data.dims}
-            else:
-                source_dims = {
-                    dim: len(self.source_data[dim]) if dim in self.source_data.dims else 0 for dim in self.source_data.dims
-                }
+        source_dims = dict(self.source_data.sizes) if self.source_data is not None else {}
+        source_info = {}
+        if self.source_data is not None:
+            source_info = {
+                "dims": source_dims,
+                "data_vars": (
+                    list(self.source_data.data_vars) if isinstance(self.source_data, xr.Dataset) else [self.source_data.name]
+                ),
+            }
+
+        target_info = {
+            "dims": dict(self.target_grid.sizes),
+            "coords": list(self.target_grid.coords),
+        }
 
         return {
             "type": "RectilinearRegridder",
             "method": self.method,
             "time_dim": self.time_dim,
             "method_kwargs": self.method_kwargs,
-            "source_dims": source_dims,
-            "target_coords": list(self.target_grid.coords),
+            "source_dims": source_dims,  # Backward compatibility
+            "source": source_info,
+            "target": target_info,
             "grid_type": "rectilinear",
         }
 
@@ -677,9 +682,7 @@ class CurvilinearRegridder(BaseRegridder):
         result = interpolator(input_data)
 
         # Update history attribute for provenance
-        history_message = f"Regridded using CurvilinearRegridder with method='{method}'"
-        existing_history = result.attrs.get("history", "")
-        result.attrs["history"] = f"{existing_history}\n{history_message}" if existing_history else history_message
+        utils.update_history(result, f"Regridded using CurvilinearRegridder with method='{method}'")
 
         return result
 
@@ -829,22 +832,28 @@ class CurvilinearRegridder(BaseRegridder):
         dict[str, Any]
             Dictionary containing regridder metadata and configuration.
         """
-        source_dims = {}
-        if hasattr(self.source_data, "dims"):
-            # Convert dims to a dict format (name -> size)
-            if hasattr(self.source_data, "sizes"):
-                source_dims = {dim: self.source_data.sizes[dim] for dim in self.source_data.dims}
-            else:
-                source_dims = {
-                    dim: len(self.source_data[dim]) if dim in self.source_data.dims else 0 for dim in self.source_data.dims
-                }
+        source_dims = dict(self.source_data.sizes) if self.source_data is not None else {}
+        source_info = {}
+        if self.source_data is not None:
+            source_info = {
+                "dims": source_dims,
+                "data_vars": (
+                    list(self.source_data.data_vars) if isinstance(self.source_data, xr.Dataset) else [self.source_data.name]
+                ),
+            }
+
+        target_info = {
+            "dims": dict(self.target_grid.sizes),
+            "coords": list(self.target_grid.coords),
+        }
 
         return {
             "type": "CurvilinearRegridder",
             "method": self.method,
             "method_kwargs": self.method_kwargs,
-            "source_dims": source_dims,
-            "target_coords": list(self.target_grid.coords),
+            "source_dims": source_dims,  # Backward compatibility
+            "source": source_info,
+            "target": target_info,
             "grid_type": "curvilinear",
             "status": "implemented",
         }
