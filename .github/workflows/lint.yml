@@ -17,8 +17,9 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
       - name: Install dependencies
         run: |
-          uv pip install --system ".[all]" pre-commit
+          uv pip install ".[all]" pre-commit
       - name: Run pre-commit checks
-        run: pre-commit run --all-files
+        run: uv run pre-commit run --all-files

@@ -24,16 +24,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
       - name: Python info
-        shell: bash -l {0}
         run: |
           uv python find
           uv --version
       - name: Install dependencies
         run: |
-          uv pip install --system --upgrade ".[all]" # MONET-MonetDB
-          uv pip install --system pre-commit pytest
+          uv pip install --upgrade ".[all]" # MONET-MonetDB
+          uv pip install pre-commit pytest
       - name: Run pre-commit checks
-        run: pre-commit run --all-files
+        run: uv run pre-commit run --all-files
       - name: Run tests
-        run: pytest
+        run: uv run pytest
