@@ -4,11 +4,13 @@ Unit tests for curvilinear statistical regridding.
 This file is part of monet-regrid.
 """
 
+import dask.array as da
 import numpy as np
 import pytest
 import xarray as xr
-import dask.array as da
-from monet_regrid.accessor import Regridder
+
+import monet_regrid  # noqa: F401
+
 
 @pytest.fixture
 def curvilinear_ds():
@@ -28,6 +30,7 @@ def curvilinear_ds():
     )
     return ds
 
+
 @pytest.fixture
 def target_rectilinear_grid():
     """Create a target rectilinear grid."""
@@ -38,6 +41,7 @@ def target_rectilinear_grid():
         }
     )
 
+
 def test_curvilinear_stat_mean(curvilinear_ds, target_rectilinear_grid):
     """Test that curvilinear stat mean works correctly."""
     result = curvilinear_ds.regrid.stat(target_rectilinear_grid, method="mean")
@@ -47,6 +51,7 @@ def test_curvilinear_stat_mean(curvilinear_ds, target_rectilinear_grid):
     assert "lat" in result.dims
     assert "lon" in result.dims
     assert result["lat"].attrs["units"] == "degrees_north"
+
 
 def test_curvilinear_most_common(curvilinear_ds, target_rectilinear_grid):
     """Test that curvilinear most_common works correctly."""
@@ -62,6 +67,7 @@ def test_curvilinear_most_common(curvilinear_ds, target_rectilinear_grid):
     assert result.shape == (3, 3)
     assert result.sel(lat=2.0, lon=2.0) == 1
     assert result.sel(lat=8.0, lon=8.0) == 2
+
 
 def test_curvilinear_stat_lazy(target_rectilinear_grid):
     """Test that curvilinear stat is lazy when using Dask."""
@@ -86,6 +92,7 @@ def test_curvilinear_stat_lazy(target_rectilinear_grid):
     # Compute and verify
     computed = result.compute()
     assert np.allclose(computed["data"].values, 1.0)
+
 
 def test_curvilinear_stat_provenance(curvilinear_ds, target_rectilinear_grid):
     """Test that history is updated for curvilinear stat."""

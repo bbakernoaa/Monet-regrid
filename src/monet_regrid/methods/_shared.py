@@ -121,9 +121,7 @@ def restore_properties(
         # Replace zeros outside of original data grid with NaNs
         src_coord = src_map.get(coord, coord)
         if src_coord in original_data.coords:
-            covered = (target_ds[coord] <= original_data[src_coord].max()) & (
-                target_ds[coord] >= original_data[src_coord].min()
-            )
+            covered = (target_ds[coord] <= original_data[src_coord].max()) & (target_ds[coord] >= original_data[src_coord].min())
         else:
             covered = xr.DataArray(True)
 
