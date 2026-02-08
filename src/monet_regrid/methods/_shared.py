@@ -31,6 +31,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from monet_regrid import utils
+
 
 def construct_intervals(coord: np.ndarray) -> pd.IntervalIndex:
     """Create pandas.intervals with given coordinates.
@@ -103,13 +105,25 @@ def restore_properties(
     """
     result.attrs = original_data.attrs
 
+    # Map target coordinates to source coordinates for coverage check
+    try:
+        src_lat, src_lon = utils.identify_cf_coordinates(original_data)
+        tgt_lat, tgt_lon = utils.identify_cf_coordinates(target_ds)
+        src_map = {tgt_lat: src_lat, tgt_lon: src_lon}
+    except ValueError:
+        src_map = {}
+
     result = result.rename({f"{coord}_bins": coord for coord in coords})
     for coord in coords:
         result[coord] = target_ds[coord]
         result[coord].attrs = target_ds[coord].attrs
 
         # Replace zeros outside of original data grid with NaNs
-        covered = (target_ds[coord] <= original_data[coord].max()) & (target_ds[coord] >= original_data[coord].min())
+        src_coord = src_map.get(coord, coord)
+        if src_coord in original_data.coords:
+            covered = (target_ds[coord] <= original_data[src_coord].max()) & (target_ds[coord] >= original_data[src_coord].min())
+        else:
+            covered = xr.DataArray(True)
 
         if (~covered).any():
             if fill_value is None:
@@ -123,7 +137,34 @@ def restore_properties(
             else:
                 result = result.where(covered, fill_value)
 
-    return result.transpose(*original_data.dims)
+    # Determine the desired dimension order. We try to match the original
+    # dimension order, but need to account for dimensions that were renamed
+    # during regridding (e.g., in the curvilinear case).
+    original_spatial_dims = [d for d in original_data.dims if d not in result.dims]
+    new_spatial_dims = [d for d in result.dims if d not in original_data.dims]
+
+    target_dims = list(original_data.dims)
+    if original_spatial_dims:
+        # Find index of first original spatial dim
+        idx = target_dims.index(original_spatial_dims[0])
+        # Remove all original spatial dims
+        for d in original_spatial_dims:
+            if d in target_dims:
+                target_dims.remove(d)
+        # Insert new spatial dims at that index
+        for i, d in enumerate(new_spatial_dims):
+            target_dims.insert(idx + i, d)
+    else:
+        # If no original dims were removed, just use result.dims but try to match order
+        target_dims = [d for d in original_data.dims if d in result.dims]
+        for d in result.dims:
+            if d not in target_dims:
+                target_dims.append(d)
+
+    # Filter to only existing dims in result
+    target_dims = [d for d in target_dims if d in result.dims]
+
+    return result.transpose(*target_dims)
 
 
 @overload
@@ -166,12 +207,15 @@ def reduce_data_to_new_domain(
         The sliced data.
     """
     for coord in coords:
-        coord_res = np.median(np.diff(target_ds[coord].to_numpy(), 1))
+        coord_diff = target_ds[coord].diff(coord)
+        coord_res = coord_diff.median().values.item()
+        c_min = target_ds[coord].min().values.item()
+        c_max = target_ds[coord].max().values.item()
         data = data.sel(
             {
                 coord: slice(
-                    float(target_ds[coord].min().to_numpy()) - coord_res,
-                    float(target_ds[coord].max().to_numpy()) + coord_res,
+                    float(c_min) - coord_res,
+                    float(c_max) + coord_res,
                 )
             }
         )

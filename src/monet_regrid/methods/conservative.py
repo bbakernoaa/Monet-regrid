@@ -325,15 +325,14 @@ def apply_spherical_correction(dot_array: xr.DataArray, latitude_coord: Hashable
     xr.DataArray
         Spherical-corrected weight matrix.
     """
-    latitude_res = float(np.median(np.diff(dot_array[latitude_coord].values, 1)))
-    lat_weights_np = lat_weight(dot_array[latitude_coord].values, latitude_res)
+    # Use xarray arithmetic for laziness
+    lat_diff = dot_array[latitude_coord].diff(latitude_coord)
+    # We use .median().values.item() to get a scalar value for the resolution
+    # This is a small computation on a 1D coordinate, so it's acceptable.
+    latitude_res = float(lat_diff.median().values.item())
 
-    # Convert weights to DataArray for vectorized arithmetic
-    da_lat_weights = xr.DataArray(
-        lat_weights_np,
-        dims=[latitude_coord],
-        coords={latitude_coord: dot_array[latitude_coord]},
-    )
+    # Calculate weights using vectorized xarray arithmetic
+    da_lat_weights = lat_weight_xarray(dot_array[latitude_coord], latitude_res)
 
     # Use xarray arithmetic to maintain potential laziness/provenance
     corrected_weights = dot_array * da_lat_weights
@@ -341,6 +340,27 @@ def apply_spherical_correction(dot_array: xr.DataArray, latitude_coord: Hashable
     # Normalize along the source latitude dimension (latitude_coord) to ensure
     # that each target cell's weights sum to 1.0.
     return corrected_weights / corrected_weights.sum(dim=latitude_coord)
+
+
+def lat_weight_xarray(latitude: xr.DataArray, latitude_res: float) -> xr.DataArray:
+    """Return the weight of gridcells based on their latitude using Xarray.
+
+    Parameters
+    ----------
+    latitude : xr.DataArray
+        (Center) latitude values of the gridcells, in degrees.
+    latitude_res : float
+        Resolution/width of the grid cells, in degrees.
+
+    Returns
+    -------
+    xr.DataArray
+        Weights, same shape as latitude input.
+    """
+    dlat: float = np.radians(latitude_res)
+    lat_rad = np.radians(latitude)
+    h = np.sin(lat_rad + dlat / 2) - np.sin(lat_rad - dlat / 2)
+    return h * dlat / (np.pi * 4)
 
 
 def lat_weight(latitude: np.ndarray, latitude_res: float) -> np.ndarray:

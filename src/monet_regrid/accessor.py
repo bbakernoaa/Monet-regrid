@@ -314,14 +314,11 @@ class Regridder:
         xr.DataArray
             Regridded data.
         """
-        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        regridder = RectilinearRegridder(
-            source_data=self._obj,
-            target_grid=validated_target_grid,
-            method="most_common",
-            time_dim=time_dim,
-        )
-        return regridder.most_common(values, time_dim, fill_value, nan_threshold=nan_threshold)
+        regridder = self._prepare_regridder(ds_target_grid, "most_common", time_dim)
+        if hasattr(regridder, "most_common"):
+            return regridder.most_common(values, time_dim, fill_value, nan_threshold=nan_threshold)
+        msg = f"{regridder.__class__.__name__} does not support 'most_common' method."
+        raise AttributeError(msg)
 
     def least_common(
         self,
@@ -363,14 +360,11 @@ class Regridder:
         xr.DataArray
             Regridded data.
         """
-        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        regridder = RectilinearRegridder(
-            source_data=self._obj,
-            target_grid=validated_target_grid,
-            method="least_common",
-            time_dim=time_dim,
-        )
-        return regridder.least_common(values, time_dim, fill_value, nan_threshold=nan_threshold)
+        regridder = self._prepare_regridder(ds_target_grid, "least_common", time_dim)
+        if hasattr(regridder, "least_common"):
+            return regridder.least_common(values, time_dim, fill_value, nan_threshold=nan_threshold)
+        msg = f"{regridder.__class__.__name__} does not support 'least_common' method."
+        raise AttributeError(msg)
 
     def stat(
         self,
@@ -408,11 +402,8 @@ class Regridder:
         xr.DataArray | xr.Dataset
             Object with regridded land cover categorical data.
         """
-        validated_target_grid = validate_input(self._obj, ds_target_grid, time_dim)
-        regridder = RectilinearRegridder(
-            source_data=self._obj,
-            target_grid=validated_target_grid,
-            method="stat",
-            time_dim=time_dim,
-        )
-        return regridder.stat(method, time_dim, skipna, fill_value)
+        regridder = self._prepare_regridder(ds_target_grid, "stat", time_dim)
+        if hasattr(regridder, "stat"):
+            return regridder.stat(method, time_dim, skipna, fill_value)
+        msg = f"{regridder.__class__.__name__} does not support 'stat' method."
+        raise AttributeError(msg)

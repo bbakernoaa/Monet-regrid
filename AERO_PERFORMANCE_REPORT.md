@@ -17,5 +17,13 @@ The `InterpolationEngine` has been refactored to replace slow Python loops with 
 2.  **Linear Interpolation**: The fallback path uses `scipy.sparse.csr_matrix` multiplication. While Numba's specialized kernel is faster (as expected for JIT-compiled code), the vectorized fallback is extremely performant, completing a 6.5M point interpolation in under 2 seconds.
 3.  **Scalability**: Both paths scale linearly with the number of target points, making the fallback suitable for high-resolution global datasets (~10km) where previous un-vectorized implementations would have failed or hung.
 
+## 📊 Statistical Reduction (Flox) Integration
+The curvilinear statistical regridding (`stat`, `most_common`, `least_common`) has been integrated using `flox`. This allows for efficient, area-weighted reductions of curvilinear data onto rectilinear grids.
+
+| Operation | Grid Type | Backend | Performance |
+| :--- | :--- | :--- | :--- |
+| **Statistical Mean** | Curvilinear | Flox + Xarray | Optimized Binning |
+| **Most Common** | Curvilinear | Flox + Xarray | Vectorized mode |
+
 ## ✅ Conclusion
-The "Vectorize or Die" rule of the Aero Protocol has been successfully applied, providing a robust and performant foundation for `monet_regrid` even in environments without hardware acceleration or specialized compilers.
+The "Vectorize or Die" rule of the Aero Protocol has been successfully applied across both interpolation and statistical reduction paths. The integration of `flox` ensures that even complex curvilinear reductions are performed efficiently and lazily, providing a robust foundation for high-throughput Earth science pipelines.
