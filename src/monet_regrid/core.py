@@ -478,10 +478,10 @@ class RectilinearRegridder(BaseRegridder):
         """
         if isinstance(self.source_data, xr.Dataset):
             msg = (
-                "The 'most common value' regridder is not implemented for\n",
+                "The 'most common value' regridder is not implemented for\n"
                 "xarray.Dataset, as it requires specifying the expected labels.\n"
                 "Please select only a single variable (as DataArray),\n"
-                " and regrid it separately.",
+                " and regrid it separately."
             )
             raise ValueError(msg)
 
@@ -530,10 +530,10 @@ class RectilinearRegridder(BaseRegridder):
         """
         if isinstance(self.source_data, xr.Dataset):
             msg = (
-                "The 'least common value' regridder is not implemented for\n",
+                "The 'least common value' regridder is not implemented for\n"
                 "xarray.Dataset, as it requires specifying the expected labels.\n"
                 "Please select only a single variable (as DataArray),\n"
-                " and regrid it separately.",
+                " and regrid it separately."
             )
             raise ValueError(msg)
 
@@ -883,3 +883,116 @@ class CurvilinearRegridder(BaseRegridder):
             "grid_type": "curvilinear",
             "status": "implemented",
         }
+
+    def stat(
+        self,
+        method: str,
+        time_dim: str | None = "time",
+        skipna: bool = False,
+        fill_value: None | Any = None,
+    ) -> xr.DataArray | xr.Dataset:
+        """Upsample data using statistical methods.
+
+        Parameters
+        ----------
+        method : str
+            The reduction method, e.g., "sum", "mean", "min", "max".
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        skipna : bool, optional
+            If True, ignores NaN values. Defaults to False.
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
+
+        Returns
+        -------
+        xr.DataArray | xr.Dataset
+            The regridded data.
+        """
+        return statistic_reduce(self.source_data, self.target_grid, time_dim, method, skipna, fill_value)
+
+    def most_common(
+        self,
+        values: np.ndarray,
+        time_dim: str | None = "time",
+        fill_value: None | Any = None,
+        nan_threshold: float = 1.0,  # noqa: ARG002
+    ) -> xr.DataArray:
+        """Regrid by taking the most common value within the new grid cells.
+
+        Parameters
+        ----------
+        values : np.ndarray
+            Numpy array containing all labels expected in the input data.
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
+        nan_threshold : float, optional
+            Threshold for NaN values. Defaults to 1.0.
+
+        Returns
+        -------
+        xr.DataArray
+            The regridded data.
+        """
+        if isinstance(self.source_data, xr.Dataset):
+            msg = (
+                "The 'most common value' regridder is not implemented for\n"
+                "xarray.Dataset, as it requires specifying the expected labels.\n"
+                "Please select only a single variable (as DataArray),\n"
+                " and regrid it separately."
+            )
+            raise ValueError(msg)
+
+        return compute_mode(
+            self.source_data,
+            self.target_grid,
+            values,
+            time_dim,
+            fill_value,
+            anti_mode=False,
+        )
+
+    def least_common(
+        self,
+        values: np.ndarray,
+        time_dim: str | None = "time",
+        fill_value: None | Any = None,
+        nan_threshold: float = 1.0,  # noqa: ARG002
+    ) -> xr.DataArray:
+        """Regrid by taking the least common value within the new grid cells.
+
+        Parameters
+        ----------
+        values : np.ndarray
+            Numpy array containing all labels expected in the input data.
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
+        nan_threshold : float, optional
+            Threshold for NaN values. Defaults to 1.0.
+
+        Returns
+        -------
+        xr.DataArray
+            The regridded data.
+        """
+        if isinstance(self.source_data, xr.Dataset):
+            msg = (
+                "The 'least common value' regridder is not implemented for\n"
+                "xarray.Dataset, as it requires specifying the expected labels.\n"
+                "Please select only a single variable (as DataArray),\n"
+                " and regrid it separately."
+            )
+            raise ValueError(msg)
+
+        return compute_mode(
+            self.source_data,
+            self.target_grid,
+            values,
+            time_dim,
+            fill_value,
+            anti_mode=True,
+        )

@@ -113,21 +113,40 @@ def statistic_reduce(
         msg = f"Invalid method. Please choose from '{valid_methods}'."
         raise ValueError(msg)
 
-    # Make sure the regridding coordinates are sorted
-    coord_names = utils.common_coords(data, target_ds, remove_coord=time_dim)
-    sorted_target_coords = xr.Dataset(coords=target_ds.coords)
-    for coord_name in coord_names:
-        sorted_target_coords = utils.ensure_monotonic(sorted_target_coords, coord_name)
-        data = utils.ensure_monotonic(data, coord_name)
-    coords = {name: sorted_target_coords[name] for name in coord_names}
+    # Identify coordinates to regrid over
+    source_lat, source_lon = utils.identify_cf_coordinates(data)
+    target_lat, target_lon = utils.identify_cf_coordinates(target_ds)
 
-    bounds = tuple(construct_intervals(sorted_target_coords[coord].to_numpy()) for coord in coords)
+    is_curvilinear = data[source_lat].ndim == 2
 
-    data = reduce_data_to_new_domain(data, sorted_target_coords, coord_names)
+    if not is_curvilinear:
+        # Make sure the regridding coordinates are sorted
+        coord_names = utils.common_coords(data, target_ds, remove_coord=time_dim)
+        sorted_target_coords = xr.Dataset(coords=target_ds.coords)
+        for coord_name in coord_names:
+            sorted_target_coords = utils.ensure_monotonic(sorted_target_coords, coord_name)
+            data = utils.ensure_monotonic(data, coord_name)
+        coords_to_reduce = list(coord_names)
+
+        bounds = tuple(construct_intervals(sorted_target_coords[coord].to_numpy()) for coord in coord_names)
+
+        data_to_reduce = reduce_data_to_new_domain(data, sorted_target_coords, coord_names)
+    else:
+        # For curvilinear grids, we use the 2D coordinates as grouping variables
+        # and the rectilinear target coordinates as bins.
+        # We rename them to match target names for restore_properties.
+        coord_names = [target_lat, target_lon]
+        coords_to_reduce = [data[source_lat].rename(target_lat), data[source_lon].rename(target_lon)]
+
+        bounds = (
+            construct_intervals(target_ds[target_lat].to_numpy()),
+            construct_intervals(target_ds[target_lon].to_numpy()),
+        )
+        data_to_reduce = data
 
     result: xr.Dataset = flox.xarray.xarray_reduce(
-        data,
-        *coords,
+        data_to_reduce,
+        *coords_to_reduce,
         func=method,
         expected_groups=bounds,
         skipna=skipna,
@@ -135,7 +154,7 @@ def statistic_reduce(
     )
 
     result = restore_properties(result, data, target_ds, coord_names, fill_value)
-    result = result.reindex_like(sorted_target_coords, copy=False)
+    result = result.reindex_like(target_ds, copy=False)
 
     # Update history for provenance
     utils.update_history(result, f"Reduced using monet_regrid.methods.flox_reduce.statistic_reduce (method={method})")
@@ -219,27 +238,42 @@ def compute_mode(
         )
         raise ValueError(msg)
 
-    coords = utils.common_coords(data, target_ds, remove_coord=time_dim)
-    target_coords = xr.Dataset(target_ds.coords)  # stores coords for reindexing later
-    sorted_target_coords = target_coords.sortby(coords)
+    # Identify coordinates to regrid over
+    source_lat, source_lon = utils.identify_cf_coordinates(data)
+    target_lat, target_lon = utils.identify_cf_coordinates(target_ds)
 
-    bounds = tuple(construct_intervals(sorted_target_coords[coord].to_numpy()) for coord in coords)
+    is_curvilinear = data[source_lat].ndim == 2
 
-    data = reduce_data_to_new_domain(data, sorted_target_coords, coords)
+    if not is_curvilinear:
+        coord_names = utils.common_coords(data, target_ds, remove_coord=time_dim)
+        target_coords_ds = xr.Dataset(target_ds.coords)  # stores coords for reindexing later
+        sorted_target_coords = target_coords_ds.sortby(coord_names)
+
+        bounds = tuple(construct_intervals(sorted_target_coords[coord].to_numpy()) for coord in coord_names)
+
+        data_to_reduce = reduce_data_to_new_domain(data, sorted_target_coords, coord_names)
+        group_vars = list(coord_names)
+    else:
+        coord_names = [target_lat, target_lon]
+        bounds = (
+            construct_intervals(target_ds[target_lat].to_numpy()),
+            construct_intervals(target_ds[target_lon].to_numpy()),
+        )
+        data_to_reduce = data
+        group_vars = [data[source_lat].rename(target_lat), data[source_lon].rename(target_lon)]
 
     result: xr.DataArray = flox.xarray.xarray_reduce(
-        xr.ones_like(data, dtype=bool),
-        data,  # important, needs to be int
-        *coords,
-        dim=coords,
+        xr.ones_like(data_to_reduce, dtype=bool),
+        data_to_reduce,  # important, needs to be int
+        *group_vars,
         func="count",
         expected_groups=(pd.Index(values.astype(data)), *bounds),
         fill_value=-1,
     )
     result = result.idxmax(array_name) if not anti_mode else result.idxmin(array_name)
 
-    result = restore_properties(result, data, target_ds, coords, fill_value)
-    result = result.reindex_like(target_coords, copy=False)
+    result = restore_properties(result, data, target_ds, coord_names, fill_value)
+    result = result.reindex_like(target_ds, copy=False)
 
     # Update history for provenance
     mode_str = "least_common" if anti_mode else "most_common"

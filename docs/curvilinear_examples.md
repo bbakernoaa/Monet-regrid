@@ -160,3 +160,42 @@ regridded_data = regridder()
 
 print("\nRegridded data with spherical geometry and nearest fill method:")
 print(regridded_data)
+
+## Example 4: Statistical Regridding of Curvilinear Data
+
+This example demonstrates how to use the `.regrid.stat()` method on curvilinear data to compute area-weighted averages on a rectilinear grid.
+
+```python
+import xarray as xr
+import numpy as np
+
+# Create a sample curvilinear source grid
+source_x, source_y = np.meshgrid(np.arange(10), np.arange(10))
+source_lat = 30 + 0.5 * source_x + 0.1 * source_y
+source_lon = -100 + 0.3 * source_x + 0.2 * source_y
+
+# Create sample data
+data_values = np.ones((10, 10))
+source_data = xr.Dataset(
+    {"temperature": (("y", "x"), data_values)},
+    coords={
+        "lat": (("y", "x"), source_lat),
+        "lon": (("y", "x"), source_lon),
+    },
+)
+
+# Create a coarse rectilinear target grid
+target_ds = xr.Dataset(
+    coords={
+        "lat": (("lat",), np.array([32.0, 35.0])),
+        "lon": (("lon",), np.array([-98.0, -95.0])),
+    }
+)
+
+# Perform statistical reduction (mean)
+# This will automatically use flox to bin the curvilinear data into the target grid
+regridded_ds = source_data.regrid.stat(target_ds, method="mean")
+
+print("\nCoarse regridded statistical mean:")
+print(regridded_ds.temperature)
+```

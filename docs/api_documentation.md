@@ -100,6 +100,9 @@ CurvilinearRegridder(
 *   `to_file(self, filepath: str, **kwargs)`: Saves the regridder configuration.
 *   `from_file(cls, filepath: str, **kwargs)`: Loads a regridder from a file.
 *   `info(self)`: Returns regridder information.
+*   `stat(self, method: str, time_dim: str | None = "time", skipna: bool = False, fill_value: Any | None = None)`: Upsamples curvilinear data using statistical methods (e.g., mean, sum).
+*   `most_common(self, values: np.ndarray, time_dim: str | None = "time", fill_value: Any | None = None)`: Regrids curvilinear categorical data by taking the most common value.
+*   `least_common(self, values: np.ndarray, time_dim: str | None = "time", fill_value: Any | None = None)`: Regrids curvilinear categorical data by taking the least common value.
 
 ## `build_regridder` Factory Method
 
