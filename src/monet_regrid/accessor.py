@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Hashable
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 import xarray as xr
@@ -10,8 +10,6 @@ from monet_regrid.constants import GridType
 from monet_regrid.core import BaseRegridder, CurvilinearRegridder, RectilinearRegridder
 from monet_regrid.utils import (
     _get_grid_type,
-    identify_cf_coordinates,
-    update_history,
     validate_input,
 )
 
@@ -409,100 +407,3 @@ class Regridder:
             return regridder.stat(method, time_dim, skipna, fill_value)
         msg = f"{regridder.__class__.__name__} does not support 'stat' method."
         raise AttributeError(msg)
-
-    def visualize(
-        self,
-        mode: Literal["static", "interactive"] = "static",
-        **kwargs: Any,
-    ) -> Any:
-        """Visualize the data using Aero Protocol standards.
-
-        This method provides a centralized entry point for generating scientific
-        plots following the Aero Protocol's two-track rule:
-        - Track A (Static): Matplotlib + Cartopy for publication.
-        - Track B (Interactive): HvPlot + GeoViews for exploration.
-
-        Parameters
-        ----------
-        mode : {'static', 'interactive'}, default: 'static'
-            The visualization mode.
-        **kwargs : Any
-            Additional keyword arguments passed to the plotting function.
-            If the object is a Dataset, use `variable='name'` to select a variable.
-
-        Returns
-        -------
-        Any
-            The plot object (Matplotlib figure/axis or HvPlot object).
-
-        Examples
-        --------
-        >>> ds.regrid.visualize(mode='static', cmap='viridis')
-        >>> ds.regrid.visualize(mode='interactive', rasterize=True)
-        """
-        # Scientific Hygiene: Update history
-        update_history(self._obj, f"Visualized using Aero Protocol (mode={mode})")
-
-        if mode == "static":
-            return self._visualize_static(**kwargs)
-        elif mode == "interactive":
-            return self._visualize_interactive(**kwargs)
-        else:
-            msg = f"Unknown mode: {mode}. Supported modes are 'static' and 'interactive'."
-            raise ValueError(msg)
-
-    def _visualize_static(self, **kwargs: Any) -> Any:
-        """Track A: Static visualization using Matplotlib and Cartopy."""
-        try:
-            import cartopy.crs as ccrs
-            import matplotlib.pyplot as plt
-        except ImportError as e:
-            msg = "Static visualization requires 'matplotlib' and 'cartopy'."
-            raise ImportError(msg) from e
-
-        obj = self._obj
-        if isinstance(obj, xr.Dataset):
-            var_name = kwargs.pop("variable", next(iter(obj.data_vars)))
-            obj = obj[var_name]
-
-        # Identify coordinates
-        lat_name, lon_name = identify_cf_coordinates(obj)
-
-        # Default projection and transform
-        projection = kwargs.pop("projection", ccrs.PlateCarree())
-        transform = kwargs.pop("transform", ccrs.PlateCarree())
-
-        if "ax" not in kwargs:
-            _, ax = plt.subplots(subplot_kw={"projection": projection})
-            kwargs["ax"] = ax
-        else:
-            ax = kwargs["ax"]
-
-        plot_obj = obj.plot(x=lon_name, y=lat_name, transform=transform, **kwargs)
-
-        # Standard Aero Protocol features
-        if hasattr(ax, "coastlines"):
-            ax.coastlines()
-
-        return plot_obj
-
-    def _visualize_interactive(self, **kwargs: Any) -> Any:
-        """Track B: Interactive visualization using HvPlot."""
-        try:
-            import hvplot.xarray  # noqa: F401
-        except ImportError as e:
-            msg = "Interactive visualization requires 'hvplot'."
-            raise ImportError(msg) from e
-
-        obj = self._obj
-        if isinstance(obj, xr.Dataset):
-            var_name = kwargs.pop("variable", next(iter(obj.data_vars)))
-            obj = obj[var_name]
-
-        lat_name, lon_name = identify_cf_coordinates(obj)
-
-        # Aero Protocol mandatory defaults for Track B
-        rasterize = kwargs.pop("rasterize", True)
-        geo = kwargs.pop("geo", True)
-
-        return obj.hvplot(x=lon_name, y=lat_name, rasterize=rasterize, geo=geo, **kwargs)
