@@ -820,8 +820,15 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                                 if lat_1d_names and lon_1d_names:
                                     return GridType.RECTILINEAR
 
-                    msg = "No latitude or longitude coordinates found"
-                    raise ValueError(msg) from None
+                # If no coordinates found, check if it has dimensions
+                if len(ds.dims) >= 2:
+                    # Default to RECTILINEAR if we have at least 2 dimensions
+                    # but no specific coordinates identified. This allows
+                    # regridding of raw arrays by generating coordinates from dims.
+                    return GridType.RECTILINEAR
+
+                msg = "No latitude or longitude coordinates found"
+                raise ValueError(msg) from None
 
     except (KeyError, ValueError) as e:
         msg = f"Could not identify coordinate: {e}"
