@@ -262,6 +262,45 @@ class RectilinearRegridder(BaseRegridder):
         self._formatting_cache: dict[tuple, xr.DataArray | xr.Dataset] = {}
         super().__init__(source_data, target_grid)
 
+    def _ensure_spatial_coordinates(self, data: xr.DataArray | xr.Dataset) -> xr.DataArray | xr.Dataset:
+        """Ensure the data has spatial coordinates, generating them if missing.
+
+        Parameters
+        ----------
+        data : xr.DataArray | xr.Dataset
+            The input data.
+
+        Returns
+        -------
+        xr.DataArray | xr.Dataset
+            The data with spatial coordinates.
+        """
+        try:
+            lat_name, lon_name = identify_cf_coordinates(data)
+            # Check if they are actually in coords (not just dimensions)
+            if lat_name in data.coords and lon_name in data.coords:
+                return data
+            # Fallback to name-based generation if they are identified from dims
+        except ValueError:
+            # Fallback to positional generation if not identified at all
+            dims_list = list(data.dims)
+            if len(dims_list) < 2:
+                return data
+            lat_name, lon_name = dims_list[-2], dims_list[-1]
+
+        y_size, x_size = data.sizes[lat_name], data.sizes[lon_name]
+
+        # Use Dask for lazy coordinate generation
+        y_coords = da.arange(y_size)
+        x_coords = da.arange(x_size)
+
+        result = data.assign_coords({lat_name: ([lat_name], y_coords), lon_name: ([lon_name], x_coords)})
+
+        # Scientific Hygiene: Update history
+        utils.update_history(result, f"Generated lazy spatial coordinates for dimensions: {lat_name}, {lon_name}")
+
+        return result
+
     def __call__(self, data: xr.DataArray | xr.Dataset | None = None, **kwargs: Any) -> xr.DataArray | xr.Dataset:
         """Execute the regridding operation.
 
@@ -307,6 +346,9 @@ class RectilinearRegridder(BaseRegridder):
         """
         # Use provided data or fall back to source data
         input_data = data if data is not None else self.source_data
+
+        # Ensure we have coordinates (Aero Zero-Trust)
+        input_data = self._ensure_spatial_coordinates(input_data)
 
         # Override with any runtime kwargs
         method = kwargs.get("method", self.method)
