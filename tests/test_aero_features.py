@@ -1,11 +1,9 @@
-from unittest.mock import MagicMock, patch
-
 import dask.array as da
 import numpy as np
-import pytest
 import xarray as xr
 
 from monet_regrid.core import RectilinearRegridder
+from monet_regrid.utils import identify_cf_coordinates
 
 
 def test_rectilinear_lazy_coordinate_generation():
@@ -39,8 +37,6 @@ def test_rectilinear_lazy_coordinate_generation():
 
 def test_identify_cf_coordinates_standard():
     """Test that identify_cf_coordinates finds coordinates with standard names."""
-    from monet_regrid.utils import identify_cf_coordinates
-
     # Standard names in coords
     ds = xr.Dataset(
         coords={"lat": (("lat",), np.arange(10)), "lon": (("lon",), np.arange(10))},
