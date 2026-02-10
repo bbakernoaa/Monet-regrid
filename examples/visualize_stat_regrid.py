@@ -71,15 +71,15 @@ def main():
 
     plt.tight_layout()
     plt.savefig("statistical_regrid_example.png")
-    print("Static plot saved to statistical_regrid_example.png")
+    print("Static plot saved to statistical_regrid_example.png")  # noqa: T201
 
     # --- Track B: Interactive Visualization (HvPlot) ---
     # Note: This block is illustrative for interactive environments.
-    interactive_plot = ds_mean.hvplot.quadmesh(
+    _interactive_plot = ds_mean.hvplot.quadmesh(
         x="longitude", y="latitude", geo=True, coastline=True, cmap="viridis", title="Mean Pollution (Interactive)", rasterize=True
     )
     # hvplot.save(interactive_plot, "interactive_stat_regrid.html")
-    print("Interactive plot logic defined (Track B compliant).")
+    print("Interactive plot logic defined (Track B compliant).")  # noqa: T201
 
 
 if __name__ == "__main__":
