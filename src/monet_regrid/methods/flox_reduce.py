@@ -74,39 +74,51 @@ def statistic_reduce(
 ) -> xr.DataArray | xr.Dataset:
     """Upsampling of data using statistical methods (e.g. the mean or variance).
 
-    We use flox Aggregations to perform a "groupby" over multiple dimensions, which we
-    reduce using the specified method.
-    https://flox.readthedocs.io/en/latest/aggregations.html
+    This function leverages `flox` for high-performance, Dask-aware aggregations.
+    It performs a "groupby" operation over spatial dimensions, reducing the data
+    within each target grid cell using the specified statistical method.
+
+    See: https://flox.readthedocs.io/en/latest/aggregations.html
 
     Parameters
     ----------
     data : xr.DataArray | xr.Dataset
-        Input data to be regridded. It is assumed that the coordinates are sorted.
+        Input data to be regridded. For rectilinear grids, coordinates should be sorted.
     target_ds : xr.Dataset
         Target dataset containing coordinates to regrid to.
     time_dim : str | None
-        Name of the time dimension. Use `None` to force regridding over time.
+        Name of the time dimension. Use `None` to force regridding over the time dimension.
     method : str
-        Reduction method (e.g., "sum", "mean", "var", "std", "median", "max", "min").
+        Reduction method. Must be one of: "sum", "mean", "var", "std", "median", "max", "min".
     skipna : bool, optional
-        Whether to ignore NaN values. Defaults to False.
+        Whether to ignore NaN values during reduction. Defaults to False.
     fill_value : Any, optional
-        Value to fill uncovered parts of the target grid. Defaults to None.
+        Value used to fill parts of the target grid not covered by the source data.
+        Defaults to None.
 
     Returns
     -------
     xr.DataArray | xr.Dataset
-        The regridded data.
+        The regridded data with the same type as the input `data`.
 
     Examples
     --------
     >>> import xarray as xr
     >>> import numpy as np
     >>> from monet_regrid.methods.flox_reduce import statistic_reduce
-    >>> ds = xr.Dataset({"a": (("lat", "lon"), np.random.rand(10, 10))},
-    ...                 coords={"lat": np.arange(10), "lon": np.arange(10)})
-    >>> target = xr.Dataset(coords={"lat": [2, 5, 8], "lon": [2, 5, 8]})
+    >>> # Create a high-resolution source dataset
+    >>> ds = xr.Dataset(
+    ...     {"temperature": (("lat", "lon"), np.random.rand(100, 100))},
+    ...     coords={"lat": np.linspace(0, 10, 100), "lon": np.linspace(0, 10, 100)}
+    ... )
+    >>> # Define a coarse target grid
+    >>> target = xr.Dataset(
+    ...     coords={"lat": [2, 5, 8], "lon": [2, 5, 8]}
+    ... )
+    >>> # Compute the mean temperature for each coarse grid cell
     >>> res = statistic_reduce(ds, target, time_dim=None, method="mean")
+    >>> res.temperature.shape
+    (3, 3)
     """
     valid_methods = ["sum", "mean", "var", "std", "median", "max", "min"]
     if method not in valid_methods:
@@ -202,6 +214,10 @@ def compute_mode(
 ) -> xr.DataArray:
     """Upsample the input data using a "most common label" (mode) approach.
 
+    Useful for regridding categorical data (e.g., land cover types) to a coarser resolution.
+    It counts occurrences of each label within target grid cells and returns the
+    most frequent (mode) or least frequent (anti-mode) label.
+
     Parameters
     ----------
     data : xr.DataArray
@@ -209,23 +225,43 @@ def compute_mode(
     target_ds : xr.Dataset
         Target dataset with coordinates to regrid to.
     values : np.ndarray
-        Labels expected in the input data.
+        A 1D array of all possible labels expected in the input data.
     time_dim : str | None
-        Name of time dimension. Use `None` to force regridding over time.
+        Name of time dimension. Use `None` to force regridding over the time dimension.
     fill_value : Any, optional
-        Value to fill uncovered parts of the target grid. Defaults to None.
+        Value used to fill parts of the target grid not covered by the source data.
+        Defaults to None.
     anti_mode : bool, optional
-        If True, find the least-common value (anti-mode). Defaults to False.
+        If True, returns the least common value (anti-mode) instead of the mode.
+        Defaults to False.
 
     Returns
     -------
     xr.DataArray
-        Regridded categorical data.
+        The regridded categorical data.
 
     Raises
     ------
     ValueError
-        If the input data is not of an integer dtype.
+        If the input `data` is not of an integer dtype.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>> from monet_regrid.methods.flox_reduce import compute_mode
+    >>> # Create high-res categorical data (e.g., 0=Water, 1=Forest, 2=Urban)
+    >>> data = xr.DataArray(
+    ...     np.random.choice([0, 1, 2], size=(100, 100)),
+    ...     dims=["lat", "lon"],
+    ...     coords={"lat": np.linspace(0, 10, 100), "lon": np.linspace(0, 10, 100)},
+    ...     name="land_cover"
+    ... )
+    >>> target = xr.Dataset(coords={"lat": [2, 5, 8], "lon": [2, 5, 8]})
+    >>> # Find the dominant land cover type in each coarse cell
+    >>> mode_ds = compute_mode(data, target, values=np.array([0, 1, 2]), time_dim=None)
+    >>> mode_ds.shape
+    (3, 3)
     """
     array_name = data.name if data.name is not None else "DATA_NAME"
 
