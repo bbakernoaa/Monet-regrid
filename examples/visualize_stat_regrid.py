@@ -8,6 +8,7 @@ import hvplot.xarray  # noqa: F401
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+
 from monet_regrid.core import RectilinearRegridder
 
 
@@ -66,8 +67,7 @@ def visualize():
     # --- TRACK B: Exploration (HvPlot) ---
     # Interactive plot with rasterization for performance
     _plot = regridded.hvplot.quadmesh(
-        x="lon", y="lat", geo=True, rasterize=True, cmap="terrain",
-        title="Statistical Regridding (Track B - Interactive)"
+        x="lon", y="lat", geo=True, rasterize=True, cmap="terrain", title="Statistical Regridding (Track B - Interactive)"
     )
     print("Track B plot structure created with rasterize=True.")  # noqa: T201
 
