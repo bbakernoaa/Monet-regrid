@@ -462,6 +462,7 @@ class RectilinearRegridder(BaseRegridder):
         time_dim: str | None = "time",
         skipna: bool = False,
         fill_value: None | Any = None,
+        data: xr.DataArray | xr.Dataset | None = None,
     ) -> xr.DataArray | xr.Dataset:
         """Upsample data using statistical methods.
 
@@ -475,14 +476,17 @@ class RectilinearRegridder(BaseRegridder):
             If True, ignores NaN values. Defaults to False.
         fill_value : Any, optional
             Fill value for uncovered target grid parts. Defaults to None.
+        data : xr.DataArray | xr.Dataset | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
 
         Returns
         -------
         xr.DataArray | xr.Dataset
             The regridded data.
         """
-
-        ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
+        input_data = data if data is not None else self.source_data
+        ds_formatted = format_for_regrid(input_data, self.target_grid, stats=True)
 
         return statistic_reduce(ds_formatted, self.target_grid, time_dim, method, skipna, fill_value)
 
@@ -492,13 +496,14 @@ class RectilinearRegridder(BaseRegridder):
         time_dim: str | None = "time",
         fill_value: None | Any = None,
         nan_threshold: float = 1.0,  # noqa: ARG002
+        data: xr.DataArray | None = None,
     ) -> xr.DataArray:
         """Regrid by taking the most common value within the new grid cells.
 
         To be used for regridding data to a much coarser resolution, not for regridding
         when the source and target grids are of a similar resolution.
 
-        Note that in the case of two unqiue values with the same count, the behaviour
+        Note that in the case of two unique values with the same count, the behaviour
         is not deterministic, and the resulting "most common" one will randomly be
         either of the two.
 
@@ -512,13 +517,17 @@ class RectilinearRegridder(BaseRegridder):
             Fill value for uncovered target grid parts. Defaults to None.
         nan_threshold : float, optional
             Threshold for NaN values. Defaults to 1.0.
+        data : xr.DataArray | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
 
         Returns
         -------
         xr.DataArray
             The regridded data.
         """
-        if isinstance(self.source_data, xr.Dataset):
+        input_data = data if data is not None else self.source_data
+        if isinstance(input_data, xr.Dataset):
             msg = (
                 "The 'most common value' regridder is not implemented for\n"
                 "xarray.Dataset, as it requires specifying the expected labels.\n"
@@ -527,7 +536,7 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-        ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
+        ds_formatted = format_for_regrid(input_data, self.target_grid, stats=True)
 
         return compute_mode(
             ds_formatted,
@@ -544,13 +553,14 @@ class RectilinearRegridder(BaseRegridder):
         time_dim: str | None = "time",
         fill_value: None | Any = None,
         nan_threshold: float = 1.0,  # noqa: ARG002
+        data: xr.DataArray | None = None,
     ) -> xr.DataArray:
         """Regrid by taking the least common value within the new grid cells.
 
         To be used for regridding data to a much coarser resolution, not for regridding
         when the source and target grids are of a similar resolution.
 
-        Note that in the case of two unqiue values with the same count, the behaviour
+        Note that in the case of two unique values with the same count, the behaviour
         is not deterministic, and the resulting "least common" one will randomly be
         either of the two.
 
@@ -564,13 +574,17 @@ class RectilinearRegridder(BaseRegridder):
             Fill value for uncovered target grid parts. Defaults to None.
         nan_threshold : float, optional
             Threshold for NaN values. Defaults to 1.0.
+        data : xr.DataArray | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
 
         Returns
         -------
         xr.DataArray
             The regridded data.
         """
-        if isinstance(self.source_data, xr.Dataset):
+        input_data = data if data is not None else self.source_data
+        if isinstance(input_data, xr.Dataset):
             msg = (
                 "The 'least common value' regridder is not implemented for\n"
                 "xarray.Dataset, as it requires specifying the expected labels.\n"
@@ -932,6 +946,7 @@ class CurvilinearRegridder(BaseRegridder):
         time_dim: str | None = "time",
         skipna: bool = False,
         fill_value: None | Any = None,
+        data: xr.DataArray | xr.Dataset | None = None,
     ) -> xr.DataArray | xr.Dataset:
         """Upsample data using statistical methods.
 
@@ -945,13 +960,17 @@ class CurvilinearRegridder(BaseRegridder):
             If True, ignores NaN values. Defaults to False.
         fill_value : Any, optional
             Fill value for uncovered target grid parts. Defaults to None.
+        data : xr.DataArray | xr.Dataset | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
 
         Returns
         -------
         xr.DataArray | xr.Dataset
             The regridded data.
         """
-        return statistic_reduce(self.source_data, self.target_grid, time_dim, method, skipna, fill_value)
+        input_data = data if data is not None else self.source_data
+        return statistic_reduce(input_data, self.target_grid, time_dim, method, skipna, fill_value)
 
     def most_common(
         self,
@@ -959,6 +978,7 @@ class CurvilinearRegridder(BaseRegridder):
         time_dim: str | None = "time",
         fill_value: None | Any = None,
         nan_threshold: float = 1.0,  # noqa: ARG002
+        data: xr.DataArray | None = None,
     ) -> xr.DataArray:
         """Regrid by taking the most common value within the new grid cells.
 
@@ -972,13 +992,17 @@ class CurvilinearRegridder(BaseRegridder):
             Fill value for uncovered target grid parts. Defaults to None.
         nan_threshold : float, optional
             Threshold for NaN values. Defaults to 1.0.
+        data : xr.DataArray | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
 
         Returns
         -------
         xr.DataArray
             The regridded data.
         """
-        if isinstance(self.source_data, xr.Dataset):
+        input_data = data if data is not None else self.source_data
+        if isinstance(input_data, xr.Dataset):
             msg = (
                 "The 'most common value' regridder is not implemented for\n"
                 "xarray.Dataset, as it requires specifying the expected labels.\n"
@@ -988,7 +1012,7 @@ class CurvilinearRegridder(BaseRegridder):
             raise ValueError(msg)
 
         return compute_mode(
-            self.source_data,
+            input_data,
             self.target_grid,
             values,
             time_dim,
@@ -1002,6 +1026,7 @@ class CurvilinearRegridder(BaseRegridder):
         time_dim: str | None = "time",
         fill_value: None | Any = None,
         nan_threshold: float = 1.0,  # noqa: ARG002
+        data: xr.DataArray | None = None,
     ) -> xr.DataArray:
         """Regrid by taking the least common value within the new grid cells.
 
@@ -1015,13 +1040,17 @@ class CurvilinearRegridder(BaseRegridder):
             Fill value for uncovered target grid parts. Defaults to None.
         nan_threshold : float, optional
             Threshold for NaN values. Defaults to 1.0.
+        data : xr.DataArray | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
 
         Returns
         -------
         xr.DataArray
             The regridded data.
         """
-        if isinstance(self.source_data, xr.Dataset):
+        input_data = data if data is not None else self.source_data
+        if isinstance(input_data, xr.Dataset):
             msg = (
                 "The 'least common value' regridder is not implemented for\n"
                 "xarray.Dataset, as it requires specifying the expected labels.\n"
@@ -1031,7 +1060,7 @@ class CurvilinearRegridder(BaseRegridder):
             raise ValueError(msg)
 
         return compute_mode(
-            self.source_data,
+            input_data,
             self.target_grid,
             values,
             time_dim,
