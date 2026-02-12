@@ -593,7 +593,7 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-        ds_formatted = format_for_regrid(self.source_data, self.target_grid, stats=True)
+        ds_formatted = format_for_regrid(input_data, self.target_grid, stats=True)
 
         return compute_mode(
             ds_formatted,

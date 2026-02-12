@@ -3,9 +3,10 @@
 With monet-regrid it is possible to regrid between two grids. Both Rectilinear and Curvilinear grids are supported. The following methods are supported:
  - Linear (Rectilinear and Curvilinear) 
  - Nearest-neighbor (Rectilinear and Curvilinear) 
- - Conservative (Rectilinear only) 
- - Cubic (Rectilinear only) 
- - "Most common value", as well as other zonal statistics (e.g., variance or median) (Rectilinear only) 
+ - Conservative (Rectilinear and Curvilinear)
+ - Cubic (Rectilinear and Curvilinear)
+ - Bilinear (Rectilinear and Curvilinear)
+ - "Most common value", as well as other zonal statistics (e.g., variance or median) (Rectilinear and Curvilinear)
 
 All regridding methods can operate lazily on [Dask arrays](https://docs.xarray.dev/en/latest/user-guide/dask.html).
 

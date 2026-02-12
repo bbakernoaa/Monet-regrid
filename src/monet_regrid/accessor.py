@@ -44,7 +44,8 @@ class Regridder:
     """Regridding xarray datasets and dataarrays.
 
     Available methods:
-        linear: linear, bilinear, or higher dimensional linear interpolation
+        linear: linear or higher dimensional linear interpolation
+        bilinear: bilinear interpolation (optimized for 2D)
         nearest: nearest-neighbor regridding
         cubic: cubic spline regridding
         conservative: conservative regridding
@@ -228,6 +229,9 @@ class Regridder:
     ) -> xr.DataArray | xr.Dataset:
         """Regrid to the coords of the target dataset with a conservative scheme.
 
+        Supports both rectilinear and curvilinear grids. For curvilinear grids,
+        explicit cell boundaries (vertices) are required in the datasets.
+
         Parameters
         ----------
         ds_target_grid : xr.Dataset
@@ -284,6 +288,8 @@ class Regridder:
     ) -> xr.DataArray:
         """Regrid by taking the most common value within the new grid cells.
 
+        Supports both rectilinear and curvilinear grids.
+
         To be used for regridding data to a much coarser resolution, not for regridding
         when the source and target grids are of a similar resolution.
 
@@ -330,6 +336,8 @@ class Regridder:
     ) -> xr.DataArray:
         """Regrid by taking the least common value within the new grid cells.
 
+        Supports both rectilinear and curvilinear grids.
+
         To be used for regridding data to a much coarser resolution, not for regridding
         when the source and target grids are of a similar resolution.
 
@@ -375,6 +383,9 @@ class Regridder:
         fill_value: None | Any = None,
     ) -> xr.DataArray | xr.Dataset:
         """Upsampling of data using statistical methods (e.g. the mean or variance).
+
+        Supports both rectilinear and curvilinear grids. For curvilinear grids,
+        flox is used to perform efficient area-weighted reductions.
 
         We use flox Aggregations to perform a "groupby" over multiple dimensions, which
         we reduce using the specified method.
