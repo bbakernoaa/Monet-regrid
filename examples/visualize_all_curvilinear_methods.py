@@ -146,7 +146,7 @@ def main() -> None:
     results: dict[str, Any] = {}
 
     for m in methods:
-        print(f"Regridding using method: {m}")
+        print(f"Regridding using method: {m}")  # noqa: T201
         if m == "linear":
             results[m] = ds_source.regrid.linear(ds_target)
         elif m == "nearest":
@@ -159,7 +159,7 @@ def main() -> None:
             results[m] = ds_source.regrid.cubic(ds_target)
 
     # 2. UI: Track A (Publication-ready)
-    print("Generating Track A plot...")
+    print("Generating Track A plot...")  # noqa: T201
     fig = plt.figure(figsize=(20, 10))
     proj = ccrs.PlateCarree()
 
@@ -178,10 +178,10 @@ def main() -> None:
 
     plt.tight_layout()
     plt.savefig("all_curvilinear_methods.png", dpi=200)
-    print("Saved comparison plot to all_curvilinear_methods.png")
+    print("Saved comparison plot to all_curvilinear_methods.png")  # noqa: T201
 
     # 3. UI: Track B (Interactive visualization)
-    print("Generating Track B plots (hvplot)...")
+    print("Generating Track B plots (hvplot)...")  # noqa: T201
     # For demonstration, we just create the interactive objects.
     # To view: hvplot.show(interactive_plot)
     _interactive_plots = {}
@@ -195,7 +195,7 @@ def main() -> None:
             title=f"Interactive Curvilinear Regrid ({m})",
             coastline=True,
         )
-    print("Track B objects created successfully.")
+    print("Track B objects created successfully.")  # noqa: T201
 
 
 if __name__ == "__main__":

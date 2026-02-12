@@ -7,7 +7,6 @@ Also verifies the fix for data-override in least_common.
 
 from __future__ import annotations
 
-import dask.array as da
 import numpy as np
 import pytest
 import xarray as xr
