@@ -86,7 +86,10 @@ class Grid:
         return create_regridding_dataset(self, lat_name, lon_name)
 
 
-def create_lat_lon_coords(grid: Grid) -> tuple[da.Array, da.Array]:
+def create_lat_lon_coords(
+    grid: Grid,
+    chunks: int | dict[str, int] | str | None = None,
+) -> tuple[da.Array, da.Array]:
     """Create lazily-computed latitude and longitude coordinates.
 
     This function uses Dask to generate coordinate arrays, preventing them from
@@ -97,26 +100,38 @@ def create_lat_lon_coords(grid: Grid) -> tuple[da.Array, da.Array]:
     ----------
     grid : Grid
         A `Grid` object containing the spatial bounds and resolution.
+    chunks : int | dict[str, int] | str | None, optional
+        Chunk size for the Dask arrays. If None, Dask will choose a default.
+        Recommended to use a size that results in ~100MB chunks for large grids.
 
     Returns
     -------
     tuple[da.Array, da.Array]
         A tuple containing the lazily-computed latitude and longitude Dask arrays.
     """
+    arange_kwargs = {}
+    if chunks is not None:
+        arange_kwargs["chunks"] = chunks
+
     if np.remainder((grid.north - grid.south), grid.resolution_lat) > 0:
-        lat_coords = da.arange(grid.south, grid.north, grid.resolution_lat)
+        lat_coords = da.arange(grid.south, grid.north, grid.resolution_lat, **arange_kwargs)
     else:
-        lat_coords = da.arange(grid.south, grid.north + grid.resolution_lat, grid.resolution_lat)
+        lat_coords = da.arange(grid.south, grid.north + grid.resolution_lat, grid.resolution_lat, **arange_kwargs)
 
     if np.remainder((grid.east - grid.west), grid.resolution_lon) > 0:
-        lon_coords = da.arange(grid.west, grid.east, grid.resolution_lon)
+        lon_coords = da.arange(grid.west, grid.east, grid.resolution_lon, **arange_kwargs)
     else:
-        lon_coords = da.arange(grid.west, grid.east + grid.resolution_lon, grid.resolution_lon)
+        lon_coords = da.arange(grid.west, grid.east + grid.resolution_lon, grid.resolution_lon, **arange_kwargs)
 
     return lat_coords, lon_coords
 
 
-def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: str = "longitude") -> xr.Dataset:
+def create_regridding_dataset(
+    grid: Grid,
+    lat_name: str = "latitude",
+    lon_name: str = "longitude",
+    chunks: int | dict[str, int] | str | None = None,
+) -> xr.Dataset:
     """Create a lazy xarray.Dataset for regridding.
 
     This function constructs a dataset containing only coordinate information,
@@ -131,6 +146,8 @@ def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: 
         The desired name for the latitude coordinate, by default "latitude".
     lon_name : str, optional
         The desired name for the longitude coordinate, by default "longitude".
+    chunks : int | dict[str, int] | str | None, optional
+        Chunk size for the coordinate arrays.
 
     Returns
     -------
@@ -138,7 +155,7 @@ def create_regridding_dataset(grid: Grid, lat_name: str = "latitude", lon_name: 
         A dataset with Dask-backed latitude and longitude coordinates and no
         data variables.
     """
-    lat_coords, lon_coords = create_lat_lon_coords(grid)
+    lat_coords, lon_coords = create_lat_lon_coords(grid, chunks=chunks)
     return xr.Dataset(
         coords={
             lat_name: ([lat_name], lat_coords, {"units": "degrees_north"}),
@@ -474,14 +491,13 @@ def format_lat(
         # For curvilinear grids, skip pole padding
         return obj
 
-    lat_vals = obj.coords[lat_coord].values
-
     # Concat a padded value representing the mean of the first/last lat bands
     # This should match the Pole="all" option of ESMF
     # TODO: with cos(90) = 0 weighting, these weights might be 0?
 
     polar_lat = 90
-    dy: Any = obj.coords[lat_coord].diff(lat_coord).max().values.item()
+    # Use max() on diff to get resolution. item() is acceptable for scalar result.
+    dy: Any = float(obj.coords[lat_coord].diff(lat_coord).max().compute())
 
     # Only pad if global but don't have edge values directly at poles
     # NOTE: could use xr.pad here instead of xr.concat, but none of the
@@ -490,23 +506,46 @@ def format_lat(
     lat_dim = obj[lat_coord].dims[0]
     lon_dim = obj[lon_coord].dims[0] if lon_coord else None
 
-    # South pole
-    if dy - polar_lat >= obj.coords[lat_coord].values[0] > -polar_lat:
+    lat_coord_da = obj.coords[lat_coord]
+
+    # South pole - Use lazy checks where possible
+    first_lat = float(lat_coord_da.isel({lat_dim: 0}).compute())
+    if dy - polar_lat >= first_lat > -polar_lat:
         south_pole = obj.isel({lat_dim: 0})
         if lon_dim is not None:
             south_pole = south_pole.mean(lon_dim, keep_attrs=True)
+        attrs = obj.coords[lat_coord].attrs
         obj = xr.concat([south_pole, obj], dim=lat_dim)  # type: ignore
-        lat_vals = np.concatenate([[-polar_lat], lat_vals])
+        # Update coordinate values lazily
+        new_val = np.array([-polar_lat], dtype=lat_coord_da.dtype)
+        if hasattr(lat_coord_da.data, "chunks"):
+            new_val = da.from_array(new_val, chunks=1)
+            new_lat_data = da.concatenate([new_val, lat_coord_da.data], axis=0)
+        else:
+            new_lat_data = np.concatenate([new_val, lat_coord_da.values], axis=0)
+
+        obj = obj.assign_coords({lat_coord: (lat_dim, new_lat_data)})
+        obj.coords[lat_coord].attrs = attrs
+        lat_coord_da = obj.coords[lat_coord]
 
     # North pole
-    if polar_lat - dy <= obj.coords[lat_coord].values[-1] < polar_lat:
+    last_lat = float(lat_coord_da.isel({lat_dim: -1}).compute())
+    if polar_lat - dy <= last_lat < polar_lat:
+        attrs = obj.coords[lat_coord].attrs
         north_pole = obj.isel({lat_dim: -1})
         if lon_dim is not None:
             north_pole = north_pole.mean(lon_dim, keep_attrs=True)
         obj = xr.concat([obj, north_pole], dim=lat_dim)  # type: ignore
-        lat_vals = np.concatenate([lat_vals, [polar_lat]])
+        # Update coordinate values lazily
+        new_val = np.array([polar_lat], dtype=lat_coord_da.dtype)
+        if hasattr(lat_coord_da.data, "chunks"):
+            new_val = da.from_array(new_val, chunks=1)
+            new_lat_data = da.concatenate([lat_coord_da.data, new_val], axis=0)
+        else:
+            new_lat_data = np.concatenate([lat_coord_da.values, new_val], axis=0)
 
-    obj = update_coord(obj, lat_coord, lat_vals)
+        obj = obj.assign_coords({lat_coord: (lat_dim, new_lat_data)})
+        obj.coords[lat_coord].attrs = attrs
 
     return obj
 
@@ -547,8 +586,6 @@ def format_lon(
         # For curvilinear grids, skip longitude formatting
         return obj
 
-    lon_vals = obj.coords[lon_coord].values
-
     # Find the corresponding longitude coordinate in the target dataset
     target_lon_coord = None
     for coord_name in target.coords:
@@ -562,35 +599,52 @@ def format_lon(
 
     # Find a wrap point outside of the left and right bounds of the target
     # This ensures we have coverage on the target and handles global > regional
-    source_vals = obj.coords[lon_coord].values
-    target_vals = target.coords[target_lon_coord].values
-    wrap_point = (target_vals[-1] + target_vals[0] + 360) / 2
-    source_vals = np.where(source_vals < wrap_point - 360, source_vals + 360, source_vals)
-    source_vals = np.where(source_vals > wrap_point, source_vals - 360, source_vals)
-    obj = update_coord(obj, lon_coord, source_vals)
+    source_lon = obj.coords[lon_coord]
+    target_lon_da = target.coords[target_lon_coord]
+
+    # Use compute() for scalars needed for logic
+    t_first = float(target_lon_da.isel({target_lon_da.dims[0]: 0}).compute())
+    t_last = float(target_lon_da.isel({target_lon_da.dims[0]: -1}).compute())
+    wrap_point = (t_last + t_first + 360) / 2
+
+    # Use xr.where for laziness
+    new_source_lon = xr.where(source_lon < wrap_point - 360, source_lon + 360, source_lon)
+    new_source_lon = xr.where(new_source_lon > wrap_point, new_source_lon - 360, new_source_lon)
+    obj = obj.assign_coords({lon_coord: new_source_lon})
 
     obj = ensure_monotonic(obj, lon_coord)
 
     # Only pad if domain is global in lon
     source_lon = obj.coords[lon_coord]
-    target_lon = target.coords[target_lon_coord]
-    dx_s: Any = source_lon.diff(lon_coord).max().values.item()
-    dx_t: Any = target_lon.diff(target_lon_coord).max().values.item()
-    is_global_lon = source_lon.max().values - source_lon.min().values >= 360 - dx_s
+    dx_s: Any = float(source_lon.diff(lon_coord).max().compute())
+    dx_t: Any = float(target_lon_da.diff(target_lon_da.dims[0]).max().compute())
+    is_global_lon = bool((source_lon.max() - source_lon.min()).compute() >= 360 - dx_s)
 
     if is_global_lon:
-        left_pad = (source_lon.values[0] - target_lon.values[0] + dx_t / 2) / dx_s
-        right_pad = (target_lon.values[-1] - source_lon.values[-1] + dx_t / 2) / dx_s
-        left_pad = int(np.ceil(np.max([left_pad, 0])))
-        right_pad = int(np.ceil(np.max([right_pad, 0])))
-        obj = obj.pad({lon_coord: (left_pad, right_pad)}, mode="wrap", keep_attrs=True)
-        lon_vals = obj.coords[lon_coord].values.copy()
-        if left_pad:
-            lon_vals[:left_pad] = source_lon.values[-left_pad:] - 360
-        if right_pad:
-            lon_vals[-right_pad:] = source_lon.values[:right_pad] + 360
-        obj = update_coord(obj, lon_coord, lon_vals)
-        obj = ensure_monotonic(obj, lon_coord)
+        s_first = float(source_lon.isel({lon_coord: 0}).compute())
+        s_last = float(source_lon.isel({lon_coord: -1}).compute())
+
+        left_pad = int(np.ceil(max((s_first - t_first + dx_t / 2) / dx_s, 0)))
+        right_pad = int(np.ceil(max((t_last - s_last + dx_t / 2) / dx_s, 0)))
+
+        if left_pad > 0 or right_pad > 0:
+            attrs = obj.coords[lon_coord].attrs
+            obj = obj.pad({lon_coord: (left_pad, right_pad)}, mode="wrap", keep_attrs=True)
+
+            # Update coordinate values lazily using xr.where
+            lon_da = obj.coords[lon_coord]
+            n_total = lon_da.sizes[lon_coord]
+            # Create an index array for masking
+            indices = xr.DataArray(np.arange(n_total), dims=[lon_coord])
+            if hasattr(lon_da.data, "chunks"):
+                indices = indices.chunk(lon_da.chunks)
+
+            new_lon = xr.where(indices < left_pad, lon_da - 360, lon_da)
+            new_lon = xr.where(indices >= n_total - right_pad, new_lon + 360, new_lon)
+
+            obj = obj.assign_coords({lon_coord: new_lon})
+            obj.coords[lon_coord].attrs = attrs
+            obj = ensure_monotonic(obj, lon_coord)
 
     return obj
 
@@ -734,22 +788,10 @@ def _get_grid_type(ds: xr.Dataset) -> GridType:
                 if lat_ndim == 1:
                     return GridType.RECTILINEAR
                 elif lat_ndim == 2:
-                    # Check if 2D coordinates are actually just meshgrid of 1D coordinates
-                    # In such cases, we should still treat them as rectilinear
-                    try:
-                        # For true rectilinear grids with 2D coordinates,
-                        # lat varies only along one dimension and lon varies only along another
-                        # Check if latitude is constant along the second axis (x-direction)
-                        np.any(np.diff(lat_coord.values, axis=1) != 0)
-                        # Check if longitude is constant along the first axis (y-direction)
-                        np.any(np.diff(lon_coord.values, axis=0) != 0)
-
-                        # If lat only varies in y and lon only varies in x, it's still
-                        # treated as curvilinear since rectilinear interpolation expects 1D coordinates
-                        return GridType.CURVILINEAR
-                    except (IndexError, AttributeError):
-                        # If we can't determine, default to curvilinear for safety
-                        return GridType.CURVILINEAR
+                    # Any 2D coordinates are treated as curvilinear since
+                    # rectilinear interpolation expects 1D dimension coordinates.
+                    # We avoid eager .values calls here to maintain laziness.
+                    return GridType.CURVILINEAR
                 else:
                     msg = f"Unsupported coordinate dimensions: {lat_ndim} (expected 1 or 2)"
                     raise ValueError(msg) from None

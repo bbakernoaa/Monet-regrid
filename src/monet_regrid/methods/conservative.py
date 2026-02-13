@@ -174,10 +174,13 @@ def conservative_regrid_dataset(
     weights = {}
     covered = {}
     for coord, coord_array in coords.items():
+        # Coverage check can be done lazily
         covered[coord] = (coord_array <= data[coord].max()) & (coord_array >= data[coord].min())
 
-        target_coords = coord_array.values
-        source_coords = data[coord].values
+        # Weight calculation requires 1D coordinate values (usually small)
+        # We compute them explicitly only here
+        target_coords = coord_array.values if not isinstance(coord_array.data, np.ndarray) else coord_array.data
+        source_coords = data[coord].values if not isinstance(data[coord].data, np.ndarray) else data[coord].data
         nd_weights = get_weights(source_coords, target_coords)
 
         da_weights = utils.create_dot_dataarray(nd_weights, str(coord), target_coords, source_coords)
@@ -327,9 +330,9 @@ def apply_spherical_correction(dot_array: xr.DataArray, latitude_coord: Hashable
     """
     # Use xarray arithmetic for laziness
     lat_diff = dot_array[latitude_coord].diff(latitude_coord)
-    # We use .median().values.item() to get a scalar value for the resolution
+    # We use .median().compute().item() to get a scalar value for the resolution
     # This is a small computation on a 1D coordinate, so it's acceptable.
-    latitude_res = float(lat_diff.median().values.item())
+    latitude_res = float(lat_diff.median().compute().item())
 
     # Calculate weights using vectorized xarray arithmetic
     da_lat_weights = lat_weight_xarray(dot_array[latitude_coord], latitude_res)
