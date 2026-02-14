@@ -580,11 +580,7 @@ def format_lon(
     Longitude formatting is only applied to 1D coordinates (rectilinear grids).
     """
     lon_coord = formatted_coords["lon"]
-
-    # Check if this is a 2D coordinate (curvilinear grid)
-    if obj.coords[lon_coord].data.ndim == 2:
-        # For curvilinear grids, skip longitude formatting
-        return obj
+    is_curvilinear = obj.coords[lon_coord].data.ndim == 2
 
     # Find the corresponding longitude coordinate in the target dataset
     target_lon_coord = None
@@ -612,15 +608,21 @@ def format_lon(
     new_source_lon = xr.where(new_source_lon > wrap_point, new_source_lon - 360, new_source_lon)
     obj = obj.assign_coords({lon_coord: new_source_lon})
 
-    obj = ensure_monotonic(obj, lon_coord)
+    if not is_curvilinear:
+        obj = ensure_monotonic(obj, lon_coord)
 
     # Only pad if domain is global in lon
     source_lon = obj.coords[lon_coord]
-    dx_s: Any = float(source_lon.diff(lon_coord).max().compute())
-    dx_t: Any = float(target_lon_da.diff(target_lon_da.dims[0]).max().compute())
+    if not is_curvilinear:
+        dx_s = float(source_lon.diff(lon_coord).max().compute())
+    else:
+        # For 2D grids, estimate resolution from the last dimension
+        dx_s = float(source_lon.diff(source_lon.dims[-1]).max().compute())
+
+    dx_t = float(target_lon_da.diff(target_lon_da.dims[0]).max().compute())
     is_global_lon = bool((source_lon.max() - source_lon.min()).compute() >= 360 - dx_s)
 
-    if is_global_lon:
+    if is_global_lon and not is_curvilinear:
         s_first = float(source_lon.isel({lon_coord: 0}).compute())
         s_last = float(source_lon.isel({lon_coord: -1}).compute())
 
