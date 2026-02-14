@@ -9,11 +9,13 @@ Track B: Interactive Exploration (HvPlot)
 """
 
 import cartopy.crs as ccrs
+import hvplot.xarray  # noqa: F401
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-import hvplot.xarray  # noqa: F401
+
 from monet_regrid.core import CurvilinearRegridder
+
 
 def run_demo():
     # 1. Create source curvilinear grid [180, 360]
@@ -35,7 +37,7 @@ def run_demo():
             "longitude": (("y", "x"), lon_2d),
             "latitude": (("y", "x"), lat_2d),
         },
-        name="source_data"
+        name="source_data",
     )
 
     # 2. Create target rectilinear grid [-180, 180]
@@ -57,12 +59,7 @@ def run_demo():
 
     # Plot regridded data
     # Mandatory: transform=ccrs.PlateCarree()
-    result.plot(
-        ax=ax,
-        transform=ccrs.PlateCarree(),
-        cmap="viridis",
-        cbar_kwargs={"label": "Regridded Value"}
-    )
+    result.plot(ax=ax, transform=ccrs.PlateCarree(), cmap="viridis", cbar_kwargs={"label": "Regridded Value"})
 
     ax.coastlines()
     ax.gridlines(draw_labels=True)
@@ -70,20 +67,20 @@ def run_demo():
 
     plt.tight_layout()
     plt.savefig("curvilinear_fix_track_a.png")
-    print("Track A visualization saved to curvilinear_fix_track_a.png")
 
     # --- TRACK B: Exploration (Interactive) ---
     # In a real environment, this would display an interactive plot
     # Mandatory: rasterize=True for large grids
-    interactive_plot = result.hvplot.quadmesh(
-        x='lon', y='lat',
+    result.hvplot.quadmesh(
+        x="lon",
+        y="lat",
         projection=ccrs.PlateCarree(),
         rasterize=True,
-        cmap='viridis',
-        title="Interactive Exploration: Curvilinear Fix"
+        cmap="viridis",
+        title="Interactive Exploration: Curvilinear Fix",
     )
     # hvplot.save(interactive_plot, 'curvilinear_fix_track_b.html')
-    print("Track B visualization (HvPlot) configured with rasterize=True.")
+
 
 if __name__ == "__main__":
     run_demo()
