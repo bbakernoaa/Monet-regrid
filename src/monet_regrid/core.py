@@ -72,7 +72,39 @@ class BaseRegridder(abc.ABC):
         """
         self.source_data = source_data
         self.target_grid = target_grid
+        self._formatting_cache: dict[tuple, xr.DataArray | xr.Dataset] = {}
         self._validate_inputs()
+
+    def _get_formatted_data(
+        self,
+        data: xr.DataArray | xr.Dataset,
+        time_dim: str | None = None,
+        stats: bool = True,
+    ) -> xr.DataArray | xr.Dataset:
+        """Format input data for regridding with caching.
+
+        Parameters
+        ----------
+        data : xr.DataArray | xr.Dataset
+            Input data to format.
+        time_dim : str | None, optional
+            Time dimension name, by default None.
+        stats : bool, optional
+            If True, use statistical formatting (skip pole padding),
+            by default True.
+
+        Returns
+        -------
+        xr.DataArray | xr.Dataset
+            Formatted data.
+        """
+        cache_key = (_create_cache_key(data, time_dim), stats)
+        if cache_key in self._formatting_cache:
+            return self._formatting_cache[cache_key]
+
+        ds_formatted = format_for_regrid(data, self.target_grid, stats=stats)
+        self._formatting_cache[cache_key] = ds_formatted
+        return ds_formatted
 
     @abc.abstractmethod
     def __call__(self, **kwargs: Any) -> xr.DataArray | xr.Dataset:
@@ -257,9 +289,8 @@ class RectilinearRegridder(BaseRegridder):
         self.method = method
         self.time_dim = time_dim
         self.method_kwargs = kwargs
-        # Add caching for validated target grid and formatted data
+        # Add caching for validated target grid
         self._validation_cache: dict[tuple, xr.Dataset] = {}
-        self._formatting_cache: dict[tuple, xr.DataArray | xr.Dataset] = {}
         super().__init__(source_data, target_grid)
 
     def _ensure_spatial_coordinates(self, data: xr.DataArray | xr.Dataset) -> xr.DataArray | xr.Dataset:
@@ -370,14 +401,8 @@ class RectilinearRegridder(BaseRegridder):
             # Cache the validated target grid
             self._validation_cache[cache_key] = validated_target_grid
 
-        # Check if we have cached formatted data
-        if cache_key in self._formatting_cache:
-            formatted_data = self._formatting_cache[cache_key]
-        else:
-            # Format data for regridding
-            formatted_data = format_for_regrid(input_data, validated_target_grid)
-            # Cache the formatted data
-            self._formatting_cache[cache_key] = formatted_data
+        # Check if we have cached formatted data (Aero Speed)
+        formatted_data = self._get_formatted_data(input_data, time_dim, stats=False)
 
         # Apply the appropriate method
         if method in ["linear", "nearest", "cubic", "bilinear"]:
@@ -486,7 +511,7 @@ class RectilinearRegridder(BaseRegridder):
             The regridded data.
         """
         input_data = data if data is not None else self.source_data
-        ds_formatted = format_for_regrid(input_data, self.target_grid, stats=True)
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
 
         return statistic_reduce(ds_formatted, self.target_grid, time_dim, method, skipna, fill_value)
 
@@ -536,7 +561,7 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-        ds_formatted = format_for_regrid(input_data, self.target_grid, stats=True)
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
 
         return compute_mode(
             ds_formatted,
@@ -593,7 +618,7 @@ class RectilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
-        ds_formatted = format_for_regrid(input_data, self.target_grid, stats=True)
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
 
         return compute_mode(
             ds_formatted,
@@ -970,7 +995,9 @@ class CurvilinearRegridder(BaseRegridder):
             The regridded data.
         """
         input_data = data if data is not None else self.source_data
-        return statistic_reduce(input_data, self.target_grid, time_dim, method, skipna, fill_value)
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
+
+        return statistic_reduce(ds_formatted, self.target_grid, time_dim, method, skipna, fill_value)
 
     def most_common(
         self,
@@ -1011,8 +1038,10 @@ class CurvilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
+
         return compute_mode(
-            input_data,
+            ds_formatted,
             self.target_grid,
             values,
             time_dim,
@@ -1059,8 +1088,10 @@ class CurvilinearRegridder(BaseRegridder):
             )
             raise ValueError(msg)
 
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
+
         return compute_mode(
-            input_data,
+            ds_formatted,
             self.target_grid,
             values,
             time_dim,
