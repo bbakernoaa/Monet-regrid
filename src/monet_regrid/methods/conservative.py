@@ -179,8 +179,8 @@ def conservative_regrid_dataset(
 
         # Weight calculation requires 1D coordinate values (usually small)
         # We compute them explicitly only here
-        target_coords = coord_array.values if not isinstance(coord_array.data, np.ndarray) else coord_array.data
-        source_coords = data[coord].values if not isinstance(data[coord].data, np.ndarray) else data[coord].data
+        target_coords = coord_array.compute().data if not isinstance(coord_array.data, np.ndarray) else coord_array.data
+        source_coords = data[coord].compute().data if not isinstance(data[coord].data, np.ndarray) else data[coord].data
         nd_weights = get_weights(source_coords, target_coords)
 
         da_weights = utils.create_dot_dataarray(nd_weights, str(coord), target_coords, source_coords)

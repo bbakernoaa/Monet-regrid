@@ -499,11 +499,12 @@ class CurvilinearInterpolator:
             source_lon_flat, source_lat_flat, source_heights
         )
 
-        # Check for finite values before creating 3D points array
-        _check_and_raise_on_non_finite(self.source_x, self.source_y, self.source_z, source_lat_flat, source_lon_flat)
-
         # Store as 3D points array
         self.source_points_3d = da.stack([self.source_x, self.source_y, self.source_z], axis=1)
+
+        # Save flattened lats/lons for deferred validation
+        self._source_lat_flat = source_lat_flat
+        self._source_lon_flat = source_lon_flat
 
         # Extract target coordinates
         target_lat = self.target_grid[self.target_lat_name]
@@ -532,11 +533,12 @@ class CurvilinearInterpolator:
             target_lon_flat, target_lat_flat, target_heights
         )
 
-        # Check for finite values before creating 3D points array
-        _check_and_raise_on_non_finite(self.target_x, self.target_y, self.target_z, target_lat_flat, target_lon_flat)
-
         # Store as 3D points array
         self.target_points_3d = da.stack([self.target_x, self.target_y, self.target_z], axis=1)
+
+        # Save flattened lats/lons for deferred validation
+        self._target_lat_flat = target_lat_flat
+        self._target_lon_flat = target_lon_flat
 
     def _build_interpolation_structures(self) -> None:
         """Build interpolation structures based on method.
@@ -555,6 +557,11 @@ class CurvilinearInterpolator:
         # SciPy-based interpolation engines require numpy arrays, so we compute them
         # only when needed. This preserves lazy evaluation for coordinate transformations
         # while ensuring compatibility with the underlying interpolation libraries.
+
+        # Aero Protocol: Perform deferred validation of coordinates before eager computation
+        _check_and_raise_on_non_finite(self.source_x, self.source_y, self.source_z, self._source_lat_flat, self._source_lon_flat)
+        _check_and_raise_on_non_finite(self.target_x, self.target_y, self.target_z, self._target_lat_flat, self._target_lon_flat)
+
         self.source_points_3d_np = self.source_points_3d.compute()
         self.target_points_3d_np = self.target_points_3d.compute()
 
@@ -822,7 +829,8 @@ class CurvilinearInterpolator:
             else:
                 # Create a coordinate for the dimension if it doesn't exist
                 dim_size = self.target_grid.sizes[dim_name]
-                result_dataset.coords[dim_name] = np.arange(dim_size)
+                # Use Dask for laziness (Aero Protocol)
+                result_dataset.coords[dim_name] = da.arange(dim_size)
 
         # Update history
         utils.update_history(
