@@ -497,7 +497,7 @@ def format_lat(
 
     polar_lat = 90
     # Use max() on diff to get resolution. item() is acceptable for scalar result.
-    dy: Any = float(obj.coords[lat_coord].diff(lat_coord).max().compute())
+    dy: Any = float(obj.coords[lat_coord].diff(lat_coord).max().compute().item())
 
     # Only pad if global but don't have edge values directly at poles
     # NOTE: could use xr.pad here instead of xr.concat, but none of the
@@ -509,7 +509,7 @@ def format_lat(
     lat_coord_da = obj.coords[lat_coord]
 
     # South pole - Use lazy checks where possible
-    first_lat = float(lat_coord_da.isel({lat_dim: 0}).compute())
+    first_lat = float(lat_coord_da.isel({lat_dim: 0}).compute().item())
     if dy - polar_lat >= first_lat > -polar_lat:
         south_pole = obj.isel({lat_dim: 0})
         if lon_dim is not None:
@@ -529,7 +529,7 @@ def format_lat(
         lat_coord_da = obj.coords[lat_coord]
 
     # North pole
-    last_lat = float(lat_coord_da.isel({lat_dim: -1}).compute())
+    last_lat = float(lat_coord_da.isel({lat_dim: -1}).compute().item())
     if polar_lat - dy <= last_lat < polar_lat:
         attrs = obj.coords[lat_coord].attrs
         north_pole = obj.isel({lat_dim: -1})
@@ -599,8 +599,8 @@ def format_lon(
     target_lon_da = target.coords[target_lon_coord]
 
     # Use compute() for scalars needed for logic
-    t_first = float(target_lon_da.isel({target_lon_da.dims[0]: 0}).compute())
-    t_last = float(target_lon_da.isel({target_lon_da.dims[0]: -1}).compute())
+    t_first = float(target_lon_da.isel({target_lon_da.dims[0]: 0}).compute().item())
+    t_last = float(target_lon_da.isel({target_lon_da.dims[0]: -1}).compute().item())
     wrap_point = (t_last + t_first + 360) / 2
 
     # Use xr.where for laziness
@@ -614,17 +614,17 @@ def format_lon(
     # Only pad if domain is global in lon
     source_lon = obj.coords[lon_coord]
     if not is_curvilinear:
-        dx_s = float(source_lon.diff(lon_coord).max().compute())
+        dx_s = float(source_lon.diff(lon_coord).max().compute().item())
     else:
         # For 2D grids, estimate resolution from the last dimension
-        dx_s = float(source_lon.diff(source_lon.dims[-1]).max().compute())
+        dx_s = float(source_lon.diff(source_lon.dims[-1]).max().compute().item())
 
-    dx_t = float(target_lon_da.diff(target_lon_da.dims[0]).max().compute())
-    is_global_lon = bool((source_lon.max() - source_lon.min()).compute() >= 360 - dx_s)
+    dx_t = float(target_lon_da.diff(target_lon_da.dims[0]).max().compute().item())
+    is_global_lon = bool((source_lon.max() - source_lon.min()).compute().item() >= 360 - dx_s)
 
     if is_global_lon and not is_curvilinear:
-        s_first = float(source_lon.isel({lon_coord: 0}).compute())
-        s_last = float(source_lon.isel({lon_coord: -1}).compute())
+        s_first = float(source_lon.isel({lon_coord: 0}).compute().item())
+        s_last = float(source_lon.isel({lon_coord: -1}).compute().item())
 
         left_pad = int(np.ceil(max((s_first - t_first + dx_t / 2) / dx_s, 0)))
         right_pad = int(np.ceil(max((t_last - s_last + dx_t / 2) / dx_s, 0)))
@@ -669,10 +669,12 @@ def coord_is_covered(obj: xr.DataArray | xr.Dataset, target: xr.Dataset, coord: 
         True if the source coordinate covers the target coordinate range,
         False otherwise.
     """
-    pad = target[coord].diff(coord).max().values
+    pad = target[coord].diff(coord).max().compute().item()
     left_covered = obj[coord].min() <= target[coord].min() - pad
     right_covered = obj[coord].max() >= target[coord].max() + pad
-    return bool(left_covered.item() and right_covered.item())
+    # Combine lazy checks into a single compute
+    coverage = xr.concat([left_covered, right_covered], dim="check")
+    return bool(coverage.all().compute().item())
 
 
 @overload
