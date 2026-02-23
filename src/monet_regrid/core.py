@@ -73,6 +73,7 @@ class BaseRegridder(abc.ABC):
         self.source_data = source_data
         self.target_grid = target_grid
         self._formatting_cache: dict[tuple, xr.DataArray | xr.Dataset] = {}
+        self._validation_cache: dict[tuple, xr.Dataset] = {}
         self._validate_inputs()
 
     def _get_formatted_data(
@@ -207,7 +208,6 @@ class BaseRegridder(abc.ABC):
 
         return regridder_class(source_data=None, target_grid=target_grid, **config)
 
-    @abc.abstractmethod
     def info(self) -> dict[str, Any]:
         """Get information about the regridder instance.
 
@@ -216,7 +216,27 @@ class BaseRegridder(abc.ABC):
         dict[str, Any]
             Dictionary containing regridder metadata and configuration.
         """
-        pass
+        source_dims = dict(self.source_data.sizes) if self.source_data is not None else {}
+        source_info = {}
+        if self.source_data is not None:
+            source_info = {
+                "dims": source_dims,
+                "data_vars": (
+                    list(self.source_data.data_vars) if isinstance(self.source_data, xr.Dataset) else [self.source_data.name]
+                ),
+            }
+
+        target_info = {
+            "dims": dict(self.target_grid.sizes),
+            "coords": list(self.target_grid.coords),
+        }
+
+        return {
+            "type": self.__class__.__name__,
+            "source_dims": source_dims,  # Backward compatibility
+            "source": source_info,
+            "target": target_info,
+        }
 
     def _validate_inputs(self) -> None:
         """Validate the source data and target grid inputs."""
@@ -240,6 +260,154 @@ class BaseRegridder(abc.ABC):
     def __repr__(self) -> str:
         """Return a string representation of the regridder."""
         return f"<{self.__class__.__name__}>\n{self.info()}"
+
+    def stat(
+        self,
+        method: str,
+        time_dim: str | None = "time",
+        skipna: bool = False,
+        fill_value: None | Any = None,
+        data: xr.DataArray | xr.Dataset | None = None,
+    ) -> xr.DataArray | xr.Dataset:
+        """Upsample data using statistical methods.
+
+        Parameters
+        ----------
+        method : str
+            The reduction method, e.g., "sum", "mean", "min", "max".
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        skipna : bool, optional
+            If True, ignores NaN values. Defaults to False.
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
+        data : xr.DataArray | xr.Dataset | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
+
+        Returns
+        -------
+        xr.DataArray | xr.Dataset
+            The regridded data.
+        """
+        input_data = data if data is not None else self.source_data
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
+
+        return statistic_reduce(ds_formatted, self.target_grid, time_dim, method, skipna, fill_value)
+
+    def most_common(
+        self,
+        values: np.ndarray,
+        time_dim: str | None = "time",
+        fill_value: None | Any = None,
+        nan_threshold: float = 1.0,  # noqa: ARG002
+        data: xr.DataArray | None = None,
+    ) -> xr.DataArray:
+        """Regrid by taking the most common value within the new grid cells.
+
+        To be used for regridding data to a much coarser resolution, not for regridding
+        when the source and target grids are of a similar resolution.
+
+        Note that in the case of two unique values with the same count, the behaviour
+        is not deterministic, and the resulting "most common" one will randomly be
+        either of the two.
+
+        Parameters
+        ----------
+        values : np.ndarray
+            Numpy array containing all labels expected in the input data.
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
+        nan_threshold : float, optional
+            Threshold for NaN values. Defaults to 1.0.
+        data : xr.DataArray | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
+
+        Returns
+        -------
+        xr.DataArray
+            The regridded data.
+        """
+        input_data = data if data is not None else self.source_data
+        if isinstance(input_data, xr.Dataset):
+            msg = (
+                "The 'most common value' regridder is not implemented for\n"
+                "xarray.Dataset, as it requires specifying the expected labels.\n"
+                "Please select only a single variable (as DataArray),\n"
+                " and regrid it separately."
+            )
+            raise ValueError(msg)
+
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
+
+        return compute_mode(
+            ds_formatted,
+            self.target_grid,
+            values,
+            time_dim,
+            fill_value,
+            anti_mode=False,
+        )
+
+    def least_common(
+        self,
+        values: np.ndarray,
+        time_dim: str | None = "time",
+        fill_value: None | Any = None,
+        nan_threshold: float = 1.0,  # noqa: ARG002
+        data: xr.DataArray | None = None,
+    ) -> xr.DataArray:
+        """Regrid by taking the least common value within the new grid cells.
+
+        To be used for regridding data to a much coarser resolution, not for regridding
+        when the source and target grids are of a similar resolution.
+
+        Note that in the case of two unique values with the same count, the behaviour
+        is not deterministic, and the resulting "least common" one will randomly be
+        either of the two.
+
+        Parameters
+        ----------
+        values : np.ndarray
+            Numpy array containing all labels expected in the input data.
+        time_dim : str | None, optional
+            Name of the time dimension. Defaults to "time".
+        fill_value : Any, optional
+            Fill value for uncovered target grid parts. Defaults to None.
+        nan_threshold : float, optional
+            Threshold for NaN values. Defaults to 1.0.
+        data : xr.DataArray | None, optional
+            The data to be regridded. If None, the `source_data` provided
+            during initialization is used. Defaults to None.
+
+        Returns
+        -------
+        xr.DataArray
+            The regridded data.
+        """
+        input_data = data if data is not None else self.source_data
+        if isinstance(input_data, xr.Dataset):
+            msg = (
+                "The 'least common value' regridder is not implemented for\n"
+                "xarray.Dataset, as it requires specifying the expected labels.\n"
+                "Please select only a single variable (as DataArray),\n"
+                " and regrid it separately."
+            )
+            raise ValueError(msg)
+
+        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
+
+        return compute_mode(
+            ds_formatted,
+            self.target_grid,
+            values,
+            time_dim,
+            fill_value,
+            anti_mode=True,
+        )
 
 
 class RectilinearRegridder(BaseRegridder):
@@ -289,8 +457,6 @@ class RectilinearRegridder(BaseRegridder):
         self.method = method
         self.time_dim = time_dim
         self.method_kwargs = kwargs
-        # Add caching for validated target grid
-        self._validation_cache: dict[tuple, xr.Dataset] = {}
         super().__init__(source_data, target_grid)
 
     def _ensure_spatial_coordinates(self, data: xr.DataArray | xr.Dataset) -> xr.DataArray | xr.Dataset:
@@ -455,179 +621,16 @@ class RectilinearRegridder(BaseRegridder):
         dict[str, Any]
             Dictionary containing regridder metadata and configuration.
         """
-        source_dims = dict(self.source_data.sizes) if self.source_data is not None else {}
-        source_info = {}
-        if self.source_data is not None:
-            source_info = {
-                "dims": source_dims,
-                "data_vars": (
-                    list(self.source_data.data_vars) if isinstance(self.source_data, xr.Dataset) else [self.source_data.name]
-                ),
+        info = super().info()
+        info.update(
+            {
+                "method": self.method,
+                "time_dim": self.time_dim,
+                "method_kwargs": self.method_kwargs,
+                "grid_type": "rectilinear",
             }
-
-        target_info = {
-            "dims": dict(self.target_grid.sizes),
-            "coords": list(self.target_grid.coords),
-        }
-
-        return {
-            "type": "RectilinearRegridder",
-            "method": self.method,
-            "time_dim": self.time_dim,
-            "method_kwargs": self.method_kwargs,
-            "source_dims": source_dims,  # Backward compatibility
-            "source": source_info,
-            "target": target_info,
-            "grid_type": "rectilinear",
-        }
-
-    def stat(
-        self,
-        method: str,
-        time_dim: str | None = "time",
-        skipna: bool = False,
-        fill_value: None | Any = None,
-        data: xr.DataArray | xr.Dataset | None = None,
-    ) -> xr.DataArray | xr.Dataset:
-        """Upsample data using statistical methods.
-
-        Parameters
-        ----------
-        method : str
-            The reduction method, e.g., "sum", "mean", "min", "max".
-        time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
-        skipna : bool, optional
-            If True, ignores NaN values. Defaults to False.
-        fill_value : Any, optional
-            Fill value for uncovered target grid parts. Defaults to None.
-        data : xr.DataArray | xr.Dataset | None, optional
-            The data to be regridded. If None, the `source_data` provided
-            during initialization is used. Defaults to None.
-
-        Returns
-        -------
-        xr.DataArray | xr.Dataset
-            The regridded data.
-        """
-        input_data = data if data is not None else self.source_data
-        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
-
-        return statistic_reduce(ds_formatted, self.target_grid, time_dim, method, skipna, fill_value)
-
-    def most_common(
-        self,
-        values: np.ndarray,
-        time_dim: str | None = "time",
-        fill_value: None | Any = None,
-        nan_threshold: float = 1.0,  # noqa: ARG002
-        data: xr.DataArray | None = None,
-    ) -> xr.DataArray:
-        """Regrid by taking the most common value within the new grid cells.
-
-        To be used for regridding data to a much coarser resolution, not for regridding
-        when the source and target grids are of a similar resolution.
-
-        Note that in the case of two unique values with the same count, the behaviour
-        is not deterministic, and the resulting "most common" one will randomly be
-        either of the two.
-
-        Parameters
-        ----------
-        values : np.ndarray
-            Numpy array containing all labels expected in the input data.
-        time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
-        fill_value : Any, optional
-            Fill value for uncovered target grid parts. Defaults to None.
-        nan_threshold : float, optional
-            Threshold for NaN values. Defaults to 1.0.
-        data : xr.DataArray | None, optional
-            The data to be regridded. If None, the `source_data` provided
-            during initialization is used. Defaults to None.
-
-        Returns
-        -------
-        xr.DataArray
-            The regridded data.
-        """
-        input_data = data if data is not None else self.source_data
-        if isinstance(input_data, xr.Dataset):
-            msg = (
-                "The 'most common value' regridder is not implemented for\n"
-                "xarray.Dataset, as it requires specifying the expected labels.\n"
-                "Please select only a single variable (as DataArray),\n"
-                " and regrid it separately."
-            )
-            raise ValueError(msg)
-
-        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
-
-        return compute_mode(
-            ds_formatted,
-            self.target_grid,
-            values,
-            time_dim,
-            fill_value,
-            anti_mode=False,
         )
-
-    def least_common(
-        self,
-        values: np.ndarray,
-        time_dim: str | None = "time",
-        fill_value: None | Any = None,
-        nan_threshold: float = 1.0,  # noqa: ARG002
-        data: xr.DataArray | None = None,
-    ) -> xr.DataArray:
-        """Regrid by taking the least common value within the new grid cells.
-
-        To be used for regridding data to a much coarser resolution, not for regridding
-        when the source and target grids are of a similar resolution.
-
-        Note that in the case of two unique values with the same count, the behaviour
-        is not deterministic, and the resulting "least common" one will randomly be
-        either of the two.
-
-        Parameters
-        ----------
-        values : np.ndarray
-            Numpy array containing all labels expected in the input data.
-        time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
-        fill_value : Any, optional
-            Fill value for uncovered target grid parts. Defaults to None.
-        nan_threshold : float, optional
-            Threshold for NaN values. Defaults to 1.0.
-        data : xr.DataArray | None, optional
-            The data to be regridded. If None, the `source_data` provided
-            during initialization is used. Defaults to None.
-
-        Returns
-        -------
-        xr.DataArray
-            The regridded data.
-        """
-        input_data = data if data is not None else self.source_data
-        if isinstance(input_data, xr.Dataset):
-            msg = (
-                "The 'least common value' regridder is not implemented for\n"
-                "xarray.Dataset, as it requires specifying the expected labels.\n"
-                "Please select only a single variable (as DataArray),\n"
-                " and regrid it separately."
-            )
-            raise ValueError(msg)
-
-        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
-
-        return compute_mode(
-            ds_formatted,
-            self.target_grid,
-            values,
-            time_dim,
-            fill_value,
-            anti_mode=True,
-        )
+        return info
 
 
 class CurvilinearRegridder(BaseRegridder):
@@ -939,162 +942,13 @@ class CurvilinearRegridder(BaseRegridder):
         dict[str, Any]
             Dictionary containing regridder metadata and configuration.
         """
-        source_dims = dict(self.source_data.sizes) if self.source_data is not None else {}
-        source_info = {}
-        if self.source_data is not None:
-            source_info = {
-                "dims": source_dims,
-                "data_vars": (
-                    list(self.source_data.data_vars) if isinstance(self.source_data, xr.Dataset) else [self.source_data.name]
-                ),
+        info = super().info()
+        info.update(
+            {
+                "method": self.method,
+                "method_kwargs": self.method_kwargs,
+                "grid_type": "curvilinear",
+                "status": "implemented",
             }
-
-        target_info = {
-            "dims": dict(self.target_grid.sizes),
-            "coords": list(self.target_grid.coords),
-        }
-
-        return {
-            "type": "CurvilinearRegridder",
-            "method": self.method,
-            "method_kwargs": self.method_kwargs,
-            "source_dims": source_dims,  # Backward compatibility
-            "source": source_info,
-            "target": target_info,
-            "grid_type": "curvilinear",
-            "status": "implemented",
-        }
-
-    def stat(
-        self,
-        method: str,
-        time_dim: str | None = "time",
-        skipna: bool = False,
-        fill_value: None | Any = None,
-        data: xr.DataArray | xr.Dataset | None = None,
-    ) -> xr.DataArray | xr.Dataset:
-        """Upsample data using statistical methods.
-
-        Parameters
-        ----------
-        method : str
-            The reduction method, e.g., "sum", "mean", "min", "max".
-        time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
-        skipna : bool, optional
-            If True, ignores NaN values. Defaults to False.
-        fill_value : Any, optional
-            Fill value for uncovered target grid parts. Defaults to None.
-        data : xr.DataArray | xr.Dataset | None, optional
-            The data to be regridded. If None, the `source_data` provided
-            during initialization is used. Defaults to None.
-
-        Returns
-        -------
-        xr.DataArray | xr.Dataset
-            The regridded data.
-        """
-        input_data = data if data is not None else self.source_data
-        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
-
-        return statistic_reduce(ds_formatted, self.target_grid, time_dim, method, skipna, fill_value)
-
-    def most_common(
-        self,
-        values: np.ndarray,
-        time_dim: str | None = "time",
-        fill_value: None | Any = None,
-        nan_threshold: float = 1.0,  # noqa: ARG002
-        data: xr.DataArray | None = None,
-    ) -> xr.DataArray:
-        """Regrid by taking the most common value within the new grid cells.
-
-        Parameters
-        ----------
-        values : np.ndarray
-            Numpy array containing all labels expected in the input data.
-        time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
-        fill_value : Any, optional
-            Fill value for uncovered target grid parts. Defaults to None.
-        nan_threshold : float, optional
-            Threshold for NaN values. Defaults to 1.0.
-        data : xr.DataArray | None, optional
-            The data to be regridded. If None, the `source_data` provided
-            during initialization is used. Defaults to None.
-
-        Returns
-        -------
-        xr.DataArray
-            The regridded data.
-        """
-        input_data = data if data is not None else self.source_data
-        if isinstance(input_data, xr.Dataset):
-            msg = (
-                "The 'most common value' regridder is not implemented for\n"
-                "xarray.Dataset, as it requires specifying the expected labels.\n"
-                "Please select only a single variable (as DataArray),\n"
-                " and regrid it separately."
-            )
-            raise ValueError(msg)
-
-        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
-
-        return compute_mode(
-            ds_formatted,
-            self.target_grid,
-            values,
-            time_dim,
-            fill_value,
-            anti_mode=False,
         )
-
-    def least_common(
-        self,
-        values: np.ndarray,
-        time_dim: str | None = "time",
-        fill_value: None | Any = None,
-        nan_threshold: float = 1.0,  # noqa: ARG002
-        data: xr.DataArray | None = None,
-    ) -> xr.DataArray:
-        """Regrid by taking the least common value within the new grid cells.
-
-        Parameters
-        ----------
-        values : np.ndarray
-            Numpy array containing all labels expected in the input data.
-        time_dim : str | None, optional
-            Name of the time dimension. Defaults to "time".
-        fill_value : Any, optional
-            Fill value for uncovered target grid parts. Defaults to None.
-        nan_threshold : float, optional
-            Threshold for NaN values. Defaults to 1.0.
-        data : xr.DataArray | None, optional
-            The data to be regridded. If None, the `source_data` provided
-            during initialization is used. Defaults to None.
-
-        Returns
-        -------
-        xr.DataArray
-            The regridded data.
-        """
-        input_data = data if data is not None else self.source_data
-        if isinstance(input_data, xr.Dataset):
-            msg = (
-                "The 'least common value' regridder is not implemented for\n"
-                "xarray.Dataset, as it requires specifying the expected labels.\n"
-                "Please select only a single variable (as DataArray),\n"
-                " and regrid it separately."
-            )
-            raise ValueError(msg)
-
-        ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
-
-        return compute_mode(
-            ds_formatted,
-            self.target_grid,
-            values,
-            time_dim,
-            fill_value,
-            anti_mode=True,
-        )
+        return info
