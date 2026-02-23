@@ -215,6 +215,12 @@ class BaseRegridder(abc.ABC):
         -------
         dict[str, Any]
             Dictionary containing regridder metadata and configuration.
+
+        Examples
+        --------
+        >>> regridder = RectilinearRegridder(ds_source, ds_target)
+        >>> regridder.info()
+        {'type': 'RectilinearRegridder', 'grid_type': 'rectilinear', ...}
         """
         source_dims = dict(self.source_data.sizes) if self.source_data is not None else {}
         source_info = {}
@@ -266,7 +272,7 @@ class BaseRegridder(abc.ABC):
         method: str,
         time_dim: str | None = "time",
         skipna: bool = False,
-        fill_value: None | Any = None,
+        fill_value: Any = None,
         data: xr.DataArray | xr.Dataset | None = None,
     ) -> xr.DataArray | xr.Dataset:
         """Upsample data using statistical methods.
@@ -289,6 +295,11 @@ class BaseRegridder(abc.ABC):
         -------
         xr.DataArray | xr.Dataset
             The regridded data.
+
+        Examples
+        --------
+        >>> regridder = RectilinearRegridder(da_source, ds_target)
+        >>> da_regridded = regridder.stat(method="mean")
         """
         input_data = data if data is not None else self.source_data
         ds_formatted = self._get_formatted_data(input_data, time_dim, stats=True)
@@ -299,7 +310,7 @@ class BaseRegridder(abc.ABC):
         self,
         values: np.ndarray,
         time_dim: str | None = "time",
-        fill_value: None | Any = None,
+        fill_value: Any = None,
         nan_threshold: float = 1.0,  # noqa: ARG002
         data: xr.DataArray | None = None,
     ) -> xr.DataArray:
@@ -330,6 +341,11 @@ class BaseRegridder(abc.ABC):
         -------
         xr.DataArray
             The regridded data.
+
+        Examples
+        --------
+        >>> regridder = RectilinearRegridder(da_source, ds_target)
+        >>> da_regridded = regridder.most_common(values=np.arange(10))
         """
         input_data = data if data is not None else self.source_data
         if isinstance(input_data, xr.Dataset):
@@ -356,7 +372,7 @@ class BaseRegridder(abc.ABC):
         self,
         values: np.ndarray,
         time_dim: str | None = "time",
-        fill_value: None | Any = None,
+        fill_value: Any = None,
         nan_threshold: float = 1.0,  # noqa: ARG002
         data: xr.DataArray | None = None,
     ) -> xr.DataArray:
@@ -387,6 +403,11 @@ class BaseRegridder(abc.ABC):
         -------
         xr.DataArray
             The regridded data.
+
+        Examples
+        --------
+        >>> regridder = RectilinearRegridder(da_source, ds_target)
+        >>> da_regridded = regridder.least_common(values=np.arange(10))
         """
         input_data = data if data is not None else self.source_data
         if isinstance(input_data, xr.Dataset):
@@ -620,6 +641,12 @@ class RectilinearRegridder(BaseRegridder):
         -------
         dict[str, Any]
             Dictionary containing regridder metadata and configuration.
+
+        Examples
+        --------
+        >>> regridder = RectilinearRegridder(ds_source, ds_target)
+        >>> regridder.info()
+        {'type': 'RectilinearRegridder', 'grid_type': 'rectilinear', ...}
         """
         info = super().info()
         info.update(
@@ -941,6 +968,12 @@ class CurvilinearRegridder(BaseRegridder):
         -------
         dict[str, Any]
             Dictionary containing regridder metadata and configuration.
+
+        Examples
+        --------
+        >>> regridder = CurvilinearRegridder(ds_source, ds_target)
+        >>> regridder.info()
+        {'type': 'CurvilinearRegridder', 'grid_type': 'curvilinear', ...}
         """
         info = super().info()
         info.update(
