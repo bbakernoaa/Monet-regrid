@@ -1067,11 +1067,11 @@ def update_history(obj: xr.DataArray | xr.Dataset, message: str) -> None:
     obj.attrs["history"] = f"{existing_history}\n{message}" if existing_history else message
 
 
-def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
+def identify_cf_coordinates(ds: xr.DataArray | xr.Dataset) -> tuple[str, str]:
     """Identify latitude and longitude coordinates using a fallback strategy.
 
     This function attempts to find the names of the latitude and longitude
-    coordinates in a given xarray Dataset. It uses a hybrid strategy:
+    coordinates in a given xarray Dataset or DataArray. It uses a hybrid strategy:
 
     1.  **CF-xarray:** First, it tries to use the `cf-xarray` accessor to
         identify coordinates based on CF (Climate and Forecast) conventions
@@ -1081,8 +1081,8 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
 
     Parameters
     ----------
-    ds : xr.Dataset
-        The dataset to inspect.
+    ds : xr.DataArray | xr.Dataset
+        The dataset or dataarray to inspect.
 
     Returns
     -------
@@ -1099,10 +1099,10 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
     # Try standard CF names first
     try:
         lat_name = ds.cf["latitude"].name
-    except KeyError:
+    except (KeyError, AttributeError):
         try:
             lat_name = ds.cf["lat"].name
-        except KeyError:
+        except (KeyError, AttributeError):
             # Fallback to common non-CF names
             lat_candidates = [
                 name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["latitude", "lat", "yc", "y"])
@@ -1114,10 +1114,10 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
 
     try:
         lon_name = ds.cf["longitude"].name
-    except KeyError:
+    except (KeyError, AttributeError):
         try:
             lon_name = ds.cf["lon"].name
-        except KeyError:
+        except (KeyError, AttributeError):
             # Fallback to common non-CF names
             lon_candidates = [
                 name for name in ds.coords if any(keyword in str(name).lower() for keyword in ["longitude", "lon", "xc", "x"])
@@ -1128,3 +1128,89 @@ def identify_cf_coordinates(ds: xr.Dataset) -> tuple[str, str]:
             lon_name = lon_candidates[0]
 
     return str(lat_name), str(lon_name)
+
+
+def ensure_spatial_coords(
+    data: xr.DataArray | xr.Dataset,
+    grid_type: GridType,
+) -> xr.DataArray | xr.Dataset:
+    """Ensure the data has spatial coordinates, generating them lazily if missing.
+
+    This function follows the "Zero-Trust" principle of the Aero Protocol. It
+    attempts to identify existing coordinates and, if they are missing or
+    incomplete, generates Dask-backed coordinates based on the grid type.
+
+    Parameters
+    ----------
+    data : xr.DataArray | xr.Dataset
+        The input data to check and potentially update.
+    grid_type : GridType
+        The expected grid type (RECTILINEAR or CURVILINEAR), which determines
+        how new coordinates are generated.
+
+    Returns
+    -------
+    xr.DataArray | xr.Dataset
+        The data with verified or newly generated spatial coordinates.
+
+    Raises
+    ------
+    ValueError
+        If the data has fewer than 2 dimensions.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>> from monet_regrid.constants import GridType
+    >>> da = xr.DataArray(np.random.rand(10, 20), dims=["y", "x"])
+    >>> da_with_coords = ensure_spatial_coords(da, GridType.RECTILINEAR)
+    >>> "y" in da_with_coords.coords
+    True
+    """
+    try:
+        lat_name, lon_name = identify_cf_coordinates(data)
+        # Check if they are actually in coords (not just dimensions)
+        if lat_name in data.coords and lon_name in data.coords:
+            return data
+    except ValueError:
+        pass
+
+    # Fallback to generation
+    if len(data.dims) < 2:
+        msg = f"Data must have at least 2 dimensions for {grid_type.name} regridding."
+        raise ValueError(msg)
+
+    y_dim, x_dim = list(data.dims)[-2], list(data.dims)[-1]
+    y_size, x_size = data.sizes[y_dim], data.sizes[x_dim]
+
+    if grid_type == GridType.RECTILINEAR:
+        # 1D lazy coordinates for rectilinear grids
+        y_coords = da.arange(y_size, chunks="auto")
+        x_coords = da.arange(x_size, chunks="auto")
+        new_coords = {y_dim: ([y_dim], y_coords), x_dim: ([x_dim], x_coords)}
+        msg = f"Generated lazy 1D spatial coordinates for dimensions: {y_dim}, {x_dim}"
+    else:
+        # 2D lazy coordinates for curvilinear grids
+        # Estimate chunks to maintain "Chunk Awareness" (~100MB)
+        if data.chunks:
+            if isinstance(data, xr.Dataset):
+                y_chunks = data.chunks.get(y_dim, "auto")
+                x_chunks = data.chunks.get(x_dim, "auto")
+            else:
+                y_chunks = data.chunks[list(data.dims).index(y_dim)]
+                x_chunks = data.chunks[list(data.dims).index(x_dim)]
+        else:
+            y_chunks = "auto"
+            x_chunks = "auto"
+
+        y_coords_da = xr.DataArray(da.linspace(0, y_size - 1, y_size, chunks=y_chunks), dims=[y_dim])
+        x_coords_da = xr.DataArray(da.linspace(0, x_size - 1, x_size, chunks=x_chunks), dims=[x_dim])
+        lat_2d, lon_2d = xr.broadcast(y_coords_da, x_coords_da)
+        new_coords = {"latitude": (lat_2d.dims, lat_2d.data), "longitude": (lon_2d.dims, lon_2d.data)}
+        msg = "Generated lazy 2D spatial coordinates (latitude/longitude) from dimensions"
+
+    result = data.assign_coords(new_coords)
+    update_history(result, msg)
+
+    return result

@@ -27,61 +27,48 @@ import dask.array as da
 import numpy as np
 import xarray as xr
 
-from monet_regrid.core import CurvilinearRegridder
-
-
-class MockRegridder(CurvilinearRegridder):
-    """A mock class for testing protected methods without a full setup."""
-
-    def __init__(self, source_data, target_grid=None):
-        """Bypass the full parent __init__."""
-        if target_grid is None:
-            target_grid = xr.Dataset(coords={"lat": (("y",), [0.5]), "lon": (("x",), [0.5])})
-        self.source_data = source_data
-        self.target_grid = target_grid
+from monet_regrid import utils
+from monet_regrid.constants import GridType
 
 
 def test_curvilinear_regridder_lazy_coordinate_generation():
     """
     Test that the fallback coordinate generation is lazy for Dask-backed data.
 
-    This test verifies that when a ``CurvilinearRegridder`` is initialized
+    This test verifies that when a ``CurvilinearRegridder`` is called
     with an ``xarray.DataArray`` that is backed by a Dask array but has no
-    explicit coordinates, the internal ``_create_source_grid_from_data``
-    method generates lazy (Dask-backed) coordinates instead of eagerly
-    computing them. This is critical for performance and memory management.
+    explicit coordinates, it generates lazy (Dask-backed) coordinates instead
+    of eagerly computing them.
     """
     # 1. The Logic (Setup)
     # Create a Dask-backed DataArray without explicit coordinates.
-    # This simulates a common scenario in lazy data processing pipelines.
     y_size, x_size = 10, 20
     y_chunks, x_chunks = 5, 10
     lazy_data = da.random.random((y_size, x_size), chunks=(y_chunks, x_chunks))
     source_da = xr.DataArray(lazy_data, dims=["y", "x"])
 
-    regridder = MockRegridder(source_data=source_da)
-
     # 2. The Proof (Execution)
-    # Invoke the method responsible for coordinate generation.
-    source_grid = regridder._create_source_grid_from_data(source_da)
+    # Use the utility directly as it's what the regridder calls
+    source_with_coords = utils.ensure_spatial_coords(source_da, GridType.CURVILINEAR)
 
     # 3. The UI (Verification)
     # Check that the generated coordinates are Dask arrays (lazy).
-    assert "latitude" in source_grid.coords
-    assert "longitude" in source_grid.coords
-    assert isinstance(source_grid["latitude"].data, da.Array)
-    assert isinstance(source_grid["longitude"].data, da.Array)
+    assert "latitude" in source_with_coords.coords
+    assert "longitude" in source_with_coords.coords
+    assert isinstance(source_with_coords["latitude"].data, da.Array)
+    assert isinstance(source_with_coords["longitude"].data, da.Array)
 
     # Verify that the chunking of the coordinates matches the data's chunking
     # along the corresponding dimensions.
-    assert source_grid["latitude"].chunks[0] == source_da.chunks[0]
-    assert source_grid["longitude"].chunks[1] == source_da.chunks[1]
+    assert source_with_coords["latitude"].chunks[0] == source_da.chunks[0]
+    assert source_with_coords["longitude"].chunks[1] == source_da.chunks[1]
 
-    # Verify that the computed coordinate values are correct by creating an
-    # expected xr.Dataset and comparing.
+    # Verify that the computed coordinate values are correct.
     y_coords = np.linspace(0, y_size - 1, y_size)
     x_coords = np.linspace(0, x_size - 1, x_size)
-    expected_lon_2d, expected_lat_2d = np.meshgrid(x_coords, y_coords)
+    # Note: ensure_spatial_coords uses broadcast which is (y[:, np.newaxis], x)
+    expected_lat_2d = np.broadcast_to(y_coords[:, np.newaxis], (10, 20))
+    expected_lon_2d = np.broadcast_to(x_coords, (10, 20))
 
     expected_grid = xr.Dataset(
         coords={
@@ -91,7 +78,12 @@ def test_curvilinear_regridder_lazy_coordinate_generation():
     )
 
     # Use compute on the generated grid for a fair comparison of values
-    computed_source_grid = source_grid.compute()
+    computed_source_grid = xr.Dataset(
+        coords={
+            "latitude": source_with_coords["latitude"].compute(),
+            "longitude": source_with_coords["longitude"].compute(),
+        }
+    )
     xr.testing.assert_allclose(computed_source_grid, expected_grid)
 
 
@@ -151,11 +143,9 @@ def test_curvilinear_regridder_lazy_coordinate_generation_from_numpy():
     """
     Test that the fallback coordinate generation is lazy for NumPy-backed data.
 
-    This test ensures that when a ``CurvilinearRegridder`` is initialized
+    This test ensures that when a ``CurvilinearRegridder`` is called
     with an ``xarray.DataArray`` backed by a NumPy array (eager) but without
-    explicit coordinates, the ``_create_source_grid_from_data`` method still
-    generates lazy Dask-backed coordinates. This confirms that the regridder
-    promotes lazy evaluation even when the input data is in-memory.
+    explicit coordinates, it still generates lazy Dask-backed coordinates.
     """
     # 1. The Logic (Setup)
     # Create a NumPy-backed DataArray without explicit coordinates.
@@ -163,24 +153,21 @@ def test_curvilinear_regridder_lazy_coordinate_generation_from_numpy():
     eager_data = np.random.random((y_size, x_size))
     source_da = xr.DataArray(eager_data, dims=["y", "x"])
 
-    regridder = MockRegridder(source_data=source_da)
-
     # 2. The Proof (Execution)
-    # Invoke the method responsible for coordinate generation.
-    source_grid = regridder._create_source_grid_from_data(source_da)
+    source_with_coords = utils.ensure_spatial_coords(source_da, GridType.CURVILINEAR)
 
     # 3. The UI (Verification)
-    # Check that the generated coordinates are Dask arrays (lazy), even though
-    # the input was a NumPy array.
-    assert "latitude" in source_grid.coords
-    assert "longitude" in source_grid.coords
-    assert isinstance(source_grid["latitude"].data, da.Array)
-    assert isinstance(source_grid["longitude"].data, da.Array)
+    # Check that the generated coordinates are Dask arrays (lazy).
+    assert "latitude" in source_with_coords.coords
+    assert "longitude" in source_with_coords.coords
+    assert isinstance(source_with_coords["latitude"].data, da.Array)
+    assert isinstance(source_with_coords["longitude"].data, da.Array)
 
     # Verify that the computed coordinate values are correct.
     y_coords = np.linspace(0, y_size - 1, y_size)
     x_coords = np.linspace(0, x_size - 1, x_size)
-    expected_lon_2d, expected_lat_2d = np.meshgrid(x_coords, y_coords)
+    expected_lat_2d = np.broadcast_to(y_coords[:, np.newaxis], (10, 20))
+    expected_lon_2d = np.broadcast_to(x_coords, (10, 20))
 
     expected_grid = xr.Dataset(
         coords={
@@ -190,5 +177,10 @@ def test_curvilinear_regridder_lazy_coordinate_generation_from_numpy():
     )
 
     # Use compute on the generated grid for a fair comparison of values
-    computed_source_grid = source_grid.compute()
+    computed_source_grid = xr.Dataset(
+        coords={
+            "latitude": source_with_coords["latitude"].compute(),
+            "longitude": source_with_coords["longitude"].compute(),
+        }
+    )
     xr.testing.assert_allclose(computed_source_grid, expected_grid)

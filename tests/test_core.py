@@ -3,54 +3,41 @@ import numpy as np
 import pytest
 import xarray as xr
 
+from monet_regrid import utils
+from monet_regrid.constants import GridType
 from monet_regrid.core import CurvilinearRegridder
 
 
-def test_create_source_grid_from_data_lazy_generation():
+def test_ensure_spatial_coords_lazy_generation():
     """
-    Test lazy coordinate generation in `_create_source_grid_from_data`.
+    Test lazy coordinate generation in `ensure_spatial_coords`.
 
     This test verifies that when a Dask-backed DataArray is passed without
     explicit coordinates, the method correctly generates lazy, broadcasted
-    latitude and longitude coordinates as Dask arrays.
+    latitude and longitude coordinates as Dask arrays for curvilinear grids.
     """
     # 1. Create a Dask-backed DataArray without explicit coordinates
     data_values = da.random.random((10, 20), chunks=(5, 10))
     source_da = xr.DataArray(data_values, dims=["y", "x"])
 
-    # A minimal target grid is needed for the regridder's constructor,
-    # though it is not used in this specific method call.
-    target_ds = xr.Dataset(
-        coords={
-            "latitude": (("y_new",), np.arange(2)),
-            "longitude": (("x_new",), np.arange(2)),
-        }
-    )
+    # 2. Call the centralized utility
+    source_with_coords = utils.ensure_spatial_coords(source_da, GridType.CURVILINEAR)
 
-    # 2. Instantiate a mock regridder to test the internal method
-    # We pass source_data=None because we are testing the method directly
-    regridder = CurvilinearRegridder(source_data=None, target_grid=target_ds)
+    # 3. Assert that the generated coordinates are Dask arrays
+    assert "latitude" in source_with_coords.coords
+    assert "longitude" in source_with_coords.coords
+    assert isinstance(source_with_coords["latitude"].data, da.Array)
+    assert isinstance(source_with_coords["longitude"].data, da.Array)
 
-    # 3. Call the internal method to generate the source grid
-    source_grid = regridder._create_source_grid_from_data(source_da)
+    # 4. Assert correct shape and dimension names
+    assert source_with_coords["latitude"].shape == (10, 20)
+    assert source_with_coords["longitude"].shape == (10, 20)
+    assert source_with_coords["latitude"].dims == ("y", "x")
+    assert source_with_coords["longitude"].dims == ("y", "x")
 
-    # 4. Assert that the generated coordinates are Dask arrays
-    assert "latitude" in source_grid.coords
-    assert "longitude" in source_grid.coords
-    assert isinstance(source_grid["latitude"].data, da.Array)
-    assert isinstance(source_grid["longitude"].data, da.Array)
-
-    # 5. Assert correct shape and dimension names
-    assert source_grid["latitude"].shape == (10, 20)
-    assert source_grid["longitude"].shape == (10, 20)
-    assert source_grid["latitude"].dims == ("y", "x")
-    assert source_grid["longitude"].dims == ("y", "x")
-
-    # 6. Verify the computed values to ensure linspace and broadcasting are correct
-    # The key change is ensuring the test matches xarray's broadcasting behavior,
-    # which is different from np.meshgrid(..., indexing='ij').
-    computed_lat = source_grid["latitude"].compute()
-    computed_lon = source_grid["longitude"].compute()
+    # 5. Verify the computed values to ensure linspace and broadcasting are correct
+    computed_lat = source_with_coords["latitude"].compute()
+    computed_lon = source_with_coords["longitude"].compute()
 
     y_coords = np.linspace(0, 9, 10)
     x_coords = np.linspace(0, 19, 20)
@@ -63,9 +50,9 @@ def test_create_source_grid_from_data_lazy_generation():
     np.testing.assert_allclose(computed_lon, expected_lon_2d)
 
 
-def test_create_source_grid_from_data_with_explicit_coords():
+def test_ensure_spatial_coords_with_explicit_coords():
     """
-    Test that `_create_source_grid_from_data` uses existing coordinates.
+    Test that `ensure_spatial_coords` uses existing coordinates.
 
     This test ensures that if the input DataArray already has CF-compliant
     latitude and longitude coordinates, the method correctly extracts them
@@ -80,29 +67,24 @@ def test_create_source_grid_from_data_with_explicit_coords():
         coords={"latitude": (["y", "x"], lat), "longitude": (["y", "x"], lon)},
     )
 
-    target_ds = xr.Dataset(coords={"latitude": (("y_new",), [1]), "longitude": (("x_new",), [1])})
-    regridder = CurvilinearRegridder(source_data=None, target_grid=target_ds)
-
-    # 2. Call the method
-    source_grid = regridder._create_source_grid_from_data(source_da)
+    # 2. Call the utility
+    source_with_coords = utils.ensure_spatial_coords(source_da, GridType.CURVILINEAR)
 
     # 3. Assert that the returned grid contains the original coordinates
-    assert "latitude" in source_grid.coords
-    assert "longitude" in source_grid.coords
-    xr.testing.assert_equal(source_grid["latitude"], source_da["latitude"])
-    xr.testing.assert_equal(source_grid["longitude"], source_da["longitude"])
+    assert "latitude" in source_with_coords.coords
+    assert "longitude" in source_with_coords.coords
+    xr.testing.assert_equal(source_with_coords["latitude"], source_da["latitude"])
+    xr.testing.assert_equal(source_with_coords["longitude"], source_da["longitude"])
 
 
-def test_create_source_grid_from_data_insufficient_dims():
+def test_ensure_spatial_coords_insufficient_dims():
     """
     Test that a ValueError is raised for data with fewer than 2 dimensions.
     """
     source_da = xr.DataArray(np.random.rand(10), dims=["x"])
-    target_ds = xr.Dataset(coords={"latitude": (("y_new",), [1]), "longitude": (("x_new",), [1])})
-    regridder = CurvilinearRegridder(source_data=None, target_grid=target_ds)
 
-    with pytest.raises(ValueError, match="Source data must have at least 2 dimensions"):
-        regridder._create_source_grid_from_data(source_da)
+    with pytest.raises(ValueError, match="Data must have at least 2 dimensions"):
+        utils.ensure_spatial_coords(source_da, GridType.RECTILINEAR)
 
 
 def test_curvilinear_regridder_initialization():
