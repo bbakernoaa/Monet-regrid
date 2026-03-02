@@ -12,7 +12,8 @@ import xarray as xr
 from numpy.testing import assert_array_equal
 
 import monet_regrid
-from monet_regrid.core import CurvilinearRegridder
+from monet_regrid import utils
+from monet_regrid.constants import GridType
 
 try:
     import xesmf
@@ -219,19 +220,8 @@ def test_curvilinear_regridder_lazy_coordinate_creation():
         dims=["y", "x"],
     )
 
-    # 2. Create a simple target grid
-    target_grid = xr.Dataset(
-        coords={
-            "lat": (("y_new",), np.arange(0, 10)),
-            "lon": (("x_new",), np.arange(0, 20)),
-        }
-    )
-
-    # 3. Instantiate the regridder
-    regridder = CurvilinearRegridder(source_data=source_data, target_grid=target_grid)
-
-    # 4. Call the internal method to generate the source grid
-    source_grid = regridder._create_source_grid_from_data(source_data)
+    # 4. Call the centralized utility
+    source_grid = utils.ensure_spatial_coords(source_data, GridType.CURVILINEAR)
 
     # 5. Assert that the coordinates are Dask arrays
     assert isinstance(source_grid["latitude"].data, da.Array)
@@ -246,17 +236,10 @@ def test_curvilinear_regridder_lazy_coordinate_creation_with_correct_dims():
         dims=["y", "x"],
     )
 
-    # 2. Instantiate a mock regridder to isolate the method
-    class MockRegridder(CurvilinearRegridder):
-        def __init__(self):
-            self.source_data = source_data
+    # 2. Call the centralized utility
+    source_grid = utils.ensure_spatial_coords(source_data, GridType.CURVILINEAR)
 
-    regridder = MockRegridder()
-
-    # 3. Call the internal method to generate the source grid
-    source_grid = regridder._create_source_grid_from_data(source_data)
-
-    # 4. Assert that the dimensions are in the correct order ('y', 'x')
+    # 3. Assert that the dimensions are in the correct order ('y', 'x')
     assert source_grid["latitude"].dims == ("y", "x")
     assert source_grid["longitude"].dims == ("y", "x")
 
@@ -286,21 +269,10 @@ def test_curvilinear_regridder_lazy_arange_creation():
         dims=["y", "x"],
     )
 
-    # 2. Create a simple target grid
-    target_grid = xr.Dataset(
-        coords={
-            "lat": (("y_new",), np.arange(0, 10)),
-            "lon": (("x_new",), np.arange(0, 20)),
-        }
-    )
+    # 3. Call the centralized utility
+    source_grid = utils.ensure_spatial_coords(source_data, GridType.CURVILINEAR)
 
-    # 3. Instantiate the regridder
-    regridder = CurvilinearRegridder(source_data=source_data, target_grid=target_grid)
-
-    # 4. Call the internal method to generate the source grid
-    source_grid = regridder._create_source_grid_from_data(source_data)
-
-    # 5. Assert that the coordinates are Dask arrays from da.arange
+    # 4. Assert that the coordinates are Dask arrays from da.arange
     assert isinstance(source_grid["latitude"].data, da.Array)
     assert isinstance(source_grid["longitude"].data, da.Array)
 

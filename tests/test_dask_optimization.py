@@ -6,10 +6,10 @@ This derivative work Copyright (c) 2024 monet-regrid Developers.
 """
 
 import dask.array as da
-import numpy as np
 import xarray as xr
 
-from monet_regrid.core import CurvilinearRegridder
+from monet_regrid import utils
+from monet_regrid.constants import GridType
 
 
 def test_lazy_coordinate_generation():
@@ -32,20 +32,9 @@ def test_lazy_coordinate_generation():
         name="temperature",
     )
 
-    # Create a dummy target grid, required for the regridder constructor
-    target_ds = xr.Dataset(
-        coords={
-            "lat": (("y_new",), np.arange(0, 10)),
-            "lon": (("x_new",), np.arange(0, 20)),
-        }
-    )
-
-    # Instantiate the regridder
-    regridder = CurvilinearRegridder(source_data=source_da, target_grid=target_ds)
-
     # 2. The Proof (Execution & Validation)
-    # Invoke the internal method to generate the source grid
-    source_grid = regridder._create_source_grid_from_data(source_da)
+    # Use the centralized utility
+    source_grid = utils.ensure_spatial_coords(source_da, GridType.CURVILINEAR)
 
     # Assert that the coordinates are 2D
     assert source_grid["latitude"].ndim == 2, "Latitude should be 2D"
